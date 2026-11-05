@@ -61,6 +61,7 @@ if(CABIR_TESTS)
     enable_testing()
     add_executable(cabir_state_test tests/StateTests.cpp)
     target_link_libraries(cabir_state_test PRIVATE cabir_synth)
+    target_compile_definitions(cabir_state_test PRIVATE CABIR_TABLE="${CMAKE_CURRENT_SOURCE_DIR}/data/cabinets.txt")
     add_test(NAME state COMMAND cabir_state_test)
 endif()
 

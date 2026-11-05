@@ -33,7 +33,7 @@ struct State
     int back = -1;
     bool horn = true;
     double hornDb = 0;
-    Mic a, b { false, "u87", 0, 0, 0.25, 0 };
+    Mic a { true, "", -0.3, 0, 0.05, 0 }, b { false, "u87", 0.4, 0, 0.25, 0 };   // A a little left of the cap, B right of it
     double blend = 0.5;
     bool align = true, invert = false;
 

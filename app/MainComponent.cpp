@@ -162,9 +162,33 @@ void MainComponent::render (const State& s, bool live)
 
 void MainComponent::keep (const State& s)
 {
+    const bool bTakenUp = ! state.b.on && s.b.on;
     state = s;
     render (s, false);
     repaint (header());
+    if (bTakenUp)
+        placeB (s);
+}
+
+void MainComponent::placeB (const State& s)
+{
+    // B just taken up: where it combs least with A, found on the worker; it moves there unless the hand moved it first.
+    std::weak_ptr<int> stillHere = alive;
+    worker.addJob ([this, stillHere, s]
+    {
+        static const auto table = synth::parseTable (std::string (BinaryData::cabinets_txt, (size_t) BinaryData::cabinets_txtSize));
+        const auto place = synth::quietPlaceForB (table, s);
+        juce::MessageManager::callAsync ([this, stillHere, s, place]
+        {
+            if (stillHere.lock() == nullptr || ! (state.b == s.b) || state.box != s.box)
+                return;
+            auto next = state;
+            next.b.x = place.x;
+            next.b.y = place.y;
+            next.b.distance = place.distance;
+            show (next);
+        });
+    });
 }
 
 void MainComponent::show (const State& s)

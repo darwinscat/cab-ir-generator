@@ -959,6 +959,92 @@ inline Pair pairOf (const State& s)
     return pair;
 }
 
+/** WHERE B STANDS QUIETEST BESIDE A: a dozen places to A's right on the first speaker — three out across the cone, four
+    distances — each heard as the pair hears it (A's horn and back, the same clock unless aligned, the blend, B turned
+    over or not), and the one whose meeting with A cancels least from 40 Hz to 8 kHz, the top at half weight: at each
+    point the mix against the two powers apart, the dips summed. With `align`, A is rendered once; a tenth of a second or so a place. */
+struct Place { double x = 0, y = 0, distance = 0.05; };
+
+inline Place quietPlaceForB (const Table& table, const State& s, size_t n = 1 << 13)
+{
+    State both = s;
+    both.a.on = both.b.on = true;
+    const auto pair = pairOf (both);
+    auto ca = cabAt (table, s.box, pair.a);
+    const double da = firstArrival (ca);
+
+    constexpr size_t spectrum = 1 << 16;   // padded far past the IR: a 24th of an octave at 40 Hz spans bins
+    const auto spectrumOf = [] (const std::vector<double>& ir, double gain)
+    {
+        std::vector<cd> x (spectrum, 0.0);
+        for (size_t i = 0; i < ir.size() && i < spectrum; ++i) x[i] = gain * ir[i];
+        fft (x, false);
+        return x;
+    };
+    const auto middle = [n] (const std::vector<double>& ir)
+    {
+        std::vector<cd> x (n, 0.0);
+        for (size_t i = 0; i < ir.size() && i < n; ++i) x[i] = ir[i];
+        fft (x, false);
+        double e = 1e-30;
+        for (size_t k = (size_t) (500.0 * n / fs); k <= (size_t) (2000.0 * n / fs); ++k) e += std::norm (x[k]);
+        return std::sqrt (e);
+    };
+    const auto power = [] (const std::vector<cd>& x, double hz, double ratio, const std::vector<cd>* plus)
+    {
+        const double bin = fs / (double) spectrum;
+        const auto lo = (size_t) std::max (1.0, std::floor (hz / ratio / bin)), hi = (size_t) std::ceil (hz * ratio / bin);
+        double e = 0;
+        for (size_t k = lo; k <= hi; ++k) e += std::norm (plus != nullptr ? x[k] + (*plus)[k] : x[k]);
+        return e + 1e-30;
+    };
+
+    std::vector<double> ia;
+    if (both.align)
+    {
+        ca.refDelay = da;
+        ia = render (ca, n);
+    }
+
+    Place best { pair.b.x, pair.b.y, pair.b.distance };
+    double bestScore = -1e30;
+    for (const double across : { 0.4, 0.7, 1.0 })
+        for (const double distance : { 0.03, 0.06, 0.12, 0.25 })
+        {
+            auto spot = pair.b;
+            spot.x = std::min (1.05, pair.a.x + across);
+            spot.y = 0;
+            spot.distance = distance;
+            auto cb = cabAt (table, s.box, spot);
+            const double db = firstArrival (cb), first = std::min (da, db);
+            cb.refDelay = both.align ? db : first;
+            if (! both.align)
+            {
+                ca.refDelay = first;
+                ia = render (ca, n);
+            }
+            const auto ib = render (cb, n);
+            const auto a = spectrumOf (ia, (1 - both.blend) / middle (ia));
+            const auto b = spectrumOf (ib, both.blend / middle (ib) * (both.invert ? -1 : 1));
+
+            // The dips summed, 40 Hz to 8 kHz — the top's at half weight: there two mics apart always comb a little.
+            double score = 0;
+            const double ratio = std::pow (2.0, 1.0 / 24.0);
+            for (int i = 0; i < 64; ++i)
+            {
+                const double hz = 40.0 * std::pow (8000.0 / 40.0, i / 63.0);
+                const double comb = 10 * std::log10 (power (a, hz, ratio, &b) / (power (a, hz, ratio, nullptr) + power (b, hz, ratio, nullptr)));
+                score += std::min (comb, 0.0) * (hz <= 2000.0 ? 1.0 : 0.5);
+            }
+            if (score > bestScore + 1e-9)
+            {
+                bestScore = score;
+                best = { spot.x, spot.y, spot.distance };
+            }
+        }
+    return best;
+}
+
 /** The cabinets the table holds, by the names their cap sections give them, in the table's order. */
 inline std::vector<std::string> cabinets (const Table& table)
 {

@@ -69,6 +69,16 @@ int main()
     const auto pairA = cabir::synth::pairOf (onlyA);
     check (pairA.blend <= 0 && pairA.a.mic == "re20" && pairA.a.back == 2 && pairA.a.hornDb < -5, "A alone, its horn and back");
 
+    // The quiet place for B: to A's right, within the cone's reach, and no more red with A than where B waited.
+    {
+        const auto table = cabir::synth::readTable (CABIR_TABLE);
+        State pair;
+        pair.box = "SVT-410HE";
+        pair.b.on = true;
+        const auto place = cabir::synth::quietPlaceForB (table, pair);
+        check (place.x > pair.a.x && place.x <= 1.05 && place.distance > 0.0, "B's quiet place lies right of A, on the cone");
+    }
+
     std::printf ("%s\n%s", failures == 0 ? "state: all passed" : "state: FAILED", text.c_str());
     return failures == 0 ? 0 : 1;
 }

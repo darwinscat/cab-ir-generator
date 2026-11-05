@@ -66,7 +66,7 @@ public:
         from the start: two mics at two distances, unaligned, comb — rarely what a second mic is put up for. */
     struct Setup
     {
-        Spot a, b { 0.0f, 0.0f, 0.25f, true, "u87" };
+        Spot a { -0.3f, 0.0f, 0.05f }, b { 0.4f, 0.0f, 0.25f, true, "u87" };   // A a little left of the cap, B right of it
         float blend = 0.5f;
         bool align = true, invert = false;
         bool aOn = true, bOn = false;
@@ -1075,8 +1075,9 @@ private:
     bool heard (int m) const { return m == 0 ? setup_.aOn : setup_.bOn; }
     bool bothHeard() const { return setup_.aOn && setup_.bOn; }
 
-    /** A dark column taken up: its mic heard again where it stood, BLEND where it was left. B taken up the first time
-        stands on the other side of the cone from A, not on top of it, where it was only waiting. */
+    /** A dark column taken up: its mic heard again where it stood, BLEND where it was left. B taken up on top of A
+        stands to A's right, not where it was only waiting — and a host may then move it where the two comb least
+        (synth::quietPlaceForB). */
     void takeUp (int m)
     {
         if (heard (m))
@@ -1089,7 +1090,7 @@ private:
         setup_.bOn = true;
         if (std::hypot (setup_.b.x - setup_.a.x, setup_.b.y - setup_.a.y) < 0.4f)
         {
-            setup_.b.x = setup_.a.x >= 0.0f ? -0.6f : 0.6f;
+            setup_.b.x = juce::jmin (1.05f, setup_.a.x + 0.7f);
             setup_.b.y = 0.0f;
         }
     }

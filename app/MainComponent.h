@@ -63,6 +63,7 @@ private:
 
     void render (const State&, bool live);
     void keep (const State&);                      // the panel's state, kept: what history and the next run see
+    void placeB (const State&);                    // B just taken up, moved where it combs least with A
     void show (const State&);                      // ...and one put on the panel from elsewhere (undo, A/B/C/D, a preset)
     void showPresets();
     void savePreset();
