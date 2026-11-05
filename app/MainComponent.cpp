@@ -231,6 +231,7 @@ void MainComponent::placeB (const State& s, bool thorough)
             next.b.x = place.x;
             next.b.y = place.y;
             next.b.distance = place.distance;
+            next.shiftMs = place.shiftMs;
             show (next);
         });
     });

@@ -51,7 +51,7 @@ public:
     CabPicker() { startTimerHz (30); }   // DOWNLOAD IR's pulse, the search map's fade
 
     /** The size it is drawn for — small enough to open over a cabin's face too. */
-    static constexpr int panelW = 906, panelH = 488;
+    static constexpr int panelW = 906, panelH = 518;
 
     struct Spot
     {
@@ -72,6 +72,7 @@ public:
         bool align = true, invert = false;
         bool aOn = true, bOn = false;
         int back = -1;   // the box's back as the player turned it — an index of backWords — or -1, the box's own (ownBack)
+        float shiftMs = 0.0f;   // B moved in time against A, ms, later positive (TIME)
     };
 
     /** The mics to choose from, as the table names them (its "mic-<name>" sections), and as the columns write them. */
@@ -207,7 +208,8 @@ public:
     {
         const auto spot = [&s] (const Mic& m)
         { return Spot { (float) m.x, (float) m.y, (float) m.distance, s.horn, juce::String (m.model), (float) m.angle, (float) s.hornDb }; };
-        return { indexOf (juce::String (s.box)), { spot (s.a), spot (s.b), (float) s.blend, s.align, s.invert, s.a.on, s.b.on, s.back } };
+        return { indexOf (juce::String (s.box)), { spot (s.a), spot (s.b), (float) s.blend, s.align, s.invert, s.a.on, s.b.on, s.back,
+                                                   (float) s.shiftMs } };
     }
 
     /** A STATE AS A LINE READS IT: its box's size, its back where turned from the box's own, and the mics heard —
@@ -236,6 +238,7 @@ public:
         s.blend = su.blend;
         s.align = su.align;
         s.invert = su.invert;
+        s.shiftMs = su.shiftMs;
         return s;
     }
 
@@ -390,11 +393,25 @@ public:
         }
         else if (drag == Drag::angle)
             m.angle = maxAngle * along (angleTrack (dragMic), e.position.x);
+        else if (drag == Drag::shift)
+        {
+            const float v = (2.0f * along (timeTrack(), e.position.x) - 1.0f) * maxShiftMs;
+            setup_.shiftMs = std::abs (v) < 0.03f * maxShiftMs ? 0.0f : v;   // a little stick at nought, where ALIGN leaves B
+        }
         else if (drag == Drag::blend)
             setup_.blend = along (blendTrack(), e.position.x);
         repaint();
         if (onMove != nullptr)
             onMove (chosen, setup_);
+    }
+
+    void mouseDoubleClick (const juce::MouseEvent& e) override
+    {
+        if (chosen >= 0 && timeTrack().expanded (2.0f, 10.0f).contains (e.position))
+        {
+            setup_.shiftMs = 0.0f;   // TIME back to where ALIGN leaves B
+            send();
+        }
     }
 
     void mouseUp (const juce::MouseEvent& e) override
@@ -418,7 +435,7 @@ private:
     /** Down to the response's band: the pile, the columns and the speaker over it, the feet under it. */
     int bodyH() const { return getHeight() - footHeight() - responseH; }
 
-    enum class Drag { none, spot, distance, angle, blend };
+    enum class Drag { none, spot, distance, angle, blend, shift };
 
     int chosen = -1, hover = -1;
     int distHover = -1;                 // the mic whose distance the hand is over, on the speaker: its slider out
@@ -986,6 +1003,14 @@ private:
         return juce::Rectangle<float> ((float) c.getX() + (m == 0 ? 4.0f : 8.0f), (float) (top + rowH + 2), (float) c.getWidth() - 12.0f, 6.0f);
     }
 
+    /** B's TIME, under its angle: B moved against A, -1 ms to +1, nought in the middle (the owner, 05.11). */
+    static constexpr float maxShiftMs = 1.0f;
+    juce::Rectangle<float> timeTrack() const
+    {
+        const auto a = angleTrack (1);
+        return a.translated (0.0f, (float) rowH + 12.0f);
+    }
+
     /** A mic's distance in its column, along its list of mics and no lower (the owner, 05.11) — over EDGE's GE in A's,
         over CAP's CA in B's, where the names leave room — its centimetres level with the column's name, far at the top. */
     float distX (int m) const
@@ -1248,6 +1273,15 @@ private:
                 mouseDrag (e);
                 return;
             }
+            if (m == 1 && timeTrack().expanded (2.0f, 10.0f).contains (e.position))
+            {
+                takeUp (1);
+                drag = Drag::shift;
+                dragMic = 1;
+                dragging = true;
+                mouseDrag (e);
+                return;
+            }
             return;
         }
 
@@ -1369,6 +1403,24 @@ private:
             g.fillRoundedRectangle (t.withSizeKeepingCentre (t.getWidth(), 2.0f), 1.0f);
             g.setColour (colour.withMultipliedAlpha (dim));
             g.fillRoundedRectangle (juce::Rectangle<float> (6.0f, 12.0f).withCentre ({ t.getX() + sp.angle / maxAngle * t.getWidth(), t.getCentreY() }), 2.0f);
+        }
+
+        // B's TIME under its angle: the word, its milliseconds, a track with nought marked in its middle.
+        if (m == 1)
+        {
+            const auto t = timeTrack();
+            const auto label = juce::Rectangle<float> (t.getX(), t.getY() - (float) rowH - 2.0f, t.getWidth(), (float) rowH);
+            g.setColour (look().txFaint.withMultipliedAlpha (dim));
+            look().drawTracked (g, "TIME", label, font, 0.06f, side);
+            g.setColour ((std::abs (setup_.shiftMs) > 0.0f ? colour : look().txDim).withMultipliedAlpha (dim));
+            look().drawTracked (g, (setup_.shiftMs > 0.0f ? "+" : "") + juce::String (setup_.shiftMs, 2) + " ms", label, font, 0.0f,
+                                juce::Justification::centredLeft);
+            g.setColour (look().hair2);
+            g.fillRoundedRectangle (t.withSizeKeepingCentre (t.getWidth(), 2.0f), 1.0f);
+            g.fillRect (juce::Rectangle<float> (1.0f, 8.0f).withCentre (t.getCentre()));
+            g.setColour (colour.withMultipliedAlpha (dim));
+            const float at = t.getX() + (0.5f + 0.5f * setup_.shiftMs / maxShiftMs) * t.getWidth();
+            g.fillRoundedRectangle (juce::Rectangle<float> (6.0f, 12.0f).withCentre ({ at, t.getCentreY() }), 2.0f);
         }
 
         // Its distance, beside its list: its centimetres level with the column's name, far at the top.

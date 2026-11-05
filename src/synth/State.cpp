@@ -39,7 +39,9 @@ std::string toToml (const State& s)
     };
     t::Table mics;
     (void) mics.insert ("a", t::Value (mic (s.a)));
-    (void) mics.insert ("b", t::Value (mic (s.b)));
+    auto b = mic (s.b);
+    (void) b.insert ("shift", decimal (s.shiftMs, 3));   // ms against A
+    (void) mics.insert ("b", t::Value (std::move (b)));
     (void) root.insert ("mic", t::Value (std::move (mics)));
     return t::write (root);
 }
@@ -77,7 +79,11 @@ std::optional<State> fromToml (std::string_view text)
         in.table ("mic", t::Need::Optional, [&] (t::Reader& mics)
         {
             mics.table ("a", t::Need::Optional, [&] (t::Reader& m) { mic (m, s.a); });
-            mics.table ("b", t::Need::Optional, [&] (t::Reader& m) { mic (m, s.b); });
+            mics.table ("b", t::Need::Optional, [&] (t::Reader& m)
+            {
+                mic (m, s.b);
+                m.optional ("shift", s.shiftMs, { -2.0, 2.0 });
+            });
         });
     }, t::ReadOptions { t::Severity::Warning });
     if (! report.ok() || s.box.empty())

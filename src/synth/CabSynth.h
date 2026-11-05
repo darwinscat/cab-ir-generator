@@ -913,7 +913,30 @@ struct Pair
     Spot a, b;
     double blend = 0;
     bool align = false, invertB = false;
+    double shiftB = 0;   // seconds B is moved against A, later positive
 };
+
+/** `ir` moved later by `seconds` — a fraction of a sample as well as whole ones, through the spectrum, its length kept. */
+inline std::vector<double> delayed (const std::vector<double>& ir, double seconds)
+{
+    if (std::abs (seconds) < 1e-12 || ir.empty())
+        return ir;
+    size_t m = 1;
+    while (m < 2 * ir.size()) m <<= 1;
+    std::vector<cd> x (m, 0.0);
+    for (size_t i = 0; i < ir.size(); ++i) x[i] = ir[i];
+    fft (x, false);
+    for (size_t k = 0; k <= m / 2; ++k)
+    {
+        x[k] *= std::polar (1.0, -2 * pi * fs * (double) k / (double) m * seconds);
+        if (k > 0 && k < m / 2) x[m - k] = std::conj (x[k]);
+    }
+    x[m / 2] = x[m / 2].real();
+    fft (x, true);
+    std::vector<double> out (ir.size());
+    for (size_t i = 0; i < out.size(); ++i) out[i] = x[i].real();
+    return out;
+}
 
 /** The pair, and each mic's part of it at the mix's own level — `a` + `b` is `mix` — for a picture of where the two
     meet in phase and where they cancel; a pair with one mic heard (blend 0) has no parts. */
@@ -955,8 +978,11 @@ public:
             lastA = { ka, cabir::synth::render (ca, n) };
             lastB = { kb, bLater.get() };
         }
-        const auto& ia = irOf (lastA, ka, ca, n);
-        const auto& ib = irOf (lastB, kb, cb, n);
+        const auto& ia0 = irOf (lastA, ka, ca, n);
+        const auto& ib0 = irOf (lastB, kb, cb, n);
+        // B moved in time against A: B later, or — moved earlier — A later instead, so neither's start is cut off.
+        const auto ia = p.shiftB < 0 ? delayed (ia0, -p.shiftB) : ia0;
+        const auto ib = p.shiftB > 0 ? delayed (ib0, p.shiftB) : ib0;
 
         const auto middle = [n] (const std::vector<double>& ir) {
             std::vector<cd> x (n, 0.0);
@@ -1028,7 +1054,7 @@ inline Pair pairOf (const State& s)
         p.back = s.back;
         return p;
     };
-    Pair pair { spot (s.a), spot (s.b), s.blend, s.align, s.invert };
+    Pair pair { spot (s.a), spot (s.b), s.blend, s.align, s.invert, s.shiftMs / 1000.0 };
     if (! s.b.on)
         pair.blend = 0;            // A alone: the blend not heard
     else if (! s.a.on)
@@ -1046,8 +1072,10 @@ inline Pair pairOf (const State& s)
     of one mic there are one mic. `thorough` (FIND) looks again round the four best, finer — nine places about each, four
     distances about its own — about two seconds in all. Searched on as many threads as the machine has, a render each;
     with `align`, A is rendered once. `tried`, when given, hears of each place as it is judged — its score, 0 for no dip,
-    the more negative the more it cancels — from whichever thread judged it: a picture of the search, drawn as it goes. */
-struct Place { double x = 0, y = 0, distance = 0.05; };
+    the more negative the more it cancels — from whichever thread judged it: a picture of the search, drawn as it goes.
+    Each place is judged at its best shift of B in time, a twentieth of a millisecond at a time within half of one — a
+    turn of B's spectrum, no render — and the place carries it. */
+struct Place { double x = 0, y = 0, distance = 0.05, shiftMs = 0; };
 
 inline Place quietPlaceForB (const Table& table, const State& s, size_t n = 1 << 13,
                              const std::function<void (const Place&, double score)>& tried = {}, bool thorough = false)
@@ -1111,17 +1139,36 @@ inline Place quietPlaceForB (const Table& table, const State& s, size_t n = 1 <<
         const auto ib = render (cb, n, 1);   // one thread a render: the places themselves are spread over the threads
         const auto a = spectrumOf (ia, (1 - both.blend) / middle (ia));
         const auto b = spectrumOf (ib, both.blend / middle (ib) * (both.invert ? -1 : 1));
-        double sum = 0;
-        const double ratio = std::pow (2.0, 1.0 / 24.0);
+        const double ratio = std::pow (2.0, 1.0 / 24.0), bin = fs / (double) spectrum;
+        double apart[72], hzOf[72];
         for (int i = 0; i < 72; ++i)
         {
-            const double hz = 40.0 * std::pow (12000.0 / 40.0, i / 71.0);
-            const double comb = 10 * std::log10 (power (a, hz, ratio, &b) / (power (a, hz, ratio, nullptr) + power (b, hz, ratio, nullptr)));
-            sum += std::min (comb, 0.0) * (hz <= 2000.0 ? 1.0 : 0.8);
+            hzOf[i] = 40.0 * std::pow (12000.0 / 40.0, i / 71.0);
+            apart[i] = power (a, hzOf[i], ratio, nullptr) + power (b, hzOf[i], ratio, nullptr);
         }
-        c.score = sum;
+        double bestSum = -1e30, bestShift = 0;
+        for (int step = -10; step <= 10; ++step)
+        {
+            const double tau = step * 0.05e-3;
+            double sum = 0;
+            for (int i = 0; i < 72; ++i)
+            {
+                const auto lo = (size_t) std::max (1.0, std::floor (hzOf[i] / ratio / bin)), hi = (size_t) std::ceil (hzOf[i] * ratio / bin);
+                double e = 1e-30;
+                for (size_t k = lo; k <= hi; ++k)
+                    e += std::norm (a[k] + b[k] * std::polar (1.0, -2 * pi * (double) k * bin * tau));
+                sum += std::min (10 * std::log10 (e / apart[i]), 0.0) * (hzOf[i] <= 2000.0 ? 1.0 : 0.8);
+            }
+            if (sum > bestSum + 1e-9 || (std::abs (sum - bestSum) < 1e-9 && std::abs (tau) < std::abs (bestShift)))
+            {
+                bestSum = sum;
+                bestShift = tau;
+            }
+        }
+        c.score = bestSum;
+        c.place.shiftMs = bestShift * 1000.0;
         if (tried)
-            tried (c.place, sum);
+            tried (c.place, bestSum);
     };
 
     // Every candidate judged, the first first — or, given a deadline, those reached before it.
