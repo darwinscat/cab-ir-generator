@@ -41,6 +41,9 @@ public:
     bool keyPressed (const juce::KeyPress&) override;
 
     bool isInterestedInFileDrag (const juce::StringArray&) override { return true; }
+
+    /** The app's own settings — the window keeps where it was and how large there. */
+    juce::PropertiesFile& settings() { return *properties.getUserSettings(); }
     void filesDropped (const juce::StringArray& files, int, int) override;
 
 private:
