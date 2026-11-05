@@ -79,6 +79,20 @@ int main()
         check (place.x > pair.a.x && place.x <= 1.05 && place.distance > 0.0, "B's quiet place lies right of A, on the cone");
     }
 
+    // A pair rendered again with one mic moved, the other's IR kept, is the pair rendered afresh, sample for sample.
+    {
+        const auto table = cabir::synth::readTable (CABIR_TABLE);
+        State pair;
+        pair.box = "SVT-410HE";
+        pair.b.on = true;
+        cabir::synth::PairRenderer renderer;
+        (void) renderer.render (table, pair.box, cabir::synth::pairOf (pair));
+        pair.b.x = 0.8;
+        const auto kept = renderer.render (table, pair.box, cabir::synth::pairOf (pair));
+        const auto fresh = cabir::synth::renderPairParts (table, pair.box, cabir::synth::pairOf (pair));
+        check (kept.mix == fresh.mix && kept.a == fresh.a && kept.b == fresh.b, "a kept mic's IR renders the pair as afresh");
+    }
+
     std::printf ("%s\n%s", failures == 0 ? "state: all passed" : "state: FAILED", text.c_str());
     return failures == 0 ? 0 : 1;
 }

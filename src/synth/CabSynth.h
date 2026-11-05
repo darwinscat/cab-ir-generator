@@ -21,10 +21,12 @@
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
+#include <future>
 #include <map>
 #include <random>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "State.h"
@@ -507,6 +509,31 @@ inline cd heard (const Cab& c, const Mic& m, double dx, double dy, double dz, do
     return pattern * std::pow (10.0, -e * top / 20);
 }
 
+/** `bin (k)` for every bin from 1 up to `bins`, spread over up to four threads in turns of the range — or one after the
+    other where there are no threads (a page built without them). */
+template <class F>
+inline void forEachBin (size_t bins, const F& bin)
+{
+#if defined(__EMSCRIPTEN__) && ! defined(__EMSCRIPTEN_PTHREADS__)
+    for (size_t k = 1; k < bins; ++k)
+        bin (k);
+#else
+    const size_t threads = std::clamp<size_t> (std::thread::hardware_concurrency(), 1, 4);
+    const size_t step = (bins - 1 + threads - 1) / threads;
+    std::vector<std::future<void>> others;
+    for (size_t t = 1; t < threads; ++t)
+    {
+        const size_t from = 1 + t * step, to = std::min (bins, from + step);
+        if (from < to)
+            others.push_back (std::async (std::launch::async, [&bin, from, to] { for (size_t k = from; k < to; ++k) bin (k); }));
+    }
+    for (size_t k = 1; k < std::min (bins, 1 + step); ++k)
+        bin (k);
+    for (auto& f : others)
+        f.get();
+#endif
+}
+
 inline std::vector<double> render (const Cab& c, size_t n)
 {
     const size_t bins = n / 2 + 1;
@@ -608,7 +635,8 @@ inline std::vector<double> render (const Cab& c, size_t n)
     for (auto& e : c.hornEq) hornEq.push_back (Biquad::make ("peak", e[0], e[1], e[2], fs));
     const double stepDb = c.baffleStepDb, stepHz = 115.0 / c.bw;
 
-    for (size_t k = 1; k < bins; ++k)
+    // Each bin on its own — nothing below writes what another bin reads — so the bins are spread over a few threads.
+    const auto bin = [&] (size_t k)
     {
         const double f = fs * (double) k / (double) n;
         cd cone, port;
@@ -753,7 +781,8 @@ inline std::vector<double> render (const Cab& c, size_t n)
         cd capsule = highpass2 (f, c.micHp, 0.707) * (c.micTop > 0 ? lowpass1 (f, c.micTop) : lowpass2 (f, c.micLp, 0.707));
         for (auto& b : presence) capsule *= b.at (f, fs);
         H[k] = sum * capsule;
-    }
+    };
+    forEachBin (bins, bin);
     for (size_t k = 1; k < n / 2; ++k) H[n - k] = std::conj (H[k]);
     H[0] = 0;
     fft (H, true);
@@ -888,42 +917,91 @@ struct Pair
     meet in phase and where they cancel; a pair with one mic heard (blend 0) has no parts. */
 struct PairParts { std::vector<float> mix, a, b; };
 
+
+/** A PAIR RENDERED AGAIN AND AGAIN, as a hand moves one mic: each mic's own IR kept by what made it — the box, the spot,
+    the clock it stands on, the size it was rendered at — so the mic that did not move is not rendered again; and the two
+    rendered side by side, on two threads, when both did. One renderer to one thread: it keeps what it last made. */
+class PairRenderer
+{
+public:
+    PairParts render (const Table& table, const std::string& cab, const Pair& p, size_t n = 1 << 14)
+    {
+        if (p.blend <= 0)
+        {
+            auto ca = cabAt (table, cab, p.a);
+            return { peakAt (irOf (lastA, keyOf (cab, p.a, ca.refDelay, n), ca, n), 0.5), {}, {} };
+        }
+
+        auto bSpot = p.b;
+        bSpot.horn = p.a.horn;
+        bSpot.hornDb = p.a.hornDb;
+        bSpot.back = p.a.back;
+        auto ca = cabAt (table, cab, p.a), cb = cabAt (table, cab, bSpot);
+        const double da = firstArrival (ca), db = firstArrival (cb), first = std::min (da, db);
+        ca.refDelay = p.align ? da : first;
+        cb.refDelay = p.align ? db : first;
+        const auto ka = keyOf (cab, p.a, ca.refDelay, n), kb = keyOf (cab, bSpot, cb.refDelay, n);
+
+#if defined(__EMSCRIPTEN__) && ! defined(__EMSCRIPTEN_PTHREADS__)
+        const bool together = false;   // a page with no threads renders one after the other
+#else
+        const bool together = ka != lastA.key && kb != lastB.key;
+#endif
+        if (together)
+        {
+            auto bLater = std::async (std::launch::async, [&cb, n] { return cabir::synth::render (cb, n); });
+            lastA = { ka, cabir::synth::render (ca, n) };
+            lastB = { kb, bLater.get() };
+        }
+        const auto& ia = irOf (lastA, ka, ca, n);
+        const auto& ib = irOf (lastB, kb, cb, n);
+
+        const auto middle = [n] (const std::vector<double>& ir) {
+            std::vector<cd> x (n, 0.0);
+            for (size_t i = 0; i < ir.size() && i < n; ++i) x[i] = ir[i];
+            fft (x, false);
+            double e = 1e-30;
+            for (size_t k = (size_t) (500.0 * n / fs); k <= (size_t) (2000.0 * n / fs); ++k) e += std::norm (x[k]);
+            return std::sqrt (e);
+        };
+        const double ga = (1 - p.blend) / middle (ia), gb = p.blend / middle (ib) * (p.invertB ? -1 : 1);
+        const size_t len = std::min (ia.size(), ib.size());
+        double peak = 1e-12;
+        for (size_t i = 0; i < len; ++i) peak = std::max (peak, std::abs (ga * ia[i] + gb * ib[i]));
+        const double to = 0.5 / peak;   // the mix's peak at -6 dBFS, as peakAt puts it
+        PairParts out { std::vector<float> (len), std::vector<float> (len), std::vector<float> (len) };
+        for (size_t i = 0; i < len; ++i)
+        {
+            out.a[i] = (float) (ga * ia[i] * to);
+            out.b[i] = (float) (gb * ib[i] * to);
+            out.mix[i] = (float) ((ga * ia[i] + gb * ib[i]) * to);
+        }
+        return out;
+    }
+
+private:
+    struct Kept { std::string key; std::vector<double> ir; };
+    Kept lastA, lastB;
+
+    static std::string keyOf (const std::string& cab, const Spot& s, double refDelay, size_t n)
+    {
+        char text[256];
+        std::snprintf (text, sizeof text, "|%.6f|%.6f|%.6f|%d|%.4f|%.4f|%d|%.12g|%zu|", s.x, s.y, s.distance, s.horn ? 1 : 0,
+                       s.angle, s.hornDb, s.back, refDelay, n);
+        return cab + "|" + s.mic + text;
+    }
+
+    static const std::vector<double>& irOf (Kept& kept, const std::string& key, const Cab& c, size_t n)
+    {
+        if (kept.key != key)
+            kept = { key, cabir::synth::render (c, n) };
+        return kept.ir;
+    }
+};
+
 inline PairParts renderPairParts (const Table& table, const std::string& cab, const Pair& p, size_t n = 1 << 14)
 {
-    if (p.blend <= 0)
-        return { renderAt (table, cab, p.a, n), {}, {} };
-
-    auto b = p.b;
-    b.horn = p.a.horn;
-    b.hornDb = p.a.hornDb;
-    b.back = p.a.back;
-    auto ca = cabAt (table, cab, p.a), cb = cabAt (table, cab, b);
-    const double da = firstArrival (ca), db = firstArrival (cb), first = std::min (da, db);
-    ca.refDelay = p.align ? da : first;
-    cb.refDelay = p.align ? db : first;
-    const auto ia = render (ca, n), ib = render (cb, n);
-
-    const auto middle = [n] (const std::vector<double>& ir) {
-        std::vector<cd> x (n, 0.0);
-        for (size_t i = 0; i < ir.size() && i < n; ++i) x[i] = ir[i];
-        fft (x, false);
-        double e = 1e-30;
-        for (size_t k = (size_t) (500.0 * n / fs); k <= (size_t) (2000.0 * n / fs); ++k) e += std::norm (x[k]);
-        return std::sqrt (e);
-    };
-    const double ga = (1 - p.blend) / middle (ia), gb = p.blend / middle (ib) * (p.invertB ? -1 : 1);
-    const size_t len = std::min (ia.size(), ib.size());
-    double peak = 1e-12;
-    for (size_t i = 0; i < len; ++i) peak = std::max (peak, std::abs (ga * ia[i] + gb * ib[i]));
-    const double to = 0.5 / peak;   // the mix's peak at -6 dBFS, as peakAt puts it
-    PairParts out { std::vector<float> (len), std::vector<float> (len), std::vector<float> (len) };
-    for (size_t i = 0; i < len; ++i)
-    {
-        out.a[i] = (float) (ga * ia[i] * to);
-        out.b[i] = (float) (gb * ib[i] * to);
-        out.mix[i] = (float) ((ga * ia[i] + gb * ib[i]) * to);
-    }
-    return out;
+    return PairRenderer{}.render (table, cab, p, n);
 }
 
 inline std::vector<float> renderPair (const Table& table, const std::string& cab, const Pair& p, size_t n = 1 << 14)
