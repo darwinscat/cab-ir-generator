@@ -10,7 +10,6 @@
 //                                      at half the size, as the app does while a hand is on a control
 //     cabir_mix / cabir_a / cabir_b    the IR, 48 kHz mono float, and each mic's part of it (empty with one mic on)
 //     cabir_response / cabir_comb      the band's curves, cabir_points() of them (the comb empty with one mic on)
-//     cabir_response_a / _b            each mic as it stands in the response, on its scale (empty with one mic on)
 //     cabir_gain (rate)                the level the app plays it at: felitronics-core's CabConvolver, reference-unity
 //     cabir_wav / cabir_wav_size       the IR as the app downloads it: a 24-bit WAV
 //   cabir_find (toml, thorough)        B's quiet place against A: x, y, distance, shift (ms) at cabir_found() — or, with
@@ -59,7 +58,7 @@ namespace
         synth::Table table;
         synth::PairRenderer renderer;   // keeps the mic that did not move, as the app's does
         synth::PairParts ir;
-        std::vector<float> response, comb, partA, partB;
+        std::vector<float> response, comb;
         std::vector<unsigned char> wav;
         float found[4] {};
         std::vector<float> tried;
@@ -171,12 +170,8 @@ CABIR_EXPORT int cabir_render (const char* toml, int live)
         return 0;
     // The sizes the app renders at: half while a hand moves a control, full once it lets go.
     s.ir = s.renderer.render (s.table, state->box, synth::pairOf (*state), live != 0 ? (size_t) 1 << 13 : (size_t) 1 << 14);
-    const auto held = synth::as24Bit (s.ir.mix);
-    s.response = synth::responseOf (held, 48000.0);
+    s.response = synth::responseOf (synth::as24Bit (s.ir.mix), 48000.0);
     s.comb = s.ir.a.empty() ? std::vector<float>() : synth::combOf (s.ir.a, s.ir.b);
-    auto parts = synth::partsOf (held, s.ir.a, s.ir.b);
-    s.partA = std::move (parts[0]);
-    s.partB = std::move (parts[1]);
     s.wav = synth::wav24 (s.ir.mix, 48000);
     return (int) s.ir.mix.size();
 }
@@ -190,8 +185,6 @@ CABIR_EXPORT int cabir_points()                 { return synth::responsePoints; 
 CABIR_EXPORT float cabir_point_hz (int i)       { return synth::responseHz (i); }
 CABIR_EXPORT const float* cabir_response()      { return dataOf (session().response); }
 CABIR_EXPORT const float* cabir_comb()          { return dataOf (session().comb); }
-CABIR_EXPORT const float* cabir_response_a()    { return dataOf (session().partA); }
-CABIR_EXPORT const float* cabir_response_b()    { return dataOf (session().partB); }
 
 CABIR_EXPORT float cabir_gain (double rate)
 {

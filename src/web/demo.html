@@ -64,9 +64,8 @@ function render (state, live)
     if (call ('cabir_render', 'number', ['string', 'number'], [state, live ? 1 : 0]) === 0) return;
     const now = call ('cabir_response', 'number', [], []);
     const comb = call ('cabir_comb', 'number', [], []);
-    const a = call ('cabir_response_a', 'number', [], []), b = call ('cabir_response_b', 'number', [], []);
     if (keptCurve) { m.HEAPF32.set (keptCurve, ghost / 4); hasGhost = true; }
-    call ('cabir_panel_curves', null, ['number', 'number', 'number', 'number', 'number'], [now, hasGhost ? ghost : 0, comb, a, b]);
+    call ('cabir_panel_response', null, ['number', 'number', 'number'], [now, hasGhost ? ghost : 0, comb]);
     if (! live) keptCurve = m.HEAPF32.slice (now / 4, now / 4 + points);
     frame ();
 }

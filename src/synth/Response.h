@@ -9,7 +9,6 @@
 #include "CabSynth.h"
 
 #include <algorithm>
-#include <array>
 #include <cmath>
 #include <vector>
 
@@ -60,59 +59,29 @@ namespace detail
 
 /** AN IR'S RESPONSE: a sixth of an octave wide each point, in dB, levelled to its own middle (100 Hz .. 5 kHz); its first
     65536 samples at `rate`. Empty for an empty IR. */
-namespace detail
-{
-    /** An IR's levels at the response's points, dB, as they stand: a sixth of an octave wide each, its first 65536 samples. */
-    inline std::vector<float> levelsOf (const std::vector<float>& ir, double rate)
-    {
-        const int length = (int) std::min<size_t> (ir.size(), 1 << 16);
-        const auto s = spectrumOf (ir.data(), length);
-        std::vector<float> db ((size_t) responsePoints);
-        for (int i = 0; i < responsePoints; ++i)
-            db[(size_t) i] = (float) (10.0 * std::log10 (powerAt (s, rate, responseHz (i), std::pow (2.0, 1.0 / 12.0))));
-        return db;
-    }
-
-    /** ...and their middle, 100 Hz .. 5 kHz. */
-    inline float middleOf (const std::vector<float>& db)
-    {
-        double middle = 0;
-        int counted = 0;
-        for (int i = 0; i < (int) db.size(); ++i)
-            if (const double hz = responseHz (i); hz >= 100.0 && hz <= 5000.0)
-            {
-                middle += db[(size_t) i];
-                ++counted;
-            }
-        return (float) (middle / std::max (1, counted));
-    }
-}
-
 inline std::vector<float> responseOf (const std::vector<float>& ir, double rate)
 {
     if (ir.empty() || rate <= 0)
         return {};
-    auto db = detail::levelsOf (ir, rate);
-    const float middle = detail::middleOf (db);
-    for (auto& v : db)
-        v -= middle;
-    return db;
-}
+    const int length = (int) std::min<size_t> (ir.size(), 1 << 16);
+    const auto s = detail::spectrumOf (ir.data(), length);
 
-/** ...and a pair's two mics as they stand in it: each part (PairParts, `a` + `b` the mix) against the mix's own middle,
-    as responseOf levels the mix — the three on one scale, so where one lies well over the other that one is heard, and
-    where the two meet level they comb. Empty with one mic on. */
-inline std::array<std::vector<float>, 2> partsOf (const std::vector<float>& mix, const std::vector<float>& partA,
-                                                  const std::vector<float>& partB, double rate = 48000.0)
-{
-    if (mix.empty() || partA.empty() || partB.empty() || rate <= 0)
-        return {};
-    const float middle = detail::middleOf (detail::levelsOf (mix, rate));
-    std::array<std::vector<float>, 2> out { detail::levelsOf (partA, rate), detail::levelsOf (partB, rate) };
-    for (auto& part : out)
-        for (auto& v : part)
-            v -= middle;
-    return out;
+    std::vector<float> db ((size_t) responsePoints);
+    double middle = 0;
+    int counted = 0;
+    for (int i = 0; i < responsePoints; ++i)
+    {
+        const double hz = responseHz (i);
+        db[(size_t) i] = (float) (10.0 * std::log10 (detail::powerAt (s, rate, hz, std::pow (2.0, 1.0 / 12.0))));
+        if (hz >= 100.0 && hz <= 5000.0)
+        {
+            middle += db[(size_t) i];
+            ++counted;
+        }
+    }
+    for (auto& v : db)
+        v -= (float) (middle / std::max (1, counted));
+    return db;
 }
 
 /** ...and where a pair's two mics meet, at the same points — each mic's part of the pair at the mix's level, `rate` Hz:

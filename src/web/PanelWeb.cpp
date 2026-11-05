@@ -8,7 +8,6 @@
 //   cabir_panel_options (find, download, def, close)   which buttons it offers — 1 each for the app's: 1, 1, 0, 0
 //   cabir_panel_show (toml)                    what plays: the state, as the synthesis takes it
 //   cabir_panel_response (now, before, comb)   the band's curves, cabir_points() floats each; null for none
-//   cabir_panel_curves (now, before, comb, a, b)   ...and each mic's (cabir_response_a / _b), with two mics heard
 //   cabir_panel_search (x, y, score) / cabir_panel_end_search ()      FIND's map as it goes, and done
 //   cabir_panel_pointer (kind, x, y)           0 move, 1 down, 2 drag, 3 up, 4 exit, 5 double click
 //   cabir_panel_tick (seconds)                 the page's clock, while cabir_panel_wants_frames () says 1
@@ -197,11 +196,6 @@ CABIR_EXPORT int cabir_panel_show (const char* toml)
 CABIR_EXPORT void cabir_panel_response (const float* now, const float* before, const float* comb)
 {
     session().panel.showResponse (curve (now), curve (before), curve (comb));
-}
-
-CABIR_EXPORT void cabir_panel_curves (const float* now, const float* before, const float* comb, const float* a, const float* b)
-{
-    session().panel.showResponse (curve (now), curve (before), curve (comb), curve (a), curve (b));
 }
 
 CABIR_EXPORT void cabir_panel_search (float x, float y, float score) { session().panel.showSearch (x, y, score); }
