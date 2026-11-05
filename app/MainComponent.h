@@ -30,7 +30,8 @@ public:
     MainComponent();
     ~MainComponent() override;
 
-    static constexpr int brandH = 56, presetH = 40, headerH = brandH + presetH, stripH = 34;
+    static constexpr int brandH = 60, headerH = brandH, stripH = 34;
+    static constexpr float nameShare = 0.36f;   // the name's type, a share of the header's height
 
     void paint (juce::Graphics&) override;
     void resized() override;
@@ -84,7 +85,6 @@ private:
 
     juce::Rectangle<int> header() const { return getLocalBounds().removeFromTop (headerH); }
     juce::Rectangle<int> brandRow() const;
-    juce::Rectangle<int> presetRow() const;
     juce::Rectangle<int> brandLink() const;
     juce::Rectangle<int> undoArea() const;
     juce::Rectangle<int> redoArea() const;

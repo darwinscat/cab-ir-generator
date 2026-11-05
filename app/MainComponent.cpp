@@ -492,25 +492,29 @@ bool MainComponent::keyPressed (const juce::KeyPress& key)
 }
 
 // ---------------------------------------------------------------- the header
-// Two rows: the brand — the cat, the mark, the name and the byline, as the family's headers carry them — with UNDO,
-// REDO and A/B/C/D at its right; under it the preset, centred (the owner, 05.11).
-juce::Rectangle<int> MainComponent::brandRow() const   { return header().removeFromTop (brandH); }
-juce::Rectangle<int> MainComponent::presetRow() const  { return header().withTrimmedTop (brandH); }
+// One row: the brand — the cat, the mark, the name with the byline under its last word, as the family's headers carry
+// them — then the preset, then UNDO, REDO and A/B/C/D (the owner, 05.11).
+juce::Rectangle<int> MainComponent::brandRow() const   { return header(); }
 juce::Rectangle<int> MainComponent::registerArea (int i) const
 {
     const auto b = brandRow();
-    return { b.getRight() - 12 - (4 - i) * 36 + 4, b.getCentreY() - 15, 30, 30 };
+    return { b.getRight() - 10 - (4 - i) * 34 + 4, b.getCentreY() - 15, 30, 30 };
 }
-juce::Rectangle<int> MainComponent::redoArea() const   { return registerArea (0).translated (-52, 0); }
-juce::Rectangle<int> MainComponent::undoArea() const   { return redoArea().translated (-38, 0); }
-juce::Rectangle<int> MainComponent::presetArea() const { return presetRow().withSizeKeepingCentre (460, presetRow().getHeight() - 10); }
-juce::Rectangle<int> MainComponent::prevArea() const   { return presetArea().withWidth (30).translated (-36, 0); }
-juce::Rectangle<int> MainComponent::nextArea() const   { return presetArea().withX (presetArea().getRight() + 6).withWidth (30); }
+juce::Rectangle<int> MainComponent::redoArea() const   { return registerArea (0).translated (-46, 0); }
+juce::Rectangle<int> MainComponent::undoArea() const   { return redoArea().translated (-36, 0); }
+juce::Rectangle<int> MainComponent::prevArea() const
+{
+    return { brandLink().getRight() + 14, brandRow().getCentreY() - 15, 30, 30 };
+}
+juce::Rectangle<int> MainComponent::nextArea() const   { return prevArea().withX (undoArea().getX() - 18 - 30); }
+juce::Rectangle<int> MainComponent::presetArea() const
+{
+    return { prevArea().getRight() + 6, prevArea().getY(), nextArea().getX() - 6 - prevArea().getRight() - 6, prevArea().getHeight() };
+}
 juce::Rectangle<int> MainComponent::brandLink() const
 {
     const float h = (float) brandH;
-    const auto name = look().font (h * 0.40f), by = look().font (h * 0.26f);
-    const float right = h * 2.0f + 18.0f + look().trackedWidth ("Cab IR Generator", name, 0.0f) + 14.0f + look().trackedWidth ("by Darwin's Cat", by, 0.0f) + 8.0f;
+    const float right = h * 2.0f + 18.0f + look().trackedWidth ("Cab IR Generator", look().font (h * nameShare), 0.0f) + 6.0f;
     return { 0, 0, juce::roundToInt (right), brandH };
 }
 
@@ -548,15 +552,13 @@ void MainComponent::paint (juce::Graphics& g)
             cat->drawWithin (g, juce::Rectangle<float> (6.0f, 4.0f, h - 8.0f, h - 8.0f), juce::RectanglePlacement::centred, 1.0f);
         if (mark != nullptr)
             mark->drawWithin (g, juce::Rectangle<float> (h + 6.0f, 4.0f, h - 8.0f, h - 8.0f), juce::RectanglePlacement::centred, 1.0f);
-        const auto name = look().font (h * 0.40f), by = look().font (h * 0.26f);
-        float x = h * 2.0f + 18.0f;
+        // The name high, the byline under it, its right edge under the name's last word.
+        const auto name = look().font (h * nameShare), by = look().font (h * 0.25f);
+        const float x = h * 2.0f + 18.0f, nameW = look().trackedWidth ("Cab IR Generator", name, 0.0f);
         g.setColour (brandHover ? juce::Colours::white : look().tx);
-        look().drawTracked (g, "Cab IR Generator", { x, b.getY(), 400.0f, h }, name, 0.0f, juce::Justification::centredLeft);
-        x += look().trackedWidth ("Cab IR Generator", name, 0.0f) + 14.0f;
+        look().drawTracked (g, "Cab IR Generator", { x, b.getY() + 5.0f, nameW + 4.0f, h * 0.5f }, name, 0.0f, juce::Justification::centredLeft);
         g.setColour (brandHover ? look().violet.brighter (0.3f) : look().violet);
-        // the byline on the name's baseline
-        const float baseline = b.getCentreY() + (name.getAscent() - name.getDescent()) * 0.5f;
-        look().drawTracked (g, "by Darwin's Cat", { x, baseline - by.getAscent(), 260.0f, by.getHeight() }, by, 0.0f, juce::Justification::topLeft);
+        look().drawTracked (g, "by Darwin's Cat", { x, b.getY() + h * 0.54f, nameW, h * 0.36f }, by, 0.0f, juce::Justification::centredRight);
 
         const auto arrow = [&] (juce::Rectangle<int> r, bool back, bool enabled)
         {
@@ -601,7 +603,7 @@ void MainComponent::paint (juce::Graphics& g)
         g.fillRect (header().withTop (header().getBottom() - 1));
     }
 
-    // ...and its preset row: one before, the preset, one after.
+    // ...and in it the preset: one before, the preset, one after.
     {
         const bool edited = presetName.isEmpty() || toToml (state) != presetText;
         const auto pr = presetArea().toFloat().reduced (0.5f);
