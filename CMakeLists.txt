@@ -53,6 +53,8 @@ if(CABIR_TOOLS)
     target_link_libraries(cabgen PRIVATE cabir_synth)
     add_executable(irlook tools/irlook.cpp)
     target_link_libraries(irlook PRIVATE cabir_synth)
+    add_executable(presetcheck tools/presetcheck.cpp)
+    target_link_libraries(presetcheck PRIVATE cabir_synth)
 endif()
 
 # THE TESTS — no JUCE: the state's text, read and written.
