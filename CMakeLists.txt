@@ -114,13 +114,13 @@ if(CABIR_WEB)
     target_link_libraries(irdump PRIVATE cabir_web_abi)
     if(EMSCRIPTEN)
         target_link_options(irdump PRIVATE -sNODERAWFS=1 -sALLOW_MEMORY_GROWTH=1 -sENVIRONMENT=node)
-        add_executable(cabir_web src/web/CabirWeb.cpp)
+        add_executable(cabir_web src/web/CabirWeb.cpp src/web/PanelWeb.cpp)
         target_link_libraries(cabir_web PRIVATE cabir_synth felitronics::convolution)
         set_target_properties(cabir_web PROPERTIES OUTPUT_NAME cabir SUFFIX ".mjs")
         target_link_options(cabir_web PRIVATE
             -sMODULARIZE=1 -sEXPORT_ES6=1 -sEXPORT_NAME=createCabir -sENVIRONMENT=web,worker,node
             -sALLOW_MEMORY_GROWTH=1 -sFILESYSTEM=0
-            "-sEXPORTED_RUNTIME_METHODS=['ccall','cwrap','HEAPF32','HEAPF64','HEAPU8','UTF8ToString','stringToNewUTF8']"
+            "-sEXPORTED_RUNTIME_METHODS=['ccall','cwrap','HEAPF32','HEAPF64','HEAPU8','HEAPU32','UTF8ToString','stringToNewUTF8']"
             "-sEXPORTED_FUNCTIONS=['_malloc','_free']")
     endif()
 endif()

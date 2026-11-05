@@ -5,7 +5,8 @@
 # Builds the page's module — the synthesis behind the C ABI of src/web/CabirWeb.cpp — for a browser worker:
 #
 #   cabir.mjs     the emscripten glue, an ES module whose default export is the factory (createCabir)
-#   cabir.wasm    the module
+#   cabir.wasm    the module: the synthesis and the panel
+#   cabir-panel.mjs  the panel's drawing calls played onto a canvas, as the app's JUCE draws them
 #   BUILD-INFO    what it was built from: this repository, felitronics-core, felitronics-toml, the toolchain, the flags
 #
 #   tools/wasm/build.sh [out-dir]          (default tools/wasm/build)
@@ -39,7 +40,7 @@ emcmake cmake -S "$ROOT" -B "$BUILD" "${GEN[@]}" \
     -DCABIR_CORE_DIR="${CABIR_CORE_DIR:-}" -DCABIR_TOML_DIR="${CABIR_TOML_DIR:-}" \
     "-DCMAKE_CXX_FLAGS=$FLAGS" > "$OUT/configure.log" || { cat "$OUT/configure.log"; exit 1; }
 cmake --build "$BUILD" --target cabir_web
-cp "$BUILD/cabir.mjs" "$BUILD/cabir.wasm" "$OUT/"
+cp "$BUILD/cabir.mjs" "$BUILD/cabir.wasm" "$ROOT/src/web/cabir-panel.mjs" "$OUT/"
 
 CORE_SRC="$(sed -n 's/^felitronics_core_SOURCE_DIR:STATIC=//p' "$BUILD/CMakeCache.txt")"
 [ -n "$CORE_SRC" ] || CORE_SRC="$BUILD/_deps/felitronics_core-src"
