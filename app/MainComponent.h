@@ -9,6 +9,7 @@
 #include <felitronics/appkit/UpdateChecker.h>
 #include <felitronics/appkit/VersionBadge.h>
 #include <panel/CabPicker.h>
+#include <synth/CabSynth.h>
 #include <synth/State.h>
 
 #include <juce_gui_extra/juce_gui_extra.h>
@@ -51,6 +52,7 @@ private:
     std::vector<float> keptCurve;             // ...its response: the ghost under the next one
 
     juce::ThreadPool worker { 1 };
+    synth::PairRenderer renderer;             // the worker's own: it keeps each mic's last IR
     std::atomic<int> latest { 0 };
     int heard = 0;                            // the latest render loaded (message thread)
     std::shared_ptr<int> alive = std::make_shared<int> (0);

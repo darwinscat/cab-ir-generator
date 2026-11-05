@@ -94,9 +94,15 @@ MainComponent::MainComponent()
     const auto workspace = juce::parseXML (properties.getUserSettings()->getValue ("workspace"));
     if (workspace == nullptr || ! history.fromTree (juce::ValueTree::fromXml (*workspace)))
     {
+        // A 4x10, ported as eight boxes of the ten are, an MD421 close and a U47 out at 25 cm where the two comb least:
+        // green to 2 kHz (synth::quietPlaceForB found the place; the owner, 05.11).
         State first;
         first.box = "SVT-410HE";
-        first.back = 1;   // ported, as eight boxes of the ten are (the owner, 05.11)
+        first.back = 1;
+        first.a = { true, "md421", -0.3, 0.0, 0.05, 0.0 };
+        first.b = { true, "u47", 0.10, 0.0, 0.25, 0.0 };
+        first.blend = 0.35;
+        first.align = true;
         show (first);
         history.reset();
     }
@@ -133,7 +139,8 @@ void MainComponent::render (const State& s, bool live)
         if (mine != latest.load())
             return;   // superseded before it began
         static const auto table = synth::parseTable (std::string (BinaryData::cabinets_txt, (size_t) BinaryData::cabinets_txtSize));
-        auto ir = synth::renderPairParts (table, s.box, synth::pairOf (s));
+        // The mic that did not move kept, the one that did rendered at half the size while the hand is on it.
+        auto ir = renderer.render (table, s.box, synth::pairOf (s), live ? (size_t) 1 << 13 : (size_t) 1 << 14);
         auto wav = synth::wav24 (ir.mix, 48000);
 
         juce::MessageManager::callAsync ([this, stillHere, mine, s, live, ir, wav]() mutable
