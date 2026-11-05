@@ -67,6 +67,14 @@ public:
         Panel::paintSketch (drawn, cab, setup, { area.getX(), area.getY(), area.getWidth(), area.getHeight() });
     }
 
+    /** One box alone in `box`, as the pile draws it unchosen: its speakers, its own back's port, its horn — no mics. */
+    static void paintBox (juce::Graphics& g, int cab, juce::Rectangle<float> box)
+    {
+        useHostLook();
+        Drawn drawn (g);
+        Panel::paintCab (drawn, cabs()[(size_t) cab], { box.getX(), box.getY(), box.getWidth(), box.getHeight() }, {}, false, false);
+    }
+
     void paint (juce::Graphics& g) override
     {
         useHostLook();

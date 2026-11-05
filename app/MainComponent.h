@@ -30,8 +30,9 @@ public:
     MainComponent();
 
     /** THE PANEL AS STILLS (--stills <folder>): drawn as the app draws it, with no window, no audio, no hand — the first
-        run's state; FIND's map and the place it found; a pair that combs; one mic alone — at `scale`, PNG. For the
-        page (its narrow screens, its link image) and for comparing the panel with itself. 0 when all were written. */
+        run's state; FIND's map and the place it found; a pair that combs; one mic alone — and each box of the pile alone
+        (boxes/box-<size>.png) — at `scale`, PNG. For the page (its narrow screens, its link image, its list of sizes)
+        and for comparing the panel with itself. 0 when all were written. */
     static int writeStills (const juce::File& folder, float scale = 2.0f);
 
     ~MainComponent() override;

@@ -256,6 +256,14 @@ int MainComponent::writeStills (const juce::File& folder, float scale)
                              ir.a.empty() ? std::vector<float>() : synth::combOf (ir.a, ir.b));
     };
     int failed = 0;
+    const auto save = [&] (const juce::File& file, const juce::Image& image)
+    {
+        file.deleteFile();
+        juce::FileOutputStream out (file);
+        juce::PNGImageFormat png;
+        if (! out.openedOk() || ! png.writeImageToStream (image, out))
+            ++failed;
+    };
     const auto write = [&] (const char* name)
     {
         // On the panel's own colour, as the window under it paints it in the app.
@@ -267,12 +275,7 @@ int MainComponent::writeStills (const juce::File& folder, float scale)
             g.fillAll (look().panel);
             picker.paintEntireComponent (g, true);
         }
-        const auto file = folder.getChildFile (name);
-        file.deleteFile();
-        juce::FileOutputStream out (file);
-        juce::PNGImageFormat png;
-        if (! out.openedOk() || ! png.writeImageToStream (image, out))
-            ++failed;
+        save (folder.getChildFile (name), image);
     };
 
     const auto first = defaultState();
@@ -304,6 +307,28 @@ int MainComponent::writeStills (const juce::File& folder, float scale)
     found.shiftMs = place.shiftMs;
     shown (found);
     write ("panel-find@2x.png");
+
+    // Each box of the pile alone, as the pile draws it unchosen, for a page's list of sizes (the owner, 05.11): one scale
+    // for all, so each stands as big as itself against the others — 420 px a metre, about three and a half times the
+    // pile's — on nothing, its tolex opaque; box-<size>.png in boxes/.
+    const auto boxes = folder.getChildFile ("boxes");
+    if (! boxes.createDirectory())
+        return failed + 1;
+    constexpr float perMetre = 420.0f, margin = 4.0f;   // margin: the outline's line kept inside the picture
+    for (const auto& column : Panel::pile())
+        for (const auto& name : column)
+        {
+            const int i = Panel::indexOf (name);
+            const auto& c = CabPicker::cabs()[(size_t) i];
+            const float w = c.w * perMetre, h = c.h * perMetre;
+            juce::Image image (juce::Image::ARGB, juce::roundToInt ((w + 2.0f * margin) * scale), juce::roundToInt ((h + 2.0f * margin) * scale), true);
+            {
+                juce::Graphics g (image);
+                g.addTransform (juce::AffineTransform::scale (scale));
+                CabPicker::paintBox (g, i, { margin, margin, w, h });
+            }
+            save (boxes.getChildFile ("box-" + CabPicker::wordOf (i) + ".png"), image);
+        }
     return failed;
 }
 
