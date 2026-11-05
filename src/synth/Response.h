@@ -108,4 +108,29 @@ inline std::vector<float> combOf (const std::vector<float>& partA, const std::ve
     return db;
 }
 
+/** ...and how far a response falls under its own third of an octave either side, at each of its points — 0 above it,
+    and 0 under 40 Hz and over 8 kHz, where a box's own roll-off would read as one: a dip a player hears, which no comb
+    shows. tools/respread holds a preset's worst to 6 dB; the panel's line reddens by it. */
+template <typename T>
+std::vector<T> pitsOf (const std::vector<T>& db)
+{
+    const int n = (int) db.size(), reach = (int) std::lround ((double) (n - 1) / std::log2 (12000.0 / 30.0) / 3.0);
+    std::vector<T> pit (db.size(), T (0));
+    for (int i = 0; i < n; ++i)
+    {
+        const double hz = responseHz (i);
+        if (hz < 40.0 || hz > 8000.0)
+            continue;
+        double sum = 0;
+        int count = 0;
+        for (int k = std::max (0, i - reach); k <= std::min (n - 1, i + reach); ++k)
+        {
+            sum += (double) db[(size_t) k];
+            ++count;
+        }
+        pit[(size_t) i] = (T) std::max (0.0, sum / count - (double) db[(size_t) i]);
+    }
+    return pit;
+}
+
 } // namespace cabir::synth

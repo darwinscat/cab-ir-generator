@@ -42,9 +42,10 @@ namespace cabir
     UNDER THE HAND whatever a click there works is lit (the owner, 05.11): a box and a back framed, a word brighter, a
     button's line, a mic on the speaker ringed at its capsule — the same test the click goes by (hotAt).
 
-    THE RESPONSE, across the panel under it all: what plays, 30 Hz to 12 kHz — the cabinet heard in orange, following
-    a moving hand, and the one kept before it a faint grey ghost, so every click and every drag reads as before and
-    after; with two mics heard, green under it where they add in phase and red where they cancel.
+    THE RESPONSE, across the panel under it all: what plays, 30 Hz to 12 kHz — the cabinet heard, following a moving
+    hand, green where it is fine and red where it falls into a pit or its two mics cancel (the owner, 05.11), and the
+    one kept before it a faint grey ghost, so every click and every drag reads as before and after; with two mics
+    heard, green under it where they add in phase and red where they cancel.
 
     A dumb view: the cabinets in (cabs(), geometry from data/cabinets.txt — metres, the baffle's centre the
     origin, up positive), what plays in (show, showResponse), a pick out (onSetup). */
@@ -346,6 +347,10 @@ public:
         responseNow = std::move (now);
         responseBefore = std::move (before);
         responseComb = std::move (comb);
+        responseBad = synth::pitsOf (responseNow);
+        if (responseComb.size() == responseBad.size())
+            for (size_t i = 0; i < responseBad.size(); ++i)
+                responseBad[i] = ui::jmax (responseBad[i], -responseComb[i]);
         repaint (responseArea());
     }
 
@@ -1670,8 +1675,9 @@ private:
 
     // ---------------------------------------------------------------- the response
     // Across the panel under it all: the cabinet's response, 30 Hz to 12 kHz on a log scale, +15 to -30 dB — the one
-    // heard in the block's orange line, the one kept before it a faint grey ghost; dB at the left, the frequencies under.
+    // heard green to red, the one kept before it a faint grey ghost; dB at the left, the frequencies under.
     std::vector<float> responseNow, responseBefore, responseComb;
+    std::vector<float> responseBad;   // dB, each point: how far it falls into a pit, or its two mics cancel there — the deeper
     // +15 over the middle, -30 under it: a cabinet's response rarely climbs past +10, its roll-offs and a comb's dips
     // go to -20 and -30, and under that nothing more is heard (the owner, 05.11).
     static constexpr float responseTop = 15.0f, responseBottom = -30.0f;
@@ -1728,16 +1734,16 @@ private:
             ui::look().drawTracked (g, l.word, { area.getX() + 2.0f, y - 8.0f, 28.0f, 16.0f }, font, 0.0f, ui::Justification::centredRight);
         }
 
-        const auto curve = [&] (const std::vector<float>& db, ui::Colour colour, float width)
+        const auto curve = [&] (const std::vector<float>& db, ui::Colour colour, float width, int from = 0, int to = responsePoints - 1)
         {
             if ((int) db.size() != responsePoints)
                 return;
             ui::Path path;
-            for (int i = 0; i < responsePoints; ++i)
+            for (int i = from; i <= to; ++i)
             {
                 // Past the scale it goes out of the frame, as a dip does, not along its floor (the owner, 05.11).
                 const ui::Point<float> at (xOf (responseHz (i)), yOf (ui::jlimit (3.0f * responseBottom, 3.0f * responseTop, db[(size_t) i])));
-                if (i == 0)
+                if (i == from)
                     path.startNewSubPath (at);
                 else
                     path.lineTo (at);
@@ -1748,7 +1754,26 @@ private:
         ui::Graphics::ScopedSaveState keep (g);
         g.reduceClipRegion (p.toNearestInt().expanded (0, 2));
         curve (responseBefore, ui::look().txDim.withAlpha (0.3f), 1.2f);   // barely there: a second line reads as a second mic
-        curve (responseNow, ui::look().orange, 1.6f);
+        // What plays, green where it is fine and red where it falls into a pit or its two mics cancel — from 3 dB, full
+        // red at 6, the bounds the presets are held to (the owner, 05.11): drawn in runs of one shade, each segment as
+        // red as the worse of its two ends.
+        if (responseBad.size() == responseNow.size())
+        {
+            const auto shade = [this] (int i)
+            {
+                const auto at = [this] (int k) { return ui::jlimit (0, 8, ui::roundToInt ((responseBad[(size_t) k] - 3.0f) / 3.0f * 8.0f)); };
+                return ui::jmax (at (i), at (i + 1));
+            };
+            for (int from = 0; from < (int) responseNow.size() - 1;)
+            {
+                const int level = shade (from);
+                int to = from + 1;
+                while (to < (int) responseNow.size() - 1 && shade (to) == level)
+                    ++to;
+                curve (responseNow, ui::Colour (0xff3fae6a).interpolatedWith (ui::Colour (0xffd5455a), (float) level / 8.0f), 1.6f, from, to);
+                from = to;
+            }
+        }
 
         // DOWNLOAD IR over the corner, its line pulsing slowly — the one thing the response invites a hand to do.
         if (const auto d = downloadArea(); ! d.isEmpty())

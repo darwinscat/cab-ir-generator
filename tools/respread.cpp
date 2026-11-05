@@ -44,18 +44,8 @@ namespace
     /** How far the response falls under its own third of an octave either side, 40 Hz to 8 kHz, at its worst. */
     double pitOf (const std::vector<double>& db)
     {
-        const int n = (int) db.size(), reach = (int) std::lround ((double) (n - 1) / std::log2 (12000.0 / 30.0) / 3.0);
-        double worst = 0;
-        for (int i = 0; i < n; ++i)
-        {
-            const double hz = synth::responseHz (i);
-            if (hz < 40.0 || hz > 8000.0) continue;
-            double sum = 0;
-            int count = 0;
-            for (int k = std::max (0, i - reach); k <= std::min (n - 1, i + reach); ++k) { sum += db[(size_t) k]; ++count; }
-            worst = std::max (worst, sum / count - db[(size_t) i]);
-        }
-        return worst;
+        const auto pits = synth::pitsOf (db);
+        return pits.empty() ? 0.0 : *std::max_element (pits.begin(), pits.end());
     }
 
     /** Both, from a pair's two spectra with B turned by `tau` s: the worst comb point and the pit. */
