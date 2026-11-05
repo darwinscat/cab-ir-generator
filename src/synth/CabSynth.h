@@ -14,6 +14,7 @@
 // JUCE-free: the plugins, the app and the web page all render by it.
 
 #include <algorithm>
+#include <chrono>
 #include <array>
 #include <cmath>
 #include <complex>
@@ -510,16 +511,16 @@ inline cd heard (const Cab& c, const Mic& m, double dx, double dy, double dz, do
     return pattern * std::pow (10.0, -e * top / 20);
 }
 
-/** `bin (k)` for every bin from 1 up to `bins`, spread over up to four threads in turns of the range — or one after the
-    other where there are no threads (a page built without them). */
+/** `bin (k)` for every bin from 1 up to `bins`, spread over `threads` threads (0: up to four) in turns of the range — or one
+    after the other where there are no threads (a page built without them). */
 template <class F>
-inline void forEachBin (size_t bins, const F& bin)
+inline void forEachBin (size_t bins, const F& bin, size_t threadsAsked = 0)
 {
 #if defined(__EMSCRIPTEN__) && ! defined(__EMSCRIPTEN_PTHREADS__)
     for (size_t k = 1; k < bins; ++k)
         bin (k);
 #else
-    const size_t threads = std::clamp<size_t> (std::thread::hardware_concurrency(), 1, 4);
+    const size_t threads = threadsAsked > 0 ? threadsAsked : std::clamp<size_t> (std::thread::hardware_concurrency(), 1, 4);
     const size_t step = (bins - 1 + threads - 1) / threads;
     std::vector<std::future<void>> others;
     for (size_t t = 1; t < threads; ++t)
@@ -535,7 +536,7 @@ inline void forEachBin (size_t bins, const F& bin)
 #endif
 }
 
-inline std::vector<double> render (const Cab& c, size_t n)
+inline std::vector<double> render (const Cab& c, size_t n, size_t threads = 0)
 {
     const size_t bins = n / 2 + 1;
     std::vector<cd> H (n, 0.0);
@@ -783,7 +784,7 @@ inline std::vector<double> render (const Cab& c, size_t n)
         for (auto& b : presence) capsule *= b.at (f, fs);
         H[k] = sum * capsule;
     };
-    forEachBin (bins, bin);
+    forEachBin (bins, bin, threads);
     for (size_t k = 1; k < n / 2; ++k) H[n - k] = std::conj (H[k]);
     H[0] = 0;
     fft (H, true);
@@ -1042,14 +1043,16 @@ inline Pair pairOf (const State& s)
     distances, 2 to 12 cm — each heard as the pair hears it (A's horn and back, the same clock unless aligned, the blend,
     B turned over or not), and the one whose meeting with A cancels least from 40 Hz to 12 kHz: at each point the mix
     against the two powers apart, the dips summed, the top at nearly full weight. A place right on A is passed over: two
-    of one mic there are one mic. Searched on four threads; with `align`, A is rendered once. `tried`, when given, hears
-    of each place as it is judged — its score, 0 for no dip, the more negative the more it cancels — from whichever of
-    the threads judged it: a picture of the search, drawn as it goes. */
+    of one mic there are one mic. `thorough` (FIND) looks again round the four best, finer — nine places about each, four
+    distances about its own — about two seconds in all. Searched on as many threads as the machine has, a render each;
+    with `align`, A is rendered once. `tried`, when given, hears of each place as it is judged — its score, 0 for no dip,
+    the more negative the more it cancels — from whichever thread judged it: a picture of the search, drawn as it goes. */
 struct Place { double x = 0, y = 0, distance = 0.05; };
 
 inline Place quietPlaceForB (const Table& table, const State& s, size_t n = 1 << 13,
-                             const std::function<void (const Place&, double score)>& tried = {})
+                             const std::function<void (const Place&, double score)>& tried = {}, bool thorough = false)
 {
+    const auto started = std::chrono::steady_clock::now();
     State both = s;
     both.a.on = both.b.on = true;
     const auto pair = pairOf (both);
@@ -1090,12 +1093,8 @@ inline Place quietPlaceForB (const Table& table, const State& s, size_t n = 1 <<
     }
 
     struct Candidate { Place place; double score = -1e30; };
-    std::vector<Candidate> candidates;
-    for (const double x : { -0.9, -0.65, -0.4, -0.15, 0.15, 0.4, 0.65, 0.9 })
-        for (const double y : { -0.35, 0.0, 0.35 })
-            for (const double distance : { 0.02, 0.04, 0.07, 0.12 })
-                if (! (std::hypot (x - pair.a.x, y - pair.a.y) < 0.1 && std::abs (distance - pair.a.distance) < 0.01))
-                    candidates.push_back ({ { x, y, distance } });
+    const auto onA = [&pair] (const Place& p)
+    { return std::hypot (p.x - pair.a.x, p.y - pair.a.y) < 0.1 && std::abs (p.distance - pair.a.distance) < 0.01; };
 
     const auto score = [&] (Candidate& c)
     {
@@ -1108,8 +1107,8 @@ inline Place quietPlaceForB (const Table& table, const State& s, size_t n = 1 <<
         const double db = firstArrival (cb), first = std::min (da, db);
         cb.refDelay = both.align ? db : first;
         aHere.refDelay = both.align ? da : first;
-        const auto ia = both.align ? iaAligned : render (aHere, n);
-        const auto ib = render (cb, n);
+        const auto ia = both.align ? iaAligned : render (aHere, n, 1);
+        const auto ib = render (cb, n, 1);   // one thread a render: the places themselves are spread over the threads
         const auto a = spectrumOf (ia, (1 - both.blend) / middle (ia));
         const auto b = spectrumOf (ib, both.blend / middle (ib) * (both.invert ? -1 : 1));
         double sum = 0;
@@ -1125,29 +1124,58 @@ inline Place quietPlaceForB (const Table& table, const State& s, size_t n = 1 <<
             tried (c.place, sum);
     };
 
+    // Every candidate judged, the first first — or, given a deadline, those reached before it.
+    using Clock = std::chrono::steady_clock;
+    const auto judgeAll = [&score] (std::vector<Candidate>& all, Clock::time_point deadline)
+    {
+        const auto judge = [&] (size_t i) { if (Clock::now() < deadline) score (all[i]); };
 #if defined(__EMSCRIPTEN__) && ! defined(__EMSCRIPTEN_PTHREADS__)
-    for (auto& c : candidates)
-        score (c);
+        for (size_t i = 0; i < all.size(); ++i)
+            judge (i);
 #else
-    constexpr size_t lanes = 4;
-    std::vector<std::future<void>> others;
-    for (size_t lane = 1; lane < lanes; ++lane)
-        others.push_back (std::async (std::launch::async, [&, lane] { for (size_t i = lane; i < candidates.size(); i += lanes) score (candidates[i]); }));
-    for (size_t i = 0; i < candidates.size(); i += lanes)
-        score (candidates[i]);
-    for (auto& f : others)
-        f.get();
+        const size_t lanes = std::clamp<size_t> (std::thread::hardware_concurrency(), 1, 32);
+        std::vector<std::future<void>> others;
+        for (size_t lane = 1; lane < lanes; ++lane)
+            others.push_back (std::async (std::launch::async, [&all, &judge, lane, lanes] { for (size_t i = lane; i < all.size(); i += lanes) judge (i); }));
+        for (size_t i = 0; i < all.size(); i += lanes)
+            judge (i);
+        for (auto& f : others)
+            f.get();
 #endif
+    };
 
-    Place best { pair.b.x, pair.b.y, pair.b.distance };
-    double bestScore = -1e30;
-    for (const auto& c : candidates)
-        if (c.score > bestScore + 1e-9)
+    std::vector<Candidate> coarse;
+    for (const double x : { -0.9, -0.65, -0.4, -0.15, 0.15, 0.4, 0.65, 0.9 })
+        for (const double y : { -0.35, 0.0, 0.35 })
+            for (const double distance : { 0.02, 0.04, 0.07, 0.12 })
+                if (const Place p { x, y, distance }; ! onA (p))
+                    coarse.push_back ({ p });
+    judgeAll (coarse, Clock::time_point::max());
+    std::sort (coarse.begin(), coarse.end(), [] (const Candidate& a, const Candidate& b) { return a.score > b.score; });
+
+    Candidate best = coarse.empty() ? Candidate { { pair.b.x, pair.b.y, pair.b.distance } } : coarse.front();
+    if (thorough && ! coarse.empty())
+    {
+        std::vector<Candidate> fine;
+        for (size_t seed = 0; seed < std::min<size_t> (4, coarse.size()); ++seed)
         {
-            bestScore = c.score;
-            best = c.place;
+            const auto& at = coarse[seed].place;
+            for (const double dx : { -0.08, 0.0, 0.08 })
+                for (const double dy : { -0.08, 0.0, 0.08 })
+                    for (const double k : { 0.75, 0.9, 1.1, 1.3 })
+                    {
+                        const Place p { std::clamp (at.x + dx, -1.05, 1.05), std::clamp (at.y + dy, -1.05, 1.05),
+                                        std::clamp (at.distance * k, 0.01, 0.30) };
+                        if (std::hypot (p.x, p.y) <= 1.05 && ! onA (p))
+                            fine.push_back ({ p });
+                    }
         }
-    return best;
+        judgeAll (fine, started + std::chrono::seconds (2));   // the nearest the best first: what is reached in two seconds
+        for (const auto& c : fine)
+            if (c.score > best.score + 1e-9)
+                best = c;
+    }
+    return best.place;
 }
 
 /** The cabinets the table holds, by the names their cap sections give them, in the table's order. */
