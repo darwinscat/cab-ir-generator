@@ -45,7 +45,8 @@ namespace cabir
     THE RESPONSE, across the panel under it all: what plays, 30 Hz to 12 kHz — the cabinet heard, following a moving
     hand, green where it is fine and red where it falls into a pit or its two mics cancel (the owner, 05.11), and the
     one kept before it a faint grey ghost, so every click and every drag reads as before and after; with two mics
-    heard, green under it where they add in phase and red where they cancel.
+    heard, each of them too, thinner, in its colour, as it stands in what plays — and green under it where they add in
+    phase and red where they cancel.
 
     A dumb view: the cabinets in (cabs(), geometry from data/cabinets.txt — metres, the baffle's centre the
     origin, up positive), what plays in (show, showResponse), a pick out (onSetup). */
@@ -338,15 +339,19 @@ public:
 
     /** THE RESPONSE of what plays, in dB at responseHz — `now` the cabinet heard, `before` what was kept before it
         (empty, none): each level to its own middle, so the two read as shapes; and with two mics heard `comb`, where
-        they meet: dB above nought where they add in phase, below where they cancel (empty, one mic). */
+        they meet: dB above nought where they add in phase, below where they cancel (empty, one mic) — and `partA` and
+        `partB`, each mic as it stands in `now`, on its scale (synth::partsOf; empty, one mic). */
     static constexpr int responsePoints = synth::responsePoints;
     static float responseHz (int i) { return synth::responseHz (i); }
 
-    void showResponse (std::vector<float> now, std::vector<float> before, std::vector<float> comb = {})
+    void showResponse (std::vector<float> now, std::vector<float> before, std::vector<float> comb = {},
+                       std::vector<float> partA = {}, std::vector<float> partB = {})
     {
         responseNow = std::move (now);
         responseBefore = std::move (before);
         responseComb = std::move (comb);
+        responseA = std::move (partA);
+        responseB = std::move (partB);
         responseBad = synth::pitsOf (responseNow);
         if (responseComb.size() == responseBad.size())
             for (size_t i = 0; i < responseBad.size(); ++i)
@@ -1681,7 +1686,7 @@ private:
     // ---------------------------------------------------------------- the response
     // Across the panel under it all: the cabinet's response, 30 Hz to 12 kHz on a log scale, +15 to -30 dB — the one
     // heard green to red, the one kept before it a faint grey ghost; dB at the left, the frequencies under.
-    std::vector<float> responseNow, responseBefore, responseComb;
+    std::vector<float> responseNow, responseBefore, responseComb, responseA, responseB;
     std::vector<float> responseBad;   // dB, each point: how far it falls into a pit, or its two mics cancel there — the deeper
     // +15 over the middle, -30 under it: a cabinet's response rarely climbs past +10, its roll-offs and a comb's dips
     // go to -20 and -30, and under that nothing more is heard (the owner, 05.11).
@@ -1759,6 +1764,9 @@ private:
         ui::Graphics::ScopedSaveState keep (g);
         g.reduceClipRegion (p.toNearestInt().expanded (0, 2));
         curve (responseBefore, ui::look().txDim.withAlpha (0.3f), 1.2f);   // barely there: a second line reads as a second mic
+        // With two mics heard, each as it stands in what plays, in its colour and thinner (the owner, 05.11).
+        curve (responseA, ui::look().orange.withAlpha (0.8f), 1.0f);
+        curve (responseB, ui::look().lilac.withAlpha (0.8f), 1.0f);
         // What plays, green where it is fine and red where it falls into a pit or its two mics cancel — from 3 dB, full
         // red at 6, the bounds the presets are held to (the owner, 05.11): drawn in runs of one shade, each segment as
         // red as the worse of its two ends.

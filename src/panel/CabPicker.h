@@ -48,9 +48,10 @@ public:
     void show (int cab, Setup setup) { panel.show (cab, setup); }
     void showSearch (float x, float y, float score) { panel.showSearch (x, y, score); }
     void endSearch() { panel.endSearch(); }
-    void showResponse (std::vector<float> now, std::vector<float> before, std::vector<float> comb = {})
+    void showResponse (std::vector<float> now, std::vector<float> before, std::vector<float> comb = {},
+                       std::vector<float> partA = {}, std::vector<float> partB = {})
     {
-        panel.showResponse (std::move (now), std::move (before), std::move (comb));
+        panel.showResponse (std::move (now), std::move (before), std::move (comb), std::move (partA), std::move (partB));
     }
 
     static const std::vector<Cab>& cabs() { return Panel::cabs(); }

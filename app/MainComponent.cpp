@@ -197,8 +197,10 @@ void MainComponent::render (const State& s, bool live)
             heard = mine;
 
             juce::MemoryBlock bytes (wav.data(), wav.size());
-            auto now = synth::responseOf (synth::as24Bit (ir.mix), 48000.0);   // the IR as the WAV holds it, as the page draws it
+            const auto held = synth::as24Bit (ir.mix);   // the IR as the WAV holds it, as the page draws it
+            auto now = synth::responseOf (held, 48000.0);
             auto comb = ir.a.empty() ? std::vector<float>() : synth::combOf (ir.a, ir.b);
+            auto parts = synth::partsOf (held, ir.a, ir.b);
             auto before = keptCurve;
             engine.setIr (std::move (ir.mix), 48000.0);
             if (! live)
@@ -206,7 +208,7 @@ void MainComponent::render (const State& s, bool live)
                 keptWav = std::move (bytes);
                 keptCurve = now;
             }
-            picker.showResponse (std::move (now), std::move (before), std::move (comb));
+            picker.showResponse (std::move (now), std::move (before), std::move (comb), std::move (parts[0]), std::move (parts[1]));
         });
     });
 }
@@ -245,8 +247,10 @@ int MainComponent::writeStills (const juce::File& folder, float scale)
         const auto ir = renderer.render (table, s.box, synth::pairOf (s), (size_t) 1 << 14);
         const auto [cab, setup] = CabPicker::setupOf (s);
         picker.show (cab, setup);
-        picker.showResponse (synth::responseOf (synth::as24Bit (ir.mix), 48000.0), {},
-                             ir.a.empty() ? std::vector<float>() : synth::combOf (ir.a, ir.b));
+        const auto held = synth::as24Bit (ir.mix);
+        auto parts = synth::partsOf (held, ir.a, ir.b);
+        picker.showResponse (synth::responseOf (held, 48000.0), {}, ir.a.empty() ? std::vector<float>() : synth::combOf (ir.a, ir.b),
+                             std::move (parts[0]), std::move (parts[1]));
     };
     int failed = 0;
     const auto write = [&] (const char* name)
