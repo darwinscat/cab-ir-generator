@@ -12,6 +12,7 @@
 #include <cstring>
 #include <iterator>
 #include <synth/CabSynth.h>
+#include <synth/MicSearch.h>
 #include <synth/Response.h>
 
 namespace cabir::app
@@ -127,7 +128,7 @@ MainComponent::MainComponent()
     picker.onSetup    = [this] (int cab, CabPicker::Setup setup) { keep (CabPicker::stateOf (cab, setup)); };
     picker.onMove     = [this] (int cab, CabPicker::Setup setup) { render (CabPicker::stateOf (cab, setup), true); };
     picker.onDownload = [this] { download(); };
-    picker.onFind     = [this] (int cab, CabPicker::Setup setup) { placeB (CabPicker::stateOf (cab, setup), true); };   // FIND looks harder
+    picker.onFind     = [this] (int cab, CabPicker::Setup setup) { findPlace (CabPicker::stateOf (cab, setup), true); };   // FIND looks harder
     picker.showDefault = false;   // DEFAULT is the preset menu's first item here
     addAndMakeVisible (picker);
 
@@ -311,37 +312,44 @@ void MainComponent::keep (const State& s)
     render (s, false);
     repaint (header());
     if (bTakenUp)
-        placeB (s);
+        findPlace (s);
 }
 
-void MainComponent::placeB (const State& s, bool thorough)
+void MainComponent::findPlace (const State& s, bool thorough)
 {
-    // B just taken up, or FIND: where it combs least with A, found on the worker, each place it judges drawn on the
-    // speaker as it goes; B moves there unless the hand moved it first.
+    // B just taken up, or FIND: with both mics heard where B combs least with A, with one where that one stands without
+    // a pit, about where it is — found on the worker, each place it judges drawn on the speaker as it goes; the mic
+    // moves there unless the hand moved it first.
+    const bool pair = s.a.on && s.b.on, alone = s.a.on;   // alone: which mic, with one heard — A, else B
     std::weak_ptr<int> stillHere = alive;
-    worker.addJob ([this, stillHere, s, thorough]
+    worker.addJob ([this, stillHere, s, thorough, pair, alone]
     {
         static const auto table = synth::parseTable (std::string (BinaryData::cabinets_txt, (size_t) BinaryData::cabinets_txtSize));
-        const auto place = synth::quietPlaceForB (table, s, (size_t) 1 << 13, [this, stillHere] (const synth::Place& p, double score)
+        const auto tried = [this, stillHere] (const synth::Place& p, double score)
         {
             juce::MessageManager::callAsync ([this, stillHere, p, score]
             {
                 if (stillHere.lock() != nullptr)
                     picker.showSearch ((float) p.x, (float) p.y, (float) score);
             });
-        }, thorough);
-        juce::MessageManager::callAsync ([this, stillHere, s, place]
+        };
+        const auto place = pair ? synth::quietPlaceForB (table, s, (size_t) 1 << 13, tried, thorough)
+                                : synth::smoothPlaceForMic (table, s, (size_t) 1 << 14, tried);
+        juce::MessageManager::callAsync ([this, stillHere, s, place, pair, alone]
         {
             if (stillHere.lock() == nullptr)
                 return;
             picker.endSearch();
-            if (! (state.b == s.b) || state.box != s.box)
+            const auto moved = [&] (const State& now) { return pair ? &now.b : alone ? &now.a : &now.b; };
+            if (! (*moved (state) == *moved (s)) || state.box != s.box || (state.a.on && state.b.on) != pair)
                 return;
             auto next = state;
-            next.b.x = place.x;
-            next.b.y = place.y;
-            next.b.distance = place.distance;
-            next.shiftMs = place.shiftMs;
+            auto& m = pair ? next.b : alone ? next.a : next.b;
+            m.x = place.x;
+            m.y = place.y;
+            m.distance = place.distance;
+            if (pair)
+                next.shiftMs = place.shiftMs;
             show (next);
         });
     });

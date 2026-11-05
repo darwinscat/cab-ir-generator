@@ -71,7 +71,8 @@ function render (state, live)
     frame ();
 }
 
-// FIND — and B just taken up — over workers: the places from C++, judged anywhere, the kept one picked by C++.
+// FIND — and B just taken up — over workers: the places from C++, judged anywhere, the kept one picked by C++; with
+// one mic heard that one's search, one round.
 const workers = Array.from ({ length: Math.max (2, Math.min (8, (navigator.hardwareConcurrency || 4) - 1)) },
                             () => new Worker ('find-worker.mjs', { type: 'module' }));
 workers.forEach ((w) => w.postMessage ({ table }));
@@ -136,7 +137,7 @@ async function find (state, thorough)
     m._free (first); if (second) m._free (second);
     const at = call ('cabir_found', 'number', [], []) / 4, p = m.HEAPF32.subarray (at, at + 4);
     call ('cabir_panel_end_search', null, [], []);
-    const placed = m.UTF8ToString (call ('cabir_with_b', 'number', ['string', 'number', 'number', 'number', 'number'], [state, p[0], p[1], p[2], p[3]]));
+    const placed = m.UTF8ToString (call ('cabir_with_found', 'number', ['string', 'number', 'number', 'number', 'number'], [state, p[0], p[1], p[2], p[3]]));
     keep (placed);
     call ('cabir_panel_show', 'number', ['string'], [placed]);
 }

@@ -304,8 +304,9 @@ public:
     bool showDefault = true;
     static constexpr int footRowH = 26;
 
-    /** FIND: where B combs least with A, asked of whoever opened the panel (synth::quietPlaceForB) — B taken up first
-        if it was off, which asks the same on its own. No button without it. The search draws itself as it goes
+    /** FIND, asked of whoever opened the panel: with both mics heard where B combs least with A (synth::quietPlaceForB),
+        with one where that one stands without a pit, about where it is (synth::smoothPlaceForMic, the owner, 05.11) — B
+        is taken up by its column, and placed then on its own. No button without it. The search draws itself as it goes
         (showSearch) and lets go when it is done (endSearch). */
     std::function<void (int cab, Setup setup)> onFind;
 
@@ -946,14 +947,9 @@ private:
                 send();
                 return;
 
+            // With both mics heard B is looked for, with one that one (the host's: synth::BSearch, synth::MicSearch).
             case Part::find:
-                if (! heard (1))
-                {
-                    takeUp (1);   // B taken up: the host searches for it on its own
-                    send();
-                }
-                else
-                    onFind (chosen, setup_);
+                onFind (chosen, setup_);
                 return;
 
             case Part::align:

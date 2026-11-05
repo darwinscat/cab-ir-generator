@@ -13,15 +13,18 @@
 //     cabir_response_a / _b            each mic as it stands in the response, on its scale (empty with one mic on)
 //     cabir_gain (rate)                the level the app plays it at: felitronics-core's CabConvolver, reference-unity
 //     cabir_wav / cabir_wav_size       the IR as the app downloads it: a 24-bit WAV
-//   cabir_find (toml, thorough)        B's quiet place against A: x, y, distance, shift (ms) at cabir_found()
+//   cabir_find (toml, thorough)        B's quiet place against A: x, y, distance, shift (ms) at cabir_found() — or, with
+//                                      one mic heard, that one's place without a pit about where it is (shift 0)
 //     cabir_tried / cabir_tried_count  the places tried on the way, x, y, score each, for the search's map
 //
 // FIND SPREAD OVER WORKERS — the same search, its steps called apart (synth::BSearch); the page only hands places out:
 //   cabir_find_coarse (toml)           the first round's places: their count, x, y, distance each at cabir_find_places()
 //   cabir_find_score (toml, x, y, d)   one place judged, in any worker: its score, its shift (ms) at cabir_find_shift()
 //   cabir_find_fine (judged, count)    the first round's scores and shifts (double pairs, in its order) in; the second
-//                                      round's places out, as coarse gives them — best first; a page stops at 2 s
+//                                      round's places out, as coarse gives them — best first; a page stops at 2 s;
+//                                      none with one mic heard, whose search is one round (synth::MicSearch)
 //   cabir_with_b (toml, x, y, d, shift)   the state with B put where FIND found: its TOML (until the next call)
+//   cabir_with_found (toml, x, y, d, shift)   ...B with both mics heard, the one mic with one: what FIND found, put
 //   cabir_b_on (toml)                    1 while the state hears B — B just taken up is when the app searches on its own
 //   cabir_find_best (judged, count)    the second round's pairs in (-1e30 for one not reached; none without thorough):
 //                                      the place at cabir_found()
@@ -30,6 +33,7 @@
 
 #include <felitronics/convolution/CabConvolver.h>
 #include <synth/CabSynth.h>
+#include <synth/MicSearch.h>
 #include <synth/Response.h>
 #include <synth/State.h>
 
@@ -61,7 +65,8 @@ namespace
         std::vector<float> tried;
 
         std::string findToml;                       // the state the search below is of
-        std::unique_ptr<synth::BSearch> search;
+        std::unique_ptr<synth::BSearch> search;      // both mics heard
+        std::unique_ptr<synth::MicSearch> micSearch; // ...or one
         std::vector<synth::Place> first, second;
         std::vector<synth::BSearch::Judged> firstJudged;
         std::vector<float> places;
@@ -89,20 +94,49 @@ namespace
         return state;
     }
 
-    /** The search of this state, made once and kept while the state is the same. */
-    synth::BSearch* searchOf (const char* toml)
+    /** THE SEARCH OF THIS STATE, made once and kept while the state is the same: B's with both mics heard, the one
+        mic's with one — the same steps either way. */
+    struct Search
+    {
+        const synth::BSearch* pair = nullptr;
+        const synth::MicSearch* one = nullptr;
+
+        std::vector<synth::Place> coarse() const { return pair != nullptr ? pair->coarse() : one->coarse(); }
+        synth::BSearch::Judged score (const synth::Place& p) const { return pair != nullptr ? pair->score (p) : one->score (p); }
+        std::vector<synth::Place> fine (const std::vector<synth::Place>& first, const std::vector<synth::BSearch::Judged>& judged) const
+        { return pair != nullptr ? pair->fine (first, judged) : one->fine (first, judged); }
+        synth::Place best (const std::vector<synth::Place>& first, const std::vector<synth::BSearch::Judged>& firstJudged,
+                           const std::vector<synth::Place>& second, const std::vector<synth::BSearch::Judged>& secondJudged) const
+        { return pair != nullptr ? pair->best (first, firstJudged, second, secondJudged) : one->best (first, firstJudged); }
+    };
+
+    std::optional<Search> searchOf (const char* toml)
     {
         auto& s = session();
         const std::string text = toml != nullptr ? toml : "";
-        if (s.search == nullptr || s.findToml != text)
+        if ((s.search == nullptr && s.micSearch == nullptr) || s.findToml != text)
         {
             const auto state = stateOf (toml);
             if (! state)
-                return nullptr;
-            s.search = std::make_unique<synth::BSearch> (s.table, *state);
+                return std::nullopt;
+            s.search.reset();
+            s.micSearch.reset();
+            if (state->a.on && state->b.on)
+                s.search = std::make_unique<synth::BSearch> (s.table, *state);
+            else
+                s.micSearch = std::make_unique<synth::MicSearch> (s.table, *state);
             s.findToml = text;
         }
-        return s.search.get();
+        return Search { s.search.get(), s.micSearch.get() };
+    }
+
+    /** The search last made, as it stands — none before the first. */
+    std::optional<Search> lastSearch()
+    {
+        const auto& s = session();
+        if (s.search == nullptr && s.micSearch == nullptr)
+            return std::nullopt;
+        return Search { s.search.get(), s.micSearch.get() };
     }
 
     std::vector<synth::BSearch::Judged> judgedOf (const double* pairs, int count)
@@ -184,12 +218,9 @@ CABIR_EXPORT int cabir_find (const char* toml, int thorough)
     if (! state)
         return 0;
     s.tried.clear();
-    const auto place = synth::quietPlaceForB (s.table, *state, (size_t) 1 << 13,
-                                              [&s] (const synth::Place& p, double score)
-                                              {
-                                                  s.tried.insert (s.tried.end(), { (float) p.x, (float) p.y, (float) score });
-                                              },
-                                              thorough != 0);
+    const auto tried = [&s] (const synth::Place& p, double score) { s.tried.insert (s.tried.end(), { (float) p.x, (float) p.y, (float) score }); };
+    const auto place = state->a.on && state->b.on ? synth::quietPlaceForB (s.table, *state, (size_t) 1 << 13, tried, thorough != 0)
+                                                  : synth::smoothPlaceForMic (s.table, *state, (size_t) 1 << 14, tried);
     s.found[0] = (float) place.x;
     s.found[1] = (float) place.y;
     s.found[2] = (float) place.distance;
@@ -204,8 +235,8 @@ CABIR_EXPORT int cabir_tried_count()         { return (int) session().tried.size
 CABIR_EXPORT int cabir_find_coarse (const char* toml)
 {
     auto& s = session();
-    auto* search = searchOf (toml);
-    if (search == nullptr)
+    const auto search = searchOf (toml);
+    if (! search)
         return 0;
     s.first = search->coarse();
     s.second.clear();
@@ -217,8 +248,8 @@ CABIR_EXPORT const float* cabir_find_places() { return dataOf (session().places)
 
 CABIR_EXPORT double cabir_find_score (const char* toml, double x, double y, double distance)
 {
-    auto* search = searchOf (toml);
-    if (search == nullptr)
+    const auto search = searchOf (toml);
+    if (! search)
         return -1e30;
     const auto judged = search->score ({ x, y, distance });
     session().shift = judged.shiftMs;
@@ -230,10 +261,11 @@ CABIR_EXPORT double cabir_find_shift() { return session().shift; }
 CABIR_EXPORT int cabir_find_fine (const double* judged, int count)
 {
     auto& s = session();
-    if (s.search == nullptr || (size_t) count != s.first.size())
+    const auto search = lastSearch();
+    if (! search || (size_t) count != s.first.size())
         return 0;
     s.firstJudged = judgedOf (judged, count);
-    s.second = s.search->fine (s.first, s.firstJudged);
+    s.second = search->fine (s.first, s.firstJudged);
     put (s.places, s.second);
     return (int) s.second.size();
 }
@@ -241,9 +273,10 @@ CABIR_EXPORT int cabir_find_fine (const double* judged, int count)
 CABIR_EXPORT int cabir_find_best (const double* judged, int count)
 {
     auto& s = session();
-    if (s.search == nullptr || s.firstJudged.size() != s.first.size())
+    const auto search = lastSearch();
+    if (! search || s.firstJudged.size() != s.first.size())
         return 0;
-    const auto place = s.search->best (s.first, s.firstJudged, s.second, judgedOf (judged, count));
+    const auto place = search->best (s.first, s.firstJudged, s.second, judgedOf (judged, count));
     s.found[0] = (float) place.x;
     s.found[1] = (float) place.y;
     s.found[2] = (float) place.distance;
@@ -261,6 +294,23 @@ CABIR_EXPORT const char* cabir_with_b (const char* toml, double x, double y, dou
     state->b.y = y;
     state->b.distance = distance;
     state->shiftMs = shiftMs;
+    s.withB = toToml (*state);
+    return s.withB.c_str();
+}
+
+CABIR_EXPORT const char* cabir_with_found (const char* toml, double x, double y, double distance, double shiftMs)
+{
+    auto& s = session();
+    auto state = fromToml (toml != nullptr ? toml : "");
+    if (! state)
+        return nullptr;
+    const bool pair = state->a.on && state->b.on;
+    auto& m = pair || ! state->a.on ? state->b : state->a;
+    m.x = x;
+    m.y = y;
+    m.distance = distance;
+    if (pair)
+        state->shiftMs = shiftMs;
     s.withB = toToml (*state);
     return s.withB.c_str();
 }
