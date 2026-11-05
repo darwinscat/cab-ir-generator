@@ -1,0 +1,27 @@
+name = "ROCK · 4x10 BARK"
+style = "Rock"
+cabir = 1
+box = "SVT-410HE"
+back = "closed"
+horn = true
+horn_db = -6
+blend = 0.400
+align = true
+invert = false
+
+[mic.a]
+on = true
+model = "sm57"
+x = 0.200
+y = 0.000
+distance = 0.020
+angle = 0.0
+
+[mic.b]
+on = true
+model = "re20"
+x = -0.450
+y = 0.350
+distance = 0.188
+angle = 0.0
+shift = 0.000

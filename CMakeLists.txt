@@ -2,7 +2,14 @@
 # Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of Cab IR Generator — see LICENSE.
 
 cmake_minimum_required(VERSION 3.22)
-project(cab_ir_generator VERSION 0.1.0 LANGUAGES CXX)
+
+# Before project(): the oldest macOS the app runs on (left unset it is the build machine's own), and the
+# C++ runtime inside the Windows .exe so a zip runs alone. Both slices of a macOS release, Apple silicon
+# and Intel, are asked for by release.yml, so a build while we work compiles one.
+set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "The oldest macOS the binaries run on")
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+
+project(cab_ir_generator VERSION 0.1.0 LANGUAGES C CXX)
 
 include(FetchContent)
 
@@ -46,20 +53,143 @@ target_sources(cabir_panel INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/src/panel/Look
 target_include_directories(cabir_panel INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(cabir_panel INTERFACE cabir_synth)
 
+# A page's build (emscripten) makes the page's module alone: no JUCE there, and the tools are the native build's.
+if(EMSCRIPTEN)
+    set(cabirNative OFF)
+else()
+    set(cabirNative ${PROJECT_IS_TOP_LEVEL})
+endif()
+
 # THE TOOLS — no JUCE: cabgen renders a table to files, irlook reads an IR's response back.
-option(CABIR_TOOLS "Build cabgen and irlook" ${PROJECT_IS_TOP_LEVEL})
+option(CABIR_TOOLS "Build cabgen and irlook" ${cabirNative})
 if(CABIR_TOOLS)
     add_executable(cabgen tools/cabgen.cpp)
     target_link_libraries(cabgen PRIVATE cabir_synth)
     add_executable(irlook tools/irlook.cpp)
     target_link_libraries(irlook PRIVATE cabir_synth)
+    add_executable(presetcheck tools/presetcheck.cpp)
+    target_link_libraries(presetcheck PRIVATE cabir_synth)
+    add_executable(cabpack tools/cabpack.cpp)   # the IR packs a page offers (tools/cabpack.sh)
+    target_link_libraries(cabpack PRIVATE cabir_synth)
+    add_executable(respread tools/respread.cpp)   # the presets' pairs spread apart, judged as the panel draws them
+    target_link_libraries(respread PRIVATE cabir_synth)
 endif()
 
 # THE TESTS — no JUCE: the state's text, read and written.
-option(CABIR_TESTS "Build the tests" ${PROJECT_IS_TOP_LEVEL})
+option(CABIR_TESTS "Build the tests" ${cabirNative})
 if(CABIR_TESTS)
     enable_testing()
     add_executable(cabir_state_test tests/StateTests.cpp)
     target_link_libraries(cabir_state_test PRIVATE cabir_synth)
+    target_compile_definitions(cabir_state_test PRIVATE CABIR_TABLE="${CMAKE_CURRENT_SOURCE_DIR}/data/cabinets.txt")
     add_test(NAME state COMMAND cabir_state_test)
+endif()
+
+# THE APP — Cab IR Generator itself: the panel, a player through the family's convolver, the family's version window.
+option(CABIR_APP "Build the standalone app" ${cabirNative})
+option(CABIR_WEB "Build the page's module (src/web) and irdump, the check of it against the native build" ${PROJECT_IS_TOP_LEVEL})
+
+# felitronics-core — the convolver the plugins play their cabinets through, on pffft; the page's module asks it only
+# the level it plays an IR at, on core's own FFT.
+if((CABIR_APP OR CABIR_WEB) AND NOT TARGET felitronics::convolution)
+    if(EMSCRIPTEN)
+        set(FELITRONICS_WITH_PFFFT OFF CACHE BOOL "the page's module on core's own FFT" FORCE)
+    else()
+        set(FELITRONICS_WITH_PFFFT ON CACHE BOOL "the cabinet's convolver on the pffft SIMD FFT" FORCE)
+    endif()
+    set(CABIR_CORE_TAG "v0.61.2" CACHE STRING "felitronics-core release tag (fetched when no local checkout)")
+    set(CABIR_CORE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../felitronics-core" CACHE PATH "Local felitronics-core checkout (used if present)")
+    if(CABIR_CORE_DIR AND EXISTS "${CABIR_CORE_DIR}/CMakeLists.txt")
+        FetchContent_Declare(felitronics_core SOURCE_DIR "${CABIR_CORE_DIR}")
+        set(cabirCoreVersion "local")
+    else()
+        FetchContent_Declare(felitronics_core GIT_REPOSITORY https://github.com/darwinscat/felitronics-core.git GIT_TAG ${CABIR_CORE_TAG} GIT_SHALLOW TRUE)
+        set(cabirCoreVersion "${CABIR_CORE_TAG}")
+    endif()
+    FetchContent_MakeAvailable(felitronics_core)
+endif()
+
+# THE PAGE'S MODULE — the synthesis behind a C ABI (src/web/CabirWeb.cpp). Built native too, under irdump, which renders
+# the factory presets through it: the same call from both builds, written to a file, the two files compared.
+if(CABIR_WEB)
+    add_library(cabir_web_abi STATIC src/web/CabirWeb.cpp)
+    target_link_libraries(cabir_web_abi PUBLIC cabir_synth felitronics::convolution)
+    add_executable(irdump tools/irdump.cpp)
+    target_link_libraries(irdump PRIVATE cabir_web_abi)
+    if(EMSCRIPTEN)
+        target_link_options(irdump PRIVATE -sNODERAWFS=1 -sALLOW_MEMORY_GROWTH=1 -sENVIRONMENT=node)
+        add_executable(cabir_web src/web/CabirWeb.cpp src/web/PanelWeb.cpp)
+        target_link_libraries(cabir_web PRIVATE cabir_synth felitronics::convolution)
+        set_target_properties(cabir_web PROPERTIES OUTPUT_NAME cabir SUFFIX ".mjs")
+        target_link_options(cabir_web PRIVATE
+            -sMODULARIZE=1 -sEXPORT_ES6=1 -sEXPORT_NAME=createCabir -sENVIRONMENT=web,worker,node
+            -sALLOW_MEMORY_GROWTH=1 -sFILESYSTEM=0
+            "-sEXPORTED_RUNTIME_METHODS=['ccall','cwrap','HEAPF32','HEAPF64','HEAPU8','HEAPU32','UTF8ToString','stringToNewUTF8']"
+            "-sEXPORTED_FUNCTIONS=['_malloc','_free']")
+    endif()
+endif()
+
+if(CABIR_APP)
+    # JUCE, pinned as the family's plugins pin it; a local tree first.
+    set(CABIR_JUCE_TAG "8.0.16-security" CACHE STRING "JUCE git tag to build against")
+    set(CABIR_JUCE_DIR "$ENV{HOME}/IdeaProjects/orbit-capture/app/tests/build/_deps/juce-src"
+        CACHE PATH "Local JUCE source tree (used if present); else the pin is fetched")
+    if(CABIR_JUCE_DIR AND EXISTS "${CABIR_JUCE_DIR}/CMakeLists.txt")
+        message(STATUS "JUCE: local tree — ${CABIR_JUCE_DIR}")
+        FetchContent_Declare(juce SOURCE_DIR "${CABIR_JUCE_DIR}")
+    else()
+        FetchContent_Declare(juce GIT_REPOSITORY https://github.com/juce-framework/JUCE.git GIT_TAG ${CABIR_JUCE_TAG} GIT_SHALLOW TRUE)
+    endif()
+    FetchContent_MakeAvailable(juce)
+
+    # felitronics-appkit — the brand, the version window, the audio settings.
+    set(CABIR_APPKIT_TAG "v0.22.0" CACHE STRING "felitronics-appkit release tag (fetched when no local checkout)")
+    set(CABIR_APPKIT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../felitronics-appkit" CACHE PATH "Local felitronics-appkit checkout (used if present)")
+    if(CABIR_APPKIT_DIR AND EXISTS "${CABIR_APPKIT_DIR}/CMakeLists.txt")
+        FetchContent_Declare(felitronics_appkit SOURCE_DIR "${CABIR_APPKIT_DIR}")
+        set(cabirAppkitVersion "local")
+    else()
+        FetchContent_Declare(felitronics_appkit GIT_REPOSITORY https://github.com/darwinscat/felitronics-appkit.git GIT_TAG ${CABIR_APPKIT_TAG} GIT_SHALLOW TRUE)
+        set(cabirAppkitVersion "${CABIR_APPKIT_TAG}")
+    endif()
+    FetchContent_MakeAvailable(felitronics_appkit)
+
+    if(CABIR_TOML_DIR AND EXISTS "${CABIR_TOML_DIR}/CMakeLists.txt")
+        set(cabirTomlVersion "local")
+    else()
+        set(cabirTomlVersion "${CABIR_TOML_TAG}")
+    endif()
+    execute_process(COMMAND git rev-parse --short HEAD WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+                    OUTPUT_VARIABLE cabirGitHash OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+
+    juce_add_gui_app(CabIrGenerator
+        PRODUCT_NAME  "Cab IR Generator"
+        COMPANY_NAME  "Darwin's Cat"
+        BUNDLE_ID     com.darwinscat.cabirgenerator
+        ICON_BIG      "${CMAKE_CURRENT_SOURCE_DIR}/assets/logo/icon.png"   # the logo's mark, drawn from mark.svg
+        VERSION       ${PROJECT_VERSION})
+    target_sources(CabIrGenerator PRIVATE app/Main.cpp app/MainComponent.cpp app/Engine.cpp)
+    file(GLOB cabirPresets CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/data/presets/*.toml")   # the factory's presets
+    juce_add_binary_data(CabIrData SOURCES data/cabinets.txt assets/logo/mark.svg ${cabirPresets})
+    file(GLOB cabirRiffs CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/data/riffs/*.flac")       # the bass riffs the player carries
+    juce_add_binary_data(CabIrRiffs HEADER_NAME RiffData.h NAMESPACE RiffData SOURCES ${cabirRiffs})
+    target_compile_definitions(CabIrGenerator PRIVATE
+        JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0
+        CABIR_VERSION="${PROJECT_VERSION}"
+        CABIR_GIT_HASH="${cabirGitHash}"
+        CABIR_CORE_VERSION="${cabirCoreVersion}"
+        CABIR_TOML_VERSION="${cabirTomlVersion}"
+        CABIR_APPKIT_VERSION="${cabirAppkitVersion}")
+    target_link_libraries(CabIrGenerator PRIVATE
+        CabIrData
+        CabIrRiffs
+        cabir::panel
+        felitronics::convolution
+        felitronics::appkit
+        juce::juce_gui_extra
+        juce::juce_audio_utils
+        juce::juce_audio_formats
+        juce::juce_recommended_config_flags
+        juce::juce_recommended_lto_flags
+        juce::juce_recommended_warning_flags)
 endif()

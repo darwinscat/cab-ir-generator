@@ -1,0 +1,133 @@
+name: build
+
+# A pull request that touches code is built on Windows and Linux, its test and its factory presets
+# checked. macOS is built locally while we work, and signed only in release.yml, on a tag.
+
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'app/**'
+      - 'tools/**'
+      - 'tests/**'
+      - 'data/**'
+      - 'assets/**'
+      - 'CMakeLists.txt'
+      - '.github/workflows/build.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+    steps:
+      - uses: actions/checkout@v7
+
+      # Ninja invokes cl.exe directly, so it needs the MSVC toolchain on PATH.
+      - name: MSVC dev environment (vcvars for Ninja)
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756   # v1.13.0
+        with:
+          arch: x64
+
+      # Before Configure: JUCE builds juceaide at configure time and hands it the launcher too.
+      - name: sccache
+        uses: mozilla-actions/sccache-action@9e7fa8a12102821edf02ca5dbea1acd0f89a2696   # v0.0.10
+
+      - name: Cache FetchContent sources
+        uses: actions/cache@v6
+        with:
+          path: build/_deps
+          key: deps-windows-ninja-${{ hashFiles('CMakeLists.txt') }}
+
+      - name: Configure
+        run: >
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          -DCABIR_JUCE_DIR= -DCABIR_CORE_DIR= -DCABIR_APPKIT_DIR= -DCABIR_TOML_DIR=
+          -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Factory presets
+        shell: bash
+        run: ./build/presetcheck.exe data/cabinets.txt data/presets/*.toml
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: CabIrGenerator-Windows
+          if-no-files-found: ignore
+          path: build/CabIrGenerator_artefacts/Release/*.exe
+
+  linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build \
+            libasound2-dev libfreetype-dev libfontconfig1-dev \
+            libx11-dev libxcomposite-dev libxcursor-dev libxext-dev \
+            libxinerama-dev libxrandr-dev libxrender-dev \
+            libglu1-mesa-dev mesa-common-dev
+      - name: Configure
+        run: >
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          -DCABIR_JUCE_DIR= -DCABIR_CORE_DIR= -DCABIR_APPKIT_DIR= -DCABIR_TOML_DIR=
+      - name: Build
+        run: cmake --build build
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+      - name: Factory presets
+        run: ./build/presetcheck data/cabinets.txt data/presets/*.toml
+
+  web:
+    # The page's module against the native build: the presets rendered through the same C ABI by both, compared within
+    # a bound (tools/irdump.cpp) — the two do not agree to the bit, their libm differ.
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install emsdk 6.0.9
+        run: |
+          git clone --depth 1 --branch 6.0.9 https://github.com/emscripten-core/emsdk.git "$HOME/emsdk"
+          "$HOME/emsdk/emsdk" install 6.0.9
+          "$HOME/emsdk/emsdk" activate 6.0.9
+      - name: Native irdump
+        run: |
+          cmake -B build-native -DCMAKE_BUILD_TYPE=Release -DCABIR_APP=OFF -DCABIR_TOOLS=OFF -DCABIR_TESTS=OFF \
+            -DCABIR_CORE_DIR= -DCABIR_TOML_DIR=
+          cmake --build build-native --target irdump --parallel
+      - name: The page's module and its irdump
+        run: |
+          source "$HOME/emsdk/emsdk_env.sh"
+          tools/wasm/build.sh build-web
+          emcmake cmake -B build-wasm -DCMAKE_BUILD_TYPE=Release -DCABIR_CORE_DIR= -DCABIR_TOML_DIR= "-DCMAKE_CXX_FLAGS=-fno-exceptions -fno-rtti"
+          cmake --build build-wasm --target irdump --parallel
+      - name: The two compared
+        run: |
+          source "$HOME/emsdk/emsdk_env.sh"
+          ./build-native/irdump data/cabinets.txt native.bin data/presets/*.toml
+          node build-wasm/irdump.js data/cabinets.txt wasm.bin data/presets/*.toml
+          ./build-native/irdump --compare native.bin wasm.bin
+      - uses: actions/upload-artifact@v7
+        with:
+          name: CabIrGenerator-web
+          path: |
+            build-web/cabir.mjs
+            build-web/cabir.wasm
+            build-web/BUILD-INFO

@@ -1,0 +1,26 @@
+name = "MODERN · 4x10 HI-FI"
+style = "Modern"
+cabir = 1
+box = "SVT-410HE"
+back = "closed"
+horn = true
+horn_db = 0
+blend = 0.400
+align = true
+invert = false
+
+[mic.a]
+on = true
+model = "md421"
+x = 0.000
+y = 0.000
+distance = 0.040
+angle = 0.0
+
+[mic.b]
+on = true
+model = "u87"
+x = -0.300
+y = 0.300
+distance = 0.150
+angle = 0.0

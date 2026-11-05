@@ -1,0 +1,27 @@
+name = "REGGAE · 8x10 SUB"
+style = "Reggae"
+cabir = 1
+box = "SVT-810"
+back = "ported"
+horn = false
+horn_db = -12
+blend = 0.400
+align = true
+invert = false
+
+[mic.a]
+on = true
+model = "re20"
+x = 0.600
+y = 0.000
+distance = 0.060
+angle = 0.0
+
+[mic.b]
+on = true
+model = "d112"
+x = 0.225
+y = -0.350
+distance = 0.135
+angle = 0.0
+shift = 0.000

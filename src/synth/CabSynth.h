@@ -14,6 +14,7 @@
 // JUCE-free: the plugins, the app and the web page all render by it.
 
 #include <algorithm>
+#include <chrono>
 #include <array>
 #include <cmath>
 #include <complex>
@@ -21,10 +22,13 @@
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
+#include <functional>
+#include <future>
 #include <map>
 #include <random>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "State.h"
@@ -305,6 +309,7 @@ struct Cab
     double floorGap = 0, floorRefl = 0;
     double lengthMs = 200, fadeMs = 30;
     double refDelay = -1;   // the time zero, s from the sound leaving: below zero, the first arrival's own
+    double rate = fs;       // the IR's sample rate: the panel's and the app's 48 kHz, a pack's 44.1 or 96 too
 };
 
 inline Cab build (const Section& s)
@@ -507,7 +512,32 @@ inline cd heard (const Cab& c, const Mic& m, double dx, double dy, double dz, do
     return pattern * std::pow (10.0, -e * top / 20);
 }
 
-inline std::vector<double> render (const Cab& c, size_t n)
+/** `bin (k)` for every bin from 1 up to `bins`, spread over `threads` threads (0: up to four) in turns of the range — or one
+    after the other where there are no threads (a page built without them). */
+template <class F>
+inline void forEachBin (size_t bins, const F& bin, size_t threadsAsked = 0)
+{
+#if defined(__EMSCRIPTEN__) && ! defined(__EMSCRIPTEN_PTHREADS__)
+    for (size_t k = 1; k < bins; ++k)
+        bin (k);
+#else
+    const size_t threads = threadsAsked > 0 ? threadsAsked : std::clamp<size_t> (std::thread::hardware_concurrency(), 1, 4);
+    const size_t step = (bins - 1 + threads - 1) / threads;
+    std::vector<std::future<void>> others;
+    for (size_t t = 1; t < threads; ++t)
+    {
+        const size_t from = 1 + t * step, to = std::min (bins, from + step);
+        if (from < to)
+            others.push_back (std::async (std::launch::async, [&bin, from, to] { for (size_t k = from; k < to; ++k) bin (k); }));
+    }
+    for (size_t k = 1; k < std::min (bins, 1 + step); ++k)
+        bin (k);
+    for (auto& f : others)
+        f.get();
+#endif
+}
+
+inline std::vector<double> render (const Cab& c, size_t n, size_t threads = 0)
 {
     const size_t bins = n / 2 + 1;
     std::vector<cd> H (n, 0.0);
@@ -582,7 +612,7 @@ inline std::vector<double> render (const Cab& c, size_t n)
     if (c.coilHz > 0)
     {
         std::vector<double> mag (n / 2 + 1);
-        for (size_t k = 0; k <= n / 2; ++k) { const double f = fs * k / n; mag[k] = std::pow (1 + (f / c.coilHz) * (f / c.coilHz), -0.25); }
+        for (size_t k = 0; k <= n / 2; ++k) { const double f = c.rate * (double) k / (double) n; mag[k] = std::pow (1 + (f / c.coilHz) * (f / c.coilHz), -0.25); }
         coil = minimumPhase (mag, n);
     }
     // The target cone's own near-field sum, as the cones' sum is scaled below: what the port and the horn stand against.
@@ -603,14 +633,15 @@ inline std::vector<double> render (const Cab& c, size_t n)
     // The port against the cone at a cone-close mic (Keele's near field against the port's far field): n Sd / (2 pi r Delta).
     const double dc = c.micD + c.depthFrac * c.radius, delta = std::sqrt (dc * dc + c.radius * c.radius) - dc;
     std::vector<Biquad> bodyEq, presence, hornEq;
-    for (auto& e : c.body) bodyEq.push_back (Biquad::make ("peak", e[0], e[1], e[2], fs));
-    for (auto& e : c.presence) presence.push_back (Biquad::make ("peak", e[0], e[1], e[2], fs));
-    for (auto& e : c.hornEq) hornEq.push_back (Biquad::make ("peak", e[0], e[1], e[2], fs));
+    for (auto& e : c.body) bodyEq.push_back (Biquad::make ("peak", e[0], e[1], e[2], c.rate));
+    for (auto& e : c.presence) presence.push_back (Biquad::make ("peak", e[0], e[1], e[2], c.rate));
+    for (auto& e : c.hornEq) hornEq.push_back (Biquad::make ("peak", e[0], e[1], e[2], c.rate));
     const double stepDb = c.baffleStepDb, stepHz = 115.0 / c.bw;
 
-    for (size_t k = 1; k < bins; ++k)
+    // Each bin on its own — nothing below writes what another bin reads — so the bins are spread over a few threads.
+    const auto bin = [&] (size_t k)
     {
-        const double f = fs * (double) k / (double) n;
+        const double f = c.rate * (double) k / (double) n;
         cd cone, port;
         lowEnd (c, f, cone, port);
         cd pipe = 0.0;   // an open back's: what it hands out for what the cone moves
@@ -628,7 +659,7 @@ inline std::vector<double> render (const Cab& c, size_t n)
             if (! (c.open && std::abs (m[0] - c0 / (2 * c.depth)) < 0.08 * m[0]))
                 box += m[2] * resonance (f, m[0], m[1]);
         for (auto& m : c.panel) box += m[2] * resonance (f, m[0], m[1]);
-        for (auto& b : bodyEq) box *= b.at (f, fs);
+        for (auto& b : bodyEq) box *= b.at (f, c.rate);
         // The baffle step: the low end, radiating into the whole room, a few tenths of a dB under the top.
         box *= std::pow (10.0, -stepDb / 20 * (1 / (1 + (f / stepHz) * (f / stepHz))));
 
@@ -720,7 +751,7 @@ inline std::vector<double> render (const Cab& c, size_t n)
         if (c.horn)
         {
             cd hn = highpass2 (f, c.hornXo, c.hornQ) * lowpass2 (f, c.hornLp, 0.707) * std::pow (10.0, c.hornDb / 20);
-            for (auto& b : hornEq) hn *= b.at (f, fs);
+            for (auto& b : hornEq) hn *= b.at (f, c.rate);
             for (int img = 0; img < images; ++img)
             {
                 const double back = img == 0 ? 1.0 : c.floorRefl;
@@ -751,20 +782,21 @@ inline std::vector<double> render (const Cab& c, size_t n)
 
         // The mic: its capsule's own response, and the proximity it hears at this distance.
         cd capsule = highpass2 (f, c.micHp, 0.707) * (c.micTop > 0 ? lowpass1 (f, c.micTop) : lowpass2 (f, c.micLp, 0.707));
-        for (auto& b : presence) capsule *= b.at (f, fs);
+        for (auto& b : presence) capsule *= b.at (f, c.rate);
         H[k] = sum * capsule;
-    }
+    };
+    forEachBin (bins, bin, threads);
     for (size_t k = 1; k < n / 2; ++k) H[n - k] = std::conj (H[k]);
     H[0] = 0;
     fft (H, true);
 
-    const int len = (int) std::lround (c.lengthMs * fs / 1000), fade = (int) std::lround (c.fadeMs * fs / 1000);
-    std::vector<double> ir (len);
+    const int len = (int) std::lround (c.lengthMs * c.rate / 1000), fade = (int) std::lround (c.fadeMs * c.rate / 1000);
+    std::vector<double> ir ((size_t) len);
     for (int i = 0; i < len; ++i)
     {
         double w = 1;
         if (i >= len - fade) w = 0.5 + 0.5 * std::cos (pi * (i - (len - fade)) / fade);
-        ir[i] = H[i].real() * w;
+        ir[(size_t) i] = H[(size_t) i].real() * w;
     }
     return ir;
 }
@@ -778,7 +810,7 @@ inline double loudness (const std::vector<double>& ir, size_t n)
     double e = 0;
     for (size_t k = 1; k < n / 2; ++k)
     {
-        const double f = fs * k / n;
+        const double f = fs * (double) k / (double) n;
         if (f < 40 || f > 5000) continue;
         e += std::norm (X[k]) / f;
     }
@@ -807,13 +839,14 @@ constexpr double portAtFoot = 0.045;
 
 /** A cabinet of the table — its "<name> cap" section, the box as that section says, its mic or the one `spot` names
     laid over it — with the mic at `spot`, aimed straight at the baffle, its back as `spot` turns it. */
-inline Cab cabAt (const Table& table, const std::string& cab, const Spot& spot)
+inline Cab cabAt (const Table& table, const std::string& cab, const Spot& spot, double rate = fs)
 {
     auto s = resolve (table, cab + " cap");
     if (! spot.mic.empty())
         for (auto& [k, v] : resolve (table, "mic-" + spot.mic))
             s[k] = v;
     auto c = build (s);
+    c.rate    = rate;
     c.micOff  = spot.x;
     c.micOffY = spot.y;
     c.micD    = spot.distance;
@@ -882,48 +915,123 @@ struct Pair
     Spot a, b;
     double blend = 0;
     bool align = false, invertB = false;
+    double shiftB = 0;   // seconds B is moved against A, later positive
 };
+
+/** `ir` moved later by `seconds` — a fraction of a sample as well as whole ones, through the spectrum, its length kept. */
+inline std::vector<double> delayed (const std::vector<double>& ir, double seconds, double rate = fs)
+{
+    if (std::abs (seconds) < 1e-12 || ir.empty())
+        return ir;
+    size_t m = 1;
+    while (m < 2 * ir.size()) m <<= 1;
+    std::vector<cd> x (m, 0.0);
+    for (size_t i = 0; i < ir.size(); ++i) x[i] = ir[i];
+    fft (x, false);
+    for (size_t k = 0; k <= m / 2; ++k)
+    {
+        x[k] *= std::polar (1.0, -2 * pi * rate * (double) k / (double) m * seconds);
+        if (k > 0 && k < m / 2) x[m - k] = std::conj (x[k]);
+    }
+    x[m / 2] = x[m / 2].real();
+    fft (x, true);
+    std::vector<double> out (ir.size());
+    for (size_t i = 0; i < out.size(); ++i) out[i] = x[i].real();
+    return out;
+}
 
 /** The pair, and each mic's part of it at the mix's own level — `a` + `b` is `mix` — for a picture of where the two
     meet in phase and where they cancel; a pair with one mic heard (blend 0) has no parts. */
 struct PairParts { std::vector<float> mix, a, b; };
 
-inline PairParts renderPairParts (const Table& table, const std::string& cab, const Pair& p, size_t n = 1 << 14)
+
+/** A PAIR RENDERED AGAIN AND AGAIN, as a hand moves one mic: each mic's own IR kept by what made it — the box, the spot,
+    the clock it stands on, the size it was rendered at — so the mic that did not move is not rendered again; and the two
+    rendered side by side, on two threads, when both did. One renderer to one thread: it keeps what it last made. */
+class PairRenderer
 {
-    if (p.blend <= 0)
-        return { renderAt (table, cab, p.a, n), {}, {} };
-
-    auto b = p.b;
-    b.horn = p.a.horn;
-    b.hornDb = p.a.hornDb;
-    b.back = p.a.back;
-    auto ca = cabAt (table, cab, p.a), cb = cabAt (table, cab, b);
-    const double da = firstArrival (ca), db = firstArrival (cb), first = std::min (da, db);
-    ca.refDelay = p.align ? da : first;
-    cb.refDelay = p.align ? db : first;
-    const auto ia = render (ca, n), ib = render (cb, n);
-
-    const auto middle = [n] (const std::vector<double>& ir) {
-        std::vector<cd> x (n, 0.0);
-        for (size_t i = 0; i < ir.size() && i < n; ++i) x[i] = ir[i];
-        fft (x, false);
-        double e = 1e-30;
-        for (size_t k = (size_t) (500.0 * n / fs); k <= (size_t) (2000.0 * n / fs); ++k) e += std::norm (x[k]);
-        return std::sqrt (e);
-    };
-    const double ga = (1 - p.blend) / middle (ia), gb = p.blend / middle (ib) * (p.invertB ? -1 : 1);
-    const size_t len = std::min (ia.size(), ib.size());
-    double peak = 1e-12;
-    for (size_t i = 0; i < len; ++i) peak = std::max (peak, std::abs (ga * ia[i] + gb * ib[i]));
-    const double to = 0.5 / peak;   // the mix's peak at -6 dBFS, as peakAt puts it
-    PairParts out { std::vector<float> (len), std::vector<float> (len), std::vector<float> (len) };
-    for (size_t i = 0; i < len; ++i)
+public:
+    PairParts render (const Table& table, const std::string& cab, const Pair& p, size_t n = 1 << 14, double rate = fs)
     {
-        out.a[i] = (float) (ga * ia[i] * to);
-        out.b[i] = (float) (gb * ib[i] * to);
-        out.mix[i] = (float) ((ga * ia[i] + gb * ib[i]) * to);
+        if (p.blend <= 0)
+        {
+            auto ca = cabAt (table, cab, p.a, rate);
+            return { peakAt (irOf (lastA, keyOf (cab, p.a, ca.refDelay, n, rate), ca, n), 0.5), {}, {} };
+        }
+
+        auto bSpot = p.b;
+        bSpot.horn = p.a.horn;
+        bSpot.hornDb = p.a.hornDb;
+        bSpot.back = p.a.back;
+        auto ca = cabAt (table, cab, p.a, rate), cb = cabAt (table, cab, bSpot, rate);
+        const double da = firstArrival (ca), db = firstArrival (cb), first = std::min (da, db);
+        ca.refDelay = p.align ? da : first;
+        cb.refDelay = p.align ? db : first;
+        const auto ka = keyOf (cab, p.a, ca.refDelay, n, rate), kb = keyOf (cab, bSpot, cb.refDelay, n, rate);
+
+#if defined(__EMSCRIPTEN__) && ! defined(__EMSCRIPTEN_PTHREADS__)
+        const bool together = false;   // a page with no threads renders one after the other
+#else
+        const bool together = ka != lastA.key && kb != lastB.key;
+#endif
+        if (together)
+        {
+            auto bLater = std::async (std::launch::async, [&cb, n] { return cabir::synth::render (cb, n); });
+            lastA = { ka, cabir::synth::render (ca, n) };
+            lastB = { kb, bLater.get() };
+        }
+        const auto& ia0 = irOf (lastA, ka, ca, n);
+        const auto& ib0 = irOf (lastB, kb, cb, n);
+        // B moved in time against A: B later, or — moved earlier — A later instead, so neither's start is cut off.
+        const auto ia = p.shiftB < 0 ? delayed (ia0, -p.shiftB, rate) : ia0;
+        const auto ib = p.shiftB > 0 ? delayed (ib0, p.shiftB, rate) : ib0;
+
+        const auto middle = [n, rate] (const std::vector<double>& ir) {
+            std::vector<cd> x (n, 0.0);
+            for (size_t i = 0; i < ir.size() && i < n; ++i) x[i] = ir[i];
+            fft (x, false);
+            double e = 1e-30;
+            for (size_t k = (size_t) (500.0 * (double) n / rate); k <= (size_t) (2000.0 * (double) n / rate); ++k) e += std::norm (x[k]);
+            return std::sqrt (e);
+        };
+        const double ga = (1 - p.blend) / middle (ia), gb = p.blend / middle (ib) * (p.invertB ? -1 : 1);
+        const size_t len = std::min (ia.size(), ib.size());
+        double peak = 1e-12;
+        for (size_t i = 0; i < len; ++i) peak = std::max (peak, std::abs (ga * ia[i] + gb * ib[i]));
+        const double to = 0.5 / peak;   // the mix's peak at -6 dBFS, as peakAt puts it
+        PairParts out { std::vector<float> (len), std::vector<float> (len), std::vector<float> (len) };
+        for (size_t i = 0; i < len; ++i)
+        {
+            out.a[i] = (float) (ga * ia[i] * to);
+            out.b[i] = (float) (gb * ib[i] * to);
+            out.mix[i] = (float) ((ga * ia[i] + gb * ib[i]) * to);
+        }
+        return out;
     }
-    return out;
+
+private:
+    struct Kept { std::string key; std::vector<double> ir; };
+    Kept lastA, lastB;
+
+    static std::string keyOf (const std::string& cab, const Spot& s, double refDelay, size_t n, double rate)
+    {
+        char text[256];
+        std::snprintf (text, sizeof text, "|%.6f|%.6f|%.6f|%d|%.4f|%.4f|%d|%.12g|%zu|%.0f|", s.x, s.y, s.distance, s.horn ? 1 : 0,
+                       s.angle, s.hornDb, s.back, refDelay, n, rate);
+        return cab + "|" + s.mic + text;
+    }
+
+    static const std::vector<double>& irOf (Kept& kept, const std::string& key, const Cab& c, size_t n)
+    {
+        if (kept.key != key)
+            kept = { key, cabir::synth::render (c, n) };
+        return kept.ir;
+    }
+};
+
+inline PairParts renderPairParts (const Table& table, const std::string& cab, const Pair& p, size_t n = 1 << 14, double rate = fs)
+{
+    return PairRenderer{}.render (table, cab, p, n, rate);
 }
 
 inline std::vector<float> renderPair (const Table& table, const std::string& cab, const Pair& p, size_t n = 1 << 14)
@@ -948,7 +1056,7 @@ inline Pair pairOf (const State& s)
         p.back = s.back;
         return p;
     };
-    Pair pair { spot (s.a), spot (s.b), s.blend, s.align, s.invert };
+    Pair pair { spot (s.a), spot (s.b), s.blend, s.align, s.invert, s.shiftMs / 1000.0 };
     if (! s.b.on)
         pair.blend = 0;            // A alone: the blend not heard
     else if (! s.a.on)
@@ -957,6 +1065,252 @@ inline Pair pairOf (const State& s)
         pair.blend = 0;
     }
     return pair;
+}
+
+/** WHERE B STANDS QUIETEST BESIDE A: 96 places over the whole first speaker — eight across, three up and down, four
+    distances, 2 to 12 cm — each heard as the pair hears it (A's horn and back, the same clock unless aligned, the blend,
+    B turned over or not), and the one whose meeting with A cancels least from 40 Hz to 12 kHz: at each point the mix
+    against the two powers apart, the dips summed, the top at nearly full weight. A place right on A is passed over: two
+    of one mic there are one mic. `thorough` (FIND) looks again round the four best, finer — nine places about each, four
+    distances about its own — about two seconds in all. Searched on as many threads as the machine has, a render each;
+    with `align`, A is rendered once. `tried`, when given, hears of each place as it is judged — its score, 0 for no dip,
+    the more negative the more it cancels — from whichever thread judged it: a picture of the search, drawn as it goes.
+    Each place is judged at its best shift of B in time, a twentieth of a millisecond at a time within half of one — a
+    turn of B's spectrum, no render — and the place carries it. */
+struct Place { double x = 0, y = 0, distance = 0.05, shiftMs = 0; };
+
+/** THE SEARCH IN ITS STEPS, for whoever spreads it: the places of the first round (coarse), one place judged (score) —
+    nothing a place's judging reads is written by another's, so they go to any thread or worker in any order — the
+    places of the second round about the four best of the first (fine), and the one kept (best). quietPlaceForB below
+    runs them on this machine's threads; a page runs them on its workers, through the same calls. */
+class BSearch
+{
+public:
+    struct Judged { double score = -1e30, shiftMs = 0; };   // -1e30: not judged
+
+    BSearch (const Table& t, const State& s, size_t size = 1 << 13)
+        : table (t), state (s), n (size)
+    {
+        both = s;
+        both.a.on = both.b.on = true;
+        pair = pairOf (both);
+        ca = cabAt (table, s.box, pair.a);
+        da = firstArrival (ca);
+        if (both.align)
+        {
+            ca.refDelay = da;
+            iaAligned = render (ca, n);
+        }
+    }
+
+    /** The first round: eight across, three up and down, four distances — those not right on A. */
+    std::vector<Place> coarse() const
+    {
+        std::vector<Place> out;
+        for (const double x : { -0.9, -0.65, -0.4, -0.15, 0.15, 0.4, 0.65, 0.9 })
+            for (const double y : { -0.35, 0.0, 0.35 })
+                for (const double distance : { 0.02, 0.04, 0.07, 0.12 })
+                    if (const Place p { x, y, distance }; ! onA (p))
+                        out.push_back (p);
+        return out;
+    }
+
+    /** The second round, about the four best of the first (`judged` in coarse()'s order): nine places about each, four
+        distances about its own — the best's first, so a deadline cuts the least likely. */
+    std::vector<Place> fine (const std::vector<Place>& first, const std::vector<Judged>& judged) const
+    {
+        const auto order = ranked (first, judged);
+        std::vector<Place> out;
+        for (size_t seed = 0; seed < std::min<size_t> (4, order.size()); ++seed)
+        {
+            const auto& at = first[order[seed]];
+            for (const double dx : { -0.08, 0.0, 0.08 })
+                for (const double dy : { -0.08, 0.0, 0.08 })
+                    for (const double k : { 0.75, 0.9, 1.1, 1.3 })
+                    {
+                        const Place p { std::clamp (at.x + dx, -1.05, 1.05), std::clamp (at.y + dy, -1.05, 1.05),
+                                        std::clamp (at.distance * k, 0.01, 0.30) };
+                        if (std::hypot (p.x, p.y) <= 1.05 && ! onA (p))
+                            out.push_back (p);
+                    }
+        }
+        return out;
+    }
+
+    /** The place kept: the first round's best, unless the second found one better (its unjudged passed over). */
+    Place best (const std::vector<Place>& first, const std::vector<Judged>& firstJudged,
+                const std::vector<Place>& second = {}, const std::vector<Judged>& secondJudged = {}) const
+    {
+        const auto order = ranked (first, firstJudged);
+        if (order.empty())
+            return { pair.b.x, pair.b.y, pair.b.distance };
+        Place kept = first[order.front()];
+        kept.shiftMs = firstJudged[order.front()].shiftMs;
+        double keptScore = firstJudged[order.front()].score;
+        for (size_t i = 0; i < second.size() && i < secondJudged.size(); ++i)
+            if (secondJudged[i].score > keptScore + 1e-9)
+            {
+                kept = second[i];
+                kept.shiftMs = secondJudged[i].shiftMs;
+                keptScore = secondJudged[i].score;
+            }
+        return kept;
+    }
+
+    /** One place judged, as the pair hears it, at its best shift of B in time. */
+    Judged score (const Place& place) const
+    {
+        auto spot = pair.b;
+        spot.x = place.x;
+        spot.y = place.y;
+        spot.distance = place.distance;
+        auto cb = cabAt (table, state.box, spot);
+        auto aHere = ca;
+        const double db = firstArrival (cb), first = std::min (da, db);
+        cb.refDelay = both.align ? db : first;
+        aHere.refDelay = both.align ? da : first;
+        const auto ia = both.align ? iaAligned : render (aHere, n, 1);
+        const auto ib = render (cb, n, 1);   // one thread a render: the places themselves are spread over the threads
+        const auto a = spectrumOf (ia, (1 - both.blend) / middle (ia));
+        const auto b = spectrumOf (ib, both.blend / middle (ib) * (both.invert ? -1 : 1));
+        const double ratio = std::pow (2.0, 1.0 / 24.0), bin = fs / (double) spectrum;
+        double apart[72], hzOf[72];
+        for (int i = 0; i < 72; ++i)
+        {
+            hzOf[i] = 40.0 * std::pow (12000.0 / 40.0, i / 71.0);
+            apart[i] = power (a, hzOf[i], ratio) + power (b, hzOf[i], ratio);
+        }
+        double bestSum = -1e30, bestShift = 0;
+        for (int step = -10; step <= 10; ++step)
+        {
+            const double tau = step * 0.05e-3;
+            double sum = 0;
+            for (int i = 0; i < 72; ++i)
+            {
+                const auto lo = (size_t) std::max (1.0, std::floor (hzOf[i] / ratio / bin)), hi = (size_t) std::ceil (hzOf[i] * ratio / bin);
+                double e = 1e-30;
+                for (size_t k = lo; k <= hi; ++k)
+                    e += std::norm (a[k] + b[k] * std::polar (1.0, -2 * pi * (double) k * bin * tau));
+                sum += std::min (10 * std::log10 (e / apart[i]), 0.0) * (hzOf[i] <= 2000.0 ? 1.0 : 0.8);
+            }
+            if (sum > bestSum + 1e-9 || (std::abs (sum - bestSum) < 1e-9 && std::abs (tau) < std::abs (bestShift)))
+            {
+                bestSum = sum;
+                bestShift = tau;
+            }
+        }
+        return { bestSum, bestShift * 1000.0 };
+    }
+
+private:
+    static constexpr size_t spectrum = 1 << 15;   // padded past the IR: a 24th of an octave at 40 Hz still spans bins
+
+    const Table& table;
+    State state, both;
+    size_t n;
+    Pair pair;
+    Cab ca;
+    double da = 0;
+    std::vector<double> iaAligned;   // A rendered once, when the pair is aligned
+
+    bool onA (const Place& p) const   // two of one mic there are one mic
+    { return std::hypot (p.x - pair.a.x, p.y - pair.a.y) < 0.1 && std::abs (p.distance - pair.a.distance) < 0.01; }
+
+    /** The judged, best first. Places that score the same — often several with no dip at all — nearest where B stands
+        first, so B moves no further than it must; then nearest its distance; then in their order. The same on every
+        build, whatever its sort. */
+    std::vector<size_t> ranked (const std::vector<Place>& places, const std::vector<Judged>& judged) const
+    {
+        std::vector<size_t> order (std::min (places.size(), judged.size()));
+        for (size_t i = 0; i < order.size(); ++i) order[i] = i;
+        const auto across = [this, &places] (size_t i) { return std::hypot (places[i].x - pair.b.x, places[i].y - pair.b.y); };
+        const auto deep = [this, &places] (size_t i) { return std::abs (places[i].distance - pair.b.distance); };
+        std::stable_sort (order.begin(), order.end(), [&] (size_t a, size_t b)
+        {
+            if (judged[a].score > judged[b].score) return true;
+            if (judged[a].score < judged[b].score) return false;
+            const double na = across (a), nb = across (b);
+            if (na < nb) return true;
+            if (na > nb) return false;
+            return deep (a) < deep (b);
+        });
+        return order;
+    }
+
+    static std::vector<cd> spectrumOf (const std::vector<double>& ir, double gain)
+    {
+        std::vector<cd> x (spectrum, 0.0);
+        for (size_t i = 0; i < ir.size() && i < spectrum; ++i) x[i] = gain * ir[i];
+        fft (x, false);
+        return x;
+    }
+
+    double middle (const std::vector<double>& ir) const
+    {
+        std::vector<cd> x (n, 0.0);
+        for (size_t i = 0; i < ir.size() && i < n; ++i) x[i] = ir[i];
+        fft (x, false);
+        double e = 1e-30;
+        for (size_t k = (size_t) (500.0 * (double) n / fs); k <= (size_t) (2000.0 * (double) n / fs); ++k) e += std::norm (x[k]);
+        return std::sqrt (e);
+    }
+
+    static double power (const std::vector<cd>& x, double hz, double ratio)
+    {
+        const double bin = fs / (double) spectrum;
+        const auto lo = (size_t) std::max (1.0, std::floor (hz / ratio / bin)), hi = (size_t) std::ceil (hz * ratio / bin);
+        double e = 0;
+        for (size_t k = lo; k <= hi; ++k) e += std::norm (x[k]);
+        return e + 1e-30;
+    }
+};
+
+inline Place quietPlaceForB (const Table& table, const State& s, size_t n = 1 << 13,
+                             const std::function<void (const Place&, double score)>& tried = {}, bool thorough = false)
+{
+    const auto started = std::chrono::steady_clock::now();
+    const BSearch search (table, s, n);
+
+    // Every place judged, the first first — or, given a deadline, those reached before it.
+    using Clock = std::chrono::steady_clock;
+    const auto judgeAll = [&search, &tried] (const std::vector<Place>& all, Clock::time_point deadline)
+    {
+        std::vector<BSearch::Judged> judged (all.size());
+        const auto judge = [&] (size_t i)
+        {
+            if (Clock::now() >= deadline)
+                return;
+            judged[i] = search.score (all[i]);
+            if (tried)
+            {
+                auto p = all[i];
+                p.shiftMs = judged[i].shiftMs;
+                tried (p, judged[i].score);
+            }
+        };
+#if defined(__EMSCRIPTEN__) && ! defined(__EMSCRIPTEN_PTHREADS__)
+        for (size_t i = 0; i < all.size(); ++i)
+            judge (i);
+#else
+        const size_t lanes = std::clamp<size_t> (std::thread::hardware_concurrency(), 1, 32);
+        std::vector<std::future<void>> others;
+        for (size_t lane = 1; lane < lanes; ++lane)
+            others.push_back (std::async (std::launch::async, [&all, &judge, lane, lanes] { for (size_t i = lane; i < all.size(); i += lanes) judge (i); }));
+        for (size_t i = 0; i < all.size(); i += lanes)
+            judge (i);
+        for (auto& f : others)
+            f.get();
+#endif
+        return judged;
+    };
+
+    const auto first = search.coarse();
+    const auto firstJudged = judgeAll (first, Clock::time_point::max());
+    if (! thorough)
+        return search.best (first, firstJudged);
+    const auto second = search.fine (first, firstJudged);
+    const auto secondJudged = judgeAll (second, started + std::chrono::seconds (2));   // what is reached in two seconds
+    return search.best (first, firstJudged, second, secondJudged);
 }
 
 /** The cabinets the table holds, by the names their cap sections give them, in the table's order. */

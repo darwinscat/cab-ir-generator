@@ -1,0 +1,26 @@
+name = "METAL · 6x10 FORGE"
+style = "Metal"
+cabir = 1
+box = "SVT-610HLF"
+back = "ported"
+horn = true
+horn_db = 0
+blend = 0.500
+align = true
+invert = false
+
+[mic.a]
+on = true
+model = "sm57"
+x = 0.000
+y = 0.300
+distance = 0.030
+angle = 25.0
+
+[mic.b]
+on = false
+model = "u87"
+x = 0.400
+y = 0.000
+distance = 0.250
+angle = 0.0

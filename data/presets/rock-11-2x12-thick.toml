@@ -1,0 +1,27 @@
+name = "ROCK · 2x12 THICK"
+style = "Rock"
+cabir = 1
+box = "VB-212"
+back = "ported"
+horn = true
+horn_db = -12
+blend = 0.200
+align = true
+invert = false
+
+[mic.a]
+on = true
+model = "md421"
+x = -0.300
+y = 0.000
+distance = 0.040
+angle = 0.0
+
+[mic.b]
+on = true
+model = "u47"
+x = 0.225
+y = -0.275
+distance = 0.099
+angle = 0.0
+shift = 0.025

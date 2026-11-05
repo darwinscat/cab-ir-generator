@@ -1,0 +1,194 @@
+# THE TYPICAL CABINETS the site's page names, one per construction: a size, its back, its horn. The page says what each
+# is built like (darwinscat.com /felitronics/cab-ir-generator); these comments only say which line of the page it is.
+# "With a horn" is -6 on every one, the attenuator's middle; "no horn" is off. Mics are not here: tools/cabpack puts A
+# as DEFAULT's and B by the thorough FIND.
+
+# 4x10
+[[cab]]
+id = "4x10-closed-horn"     # like Ampeg SVT-410HE
+box = "4x10"
+back = "closed"
+horn = "-6"
+
+[[cab]]
+id = "4x10-closed"          # like Tech 21 B410
+box = "4x10"
+back = "closed"
+horn = "off"
+
+[[cab]]
+id = "4x10-ported-horn"     # like Ampeg SVT-410HLF, Markbass Standard 104HF, Gallien-Krueger 410RBH, SWR Goliath III
+box = "4x10"
+back = "ported"
+horn = "-6"
+
+[[cab]]
+id = "4x10-ported"          # like Hartke 410XL
+box = "4x10"
+back = "ported"
+horn = "off"
+
+[[cab]]
+id = "4x10-open"            # like the tweed Fender Bassman 4x10
+box = "4x10"
+back = "open"
+horn = "off"
+
+# 8x10
+[[cab]]
+id = "8x10-closed"          # like Ampeg SVT-810E, Hartke 810XL
+box = "8x10"
+back = "closed"
+horn = "off"
+
+[[cab]]
+id = "8x10-closed-horn"     # like Hartke HyDrive 810
+box = "8x10"
+back = "closed"
+horn = "-6"
+
+[[cab]]
+id = "8x10-ported-horn"     # like SWR Megoliath
+box = "8x10"
+back = "ported"
+horn = "-6"
+
+# 6x10
+[[cab]]
+id = "6x10-ported-horn"     # like Ampeg SVT-610HLF, Markbass Standard 106HR
+box = "6x10"
+back = "ported"
+horn = "-6"
+
+[[cab]]
+id = "6x10-closed"          # like Bergantino NV610
+box = "6x10"
+back = "closed"
+horn = "off"
+
+[[cab]]
+id = "6x10-closed-horn"     # like Bergantino NV610T
+box = "6x10"
+back = "closed"
+horn = "-6"
+
+# 2x10
+[[cab]]
+id = "2x10-closed"          # like Ampeg SVT-210AV
+box = "2x10"
+back = "closed"
+horn = "off"
+
+[[cab]]
+id = "2x10-closed-horn"     # like Ampeg PF-210HE
+box = "2x10"
+back = "closed"
+horn = "-6"
+
+[[cab]]
+id = "2x10-ported-horn"     # like Ampeg Venture VB-210, Markbass Standard 102HF, SWR Goliath Junior III
+box = "2x10"
+back = "ported"
+horn = "-6"
+
+[[cab]]
+id = "2x10-ported"          # like Orange OBC210 Mini
+box = "2x10"
+back = "ported"
+horn = "off"
+
+# 1x15
+[[cab]]
+id = "1x15-ported"          # like Ampeg SVT-15E
+box = "1x15"
+back = "ported"
+horn = "off"
+
+[[cab]]
+id = "1x15-ported-horn"     # like Ampeg Venture VB-115, Markbass Standard 151HR
+box = "1x15"
+back = "ported"
+horn = "-6"
+
+[[cab]]
+id = "1x15-closed-horn"     # like Ampeg PF-115HE
+box = "1x15"
+back = "closed"
+horn = "-6"
+
+# 1x12
+[[cab]]
+id = "1x12-ported-horn"     # like Ampeg Venture VB-112, Aguilar DB 112, Markbass New York 121
+box = "1x12"
+back = "ported"
+horn = "-6"
+
+[[cab]]
+id = "1x12-ported"          # like Aguilar DB 112 NT, Orange OBC112
+box = "1x12"
+back = "ported"
+horn = "off"
+
+[[cab]]
+id = "1x12-closed-horn"     # like Ashdown ABM-112H EVO IV Pro Neo
+box = "1x12"
+back = "closed"
+horn = "-6"
+
+[[cab]]
+id = "1x12-open"            # like the Fender Musicmaster Bass combo
+box = "1x12"
+back = "open"
+horn = "off"
+
+# 2x12
+[[cab]]
+id = "2x12-ported-horn"     # like Mesa/Boogie Subway 2x12 Vertical, Markbass New York 122, Ampeg Venture VB-212
+box = "2x12"
+back = "ported"
+horn = "-6"
+
+[[cab]]
+id = "2x12-ported"          # like SWR 12-Pack
+box = "2x12"
+back = "ported"
+horn = "off"
+
+[[cab]]
+id = "2x12-closed-horn"     # like Bergantino NV212T
+box = "2x12"
+back = "closed"
+horn = "-6"
+
+[[cab]]
+id = "2x12-closed"          # like the early-sixties Fender Bassman 2x12 cabinet
+box = "2x12"
+back = "closed"
+horn = "off"
+
+# 2x15
+[[cab]]
+id = "2x15-ported-horn"     # like Mesa/Boogie Subway 2x15 Vertical, Mesa/Boogie PowerHouse 2x15
+box = "2x15"
+back = "ported"
+horn = "-6"
+
+[[cab]]
+id = "2x15-ported"          # like Orange OBC215C
+box = "2x15"
+back = "ported"
+horn = "off"
+
+# 4x6
+[[cab]]
+id = "4x6-ported-horn"      # like Markbass New York 604
+box = "4x6"
+back = "ported"
+horn = "-6"
+
+# 8x8
+[[cab]]
+id = "8x8-ported-horn"      # like SWR Henry The 8x8, Ampeg Venture VB-88
+box = "8x8"
+back = "ported"
+horn = "-6"

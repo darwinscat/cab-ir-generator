@@ -1,0 +1,27 @@
+name = "PUNK · 8x10 SLAM"
+style = "Punk"
+cabir = 1
+box = "SVT-810"
+back = "closed"
+horn = true
+horn_db = -12
+blend = 0.300
+align = true
+invert = false
+
+[mic.a]
+on = true
+model = "md421"
+x = 0.200
+y = 0.000
+distance = 0.030
+angle = 0.0
+
+[mic.b]
+on = true
+model = "re20"
+x = -0.225
+y = -0.275
+distance = 0.126
+angle = 0.0
+shift = -0.025
