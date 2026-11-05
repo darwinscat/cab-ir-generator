@@ -37,7 +37,8 @@ namespace
         return juce::Drawable::createFromImageData (felitronics::appkit::brand::assets::catSvg, std::strlen (felitronics::appkit::brand::assets::catSvg));
     }
 
-    const juce::String productUrl = "https://github.com/darwinscat/cab-ir-generator";
+    /** The product's page on the site, where every link the app offers leads (the owner, 05.11: none to GitHub). */
+    const juce::String productUrl = "https://darwinscat.com/felitronics/cab-ir-generator?utm_source=cab-ir-generator&utm_medium=app";
 
     /** THE RIFFS THE APP CARRIES: Oleh's bass, played DI — the preamp already in it, so it goes straight into the cabinet —
         each a seamless loop (mono, 48 kHz, 24-bit FLAC), in the menu's order. The first plays until another is picked. */
@@ -80,15 +81,16 @@ namespace
     {
         felitronics::appkit::VersionBadge::Config c;
         c.productName = "Cab IR Generator";
-        c.productUrl  = "https://github.com/darwinscat/cab-ir-generator";
+        c.productUrl  = productUrl;
         c.gitHash     = CABIR_GIT_HASH;
         c.os          = juce::SystemStats::getOperatingSystemName();
         c.licence     = "AGPL-3.0+";
         const auto juceVersion = juce::SystemStats::getJUCEVersion().fromFirstOccurrenceOf (" ", false, false);
-        c.dependencies = { { .label = "felitronics-core",   .version = CABIR_CORE_VERSION,   .ownerRepo = "darwinscat/felitronics-core" },
-                           { .label = "felitronics-toml",   .version = CABIR_TOML_VERSION,   .ownerRepo = "darwinscat/felitronics-toml" },
-                           { .label = "felitronics-appkit", .version = CABIR_APPKIT_VERSION, .ownerRepo = "darwinscat/felitronics-appkit" },
-                           { .label = "JUCE",               .version = juceVersion,          .ownerRepo = "juce-framework/JUCE" } };
+        // What it was built on, said as plain text: no repository named, no link to one.
+        c.dependencies = { { .label = "felitronics-core",   .version = CABIR_CORE_VERSION },
+                           { .label = "felitronics-toml",   .version = CABIR_TOML_VERSION },
+                           { .label = "felitronics-appkit", .version = CABIR_APPKIT_VERSION },
+                           { .label = "JUCE",               .version = juceVersion } };
         // The product's mark, drawn from the logo's own SVG.
         std::shared_ptr<juce::Drawable> mark { juce::Drawable::createFromImageData (BinaryData::mark_svg, (size_t) BinaryData::mark_svgSize).release() };
         c.drawMark = [mark] (juce::Graphics& g, float cx, float cy, float d)
