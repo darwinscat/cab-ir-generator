@@ -19,7 +19,16 @@ Engine::~Engine()
 
 bool Engine::loadSample (const juce::File& file)
 {
-    auto* read = formats.createReaderFor (file);
+    return take (formats.createReaderFor (file), file.getFileNameWithoutExtension());
+}
+
+bool Engine::loadSample (const void* data, size_t size, const juce::String& title)
+{
+    return take (formats.createReaderFor (std::make_unique<juce::MemoryInputStream> (data, size, false)), title);
+}
+
+bool Engine::take (juce::AudioFormatReader* read, const juce::String& title)
+{
     if (read == nullptr)
         return false;
     const double rate = read->sampleRate;
@@ -27,7 +36,7 @@ bool Engine::loadSample (const juce::File& file)
     source->setLooping (true);
     transport.setSource (source.get(), 0, nullptr, rate);
     reader = std::move (source);
-    name = file.getFileNameWithoutExtension();
+    name = title;
     return true;
 }
 

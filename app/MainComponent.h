@@ -69,6 +69,7 @@ private:
     bool brandHover = false;                       // the hand over the brand: it links to the product's page
     juce::String presetName;                       // the preset last loaded or saved — dim once edited
     std::string presetText;                        // ...as its state's TOML, to tell
+    int riffNow = -1;                              // the riff playing, by its place in the menu; -1 for a file of the player's own
 
     void render (const State&, bool live);
     static State defaultState();                   // the first run's, and the preset menu's DEFAULT
@@ -83,6 +84,8 @@ private:
     void stepPreset (int by);                                                 // the one before or after, round the end
     void openSample();
     void loadSample (const juce::File&);
+    void loadRiff (int);                           // one of the riffs the app carries, by its place in the menu
+    void showSamples();
     void showAudio();
     void download();
     void timerCallback() override;
@@ -99,6 +102,7 @@ private:
     juce::Rectangle<int> strip() const { return getLocalBounds().removeFromBottom (stripH); }
     juce::Rectangle<int> openArea() const;
     juce::Rectangle<int> playArea() const;
+    juce::Rectangle<int> sampleArea() const;
     juce::Rectangle<int> audioArea() const;
     juce::Rectangle<int> versionArea() const;
 };

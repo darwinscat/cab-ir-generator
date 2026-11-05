@@ -4,11 +4,13 @@
 #include "MainComponent.h"
 
 #include <BinaryData.h>
+#include <RiffData.h>
 #include <felitronics/appkit/AudioSettingsPanel.h>
 #include <felitronics/appkit/BrandAssets.h>
 #include <felitronics/toml/Toml.h>
 
 #include <cstring>
+#include <iterator>
 #include <panel/Response.h>
 #include <synth/CabSynth.h>
 
@@ -35,6 +37,27 @@ namespace
     }
 
     const juce::String productUrl = "https://github.com/darwinscat/cab-ir-generator";
+
+    /** THE RIFFS THE APP CARRIES: Oleh's bass, played DI — the preamp already in it, so it goes straight into the cabinet —
+        each a seamless loop (mono, 48 kHz, 24-bit FLAC), in the menu's order. The first plays until another is picked. */
+    struct Riff { const char* file; const char* title; };
+    constexpr Riff riffs[] { { "11yl.flac",              "Eleven Light Years" },
+                             { "fifth-dimension-1.flac", "Fifth Dimension 1" },
+                             { "fifth-dimension-2.flac", "Fifth Dimension 2" },
+                             { "deep-space-1.flac",      "Deep Space is My Home 1" },
+                             { "deep-space-2.flac",      "Deep Space is My Home 2" },
+                             { "im-projection.flac",     "I am Projection" } };
+    constexpr int numRiffs = (int) std::size (riffs);
+    const juce::String riffKey = "riff:";   // the setting's prefix for one of these, else a file's path
+
+    const char* riffBytes (int i, int& size)
+    {
+        for (int r = 0; r < RiffData::namedResourceListSize; ++r)
+            if (juce::String (RiffData::originalFilenames[r]) == riffs[i].file)
+                return RiffData::getNamedResource (RiffData::namedResourceList[r], size);
+        size = 0;
+        return nullptr;
+    }
 
     juce::PropertiesFile::Options storage()
     {
@@ -125,8 +148,16 @@ MainComponent::MainComponent()
     engine.devices.initialise (0, 2, audio.get(), true);
     engine.devices.addAudioCallback (&engine);
 
-    if (const auto last = juce::File (properties.getUserSettings()->getValue ("sample")); last.existsAsFile())
-        loadSample (last);
+    // The sample the last run played — a riff of ours or a file — else the first riff.
+    const auto last = properties.getUserSettings()->getValue ("sample");
+    int riff = 0;
+    for (int i = 0; i < numRiffs; ++i)
+        if (last == riffKey + riffs[i].file)
+            riff = i;
+    if (! last.startsWith (riffKey) && juce::File::isAbsolutePath (last) && juce::File (last).existsAsFile())
+        loadSample (juce::File (last));
+    if (! engine.hasSample())
+        loadRiff (riff);
 
     setSize (CabPicker::panelW, headerH + CabPicker::panelH - CabPicker::footRowH + stripH);
     setWantsKeyboardFocus (true);
@@ -427,8 +458,40 @@ void MainComponent::loadSample (const juce::File& file)
     if (! engine.loadSample (file))
         return;
     properties.getUserSettings()->setValue ("sample", file.getFullPathName());
+    riffNow = -1;
     engine.play (wasPlaying);
     repaint (strip());
+}
+
+void MainComponent::loadRiff (int i)
+{
+    int size = 0;
+    const char* data = riffBytes (i, size);
+    const bool wasPlaying = engine.isPlaying();
+    if (data == nullptr || ! engine.loadSample (data, (size_t) size, riffs[i].title))
+        return;
+    properties.getUserSettings()->setValue ("sample", riffKey + riffs[i].file);
+    riffNow = i;
+    engine.play (wasPlaying);
+    repaint (strip());
+}
+
+void MainComponent::showSamples()
+{
+    juce::PopupMenu menu;
+    for (int i = 0; i < numRiffs; ++i)
+        menu.addItem (i + 1, riffs[i].title, true, i == riffNow);
+    menu.addSeparator();
+    constexpr int fileId = 1000;
+    menu.addItem (fileId, "OPEN A FILE...");
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this).withTargetScreenArea (localAreaToGlobal (sampleArea())),
+                        [this] (int id)
+                        {
+                            if (id == fileId)
+                                openSample();
+                            else if (id >= 1 && id <= numRiffs)
+                                loadRiff (id - 1);
+                        });
 }
 
 void MainComponent::openSample()
@@ -537,6 +600,7 @@ juce::Rectangle<int> MainComponent::brandLink() const
 // ---------------------------------------------------------------- the strip
 juce::Rectangle<int> MainComponent::openArea() const    { return strip().reduced (8, 5).withWidth (70); }
 juce::Rectangle<int> MainComponent::playArea() const    { return openArea().translated (78, 0).withWidth (70); }
+juce::Rectangle<int> MainComponent::sampleArea() const  { return playArea().translated (78, 0).withWidth (300); }
 juce::Rectangle<int> MainComponent::audioArea() const   { return versionArea().translated (-82, 0).withWidth (74); }
 juce::Rectangle<int> MainComponent::versionArea() const { return strip().reduced (8, 5).removeFromRight (70); }
 
@@ -644,10 +708,16 @@ void MainComponent::paint (juce::Graphics& g)
         button (engine.isPlaying() ? "STOP" : "PLAY", playArea(), engine.isPlaying());
     button ("AUDIO", audioArea(), false);
 
-    const auto nameArea = juce::Rectangle<int> (playArea().getRight() + 12, s.getY(), audioArea().getX() - playArea().getRight() - 24, s.getHeight());
+    // The sample: a box like the preset's, its menu the riffs we carry and a file of the player's own.
+    const auto sa = sampleArea().toFloat().reduced (0.5f);
+    g.setColour (look().panel2);
+    g.fillRoundedRectangle (sa, 4.0f);
+    g.setColour (look().txFaint);
+    g.drawRoundedRectangle (sa, 4.0f, 1.0f);
     g.setColour (engine.hasSample() ? look().tx : look().txFaint);
     look().drawTracked (g, engine.hasSample() ? engine.sampleName().toUpperCase() : juce::String ("DROP A BASS SAMPLE ON THE WINDOW"),
-                        nameArea.toFloat(), font, 0.06f, juce::Justification::centredLeft);
+                        sa.reduced (10.0f, 0.0f), font, 0.06f, juce::Justification::centredLeft);
+    look().drawTracked (g, juce::String::fromUTF8 ("\xe2\x96\xbe"), sa.reduced (10.0f, 0.0f), font, 0.0f, juce::Justification::centredRight);
 
     g.setColour (checker.updateAvailable() ? look().orange : look().txDim);
     look().drawTracked (g, "V" + checker.currentVersion(), versionArea().toFloat(), font, 0.06f, juce::Justification::centredRight);
@@ -692,6 +762,8 @@ void MainComponent::mouseDown (const juce::MouseEvent& e)
     }
     else if (openArea().contains (p))
         openSample();
+    else if (sampleArea().contains (p))
+        showSamples();
     else if (playArea().contains (p) && engine.hasSample())
     {
         engine.play (! engine.isPlaying());

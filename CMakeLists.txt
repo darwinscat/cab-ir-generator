@@ -131,6 +131,8 @@ if(CABIR_APP)
     target_sources(CabIrGenerator PRIVATE app/Main.cpp app/MainComponent.cpp app/Engine.cpp)
     file(GLOB cabirPresets CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/data/presets/*.toml")   # the factory's presets
     juce_add_binary_data(CabIrData SOURCES data/cabinets.txt assets/logo/mark.svg ${cabirPresets})
+    file(GLOB cabirRiffs CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/data/riffs/*.flac")       # the bass riffs the player carries
+    juce_add_binary_data(CabIrRiffs HEADER_NAME RiffData.h NAMESPACE RiffData SOURCES ${cabirRiffs})
     target_compile_definitions(CabIrGenerator PRIVATE
         JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0
         CABIR_VERSION="${PROJECT_VERSION}"
@@ -140,6 +142,7 @@ if(CABIR_APP)
         CABIR_APPKIT_VERSION="${cabirAppkitVersion}")
     target_link_libraries(CabIrGenerator PRIVATE
         CabIrData
+        CabIrRiffs
         cabir::panel
         felitronics::convolution
         felitronics::appkit

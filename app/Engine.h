@@ -26,6 +26,8 @@ public:
 
     /** A sample from a file: false for one that does not decode. Played from its start once play() is asked. */
     bool loadSample (const juce::File&);
+    /** ...or from bytes the app carries (a riff of its own), read where they lie: they outlive the player. */
+    bool loadSample (const void* data, size_t size, const juce::String& title);
     juce::String sampleName() const { return name; }
     bool hasSample() const { return reader != nullptr; }
 
@@ -55,6 +57,7 @@ private:
     double irRate = 48000.0;
     juce::AudioBuffer<float> scratch;
 
+    bool take (juce::AudioFormatReader*, const juce::String& title);   // the reader looped into the transport, named
     void loadIrIntoConvolver();
 };
 
