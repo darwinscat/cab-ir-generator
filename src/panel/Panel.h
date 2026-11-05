@@ -1770,7 +1770,8 @@ private:
         {
             const auto shade = [this] (int i)
             {
-                const auto at = [this] (int k) { return ui::jlimit (0, 8, ui::roundToInt ((responseBad[(size_t) k] - 3.0f) / 3.0f * 8.0f)); };
+                // Past 3 dB at all, a shade at least: the line reddens where FIND would move a mic (synth::MicSearch).
+                const auto at = [this] (int k) { return ui::jlimit (0, 8, (int) std::ceil ((responseBad[(size_t) k] - 3.0f) / 3.0f * 8.0f)); };
                 return ui::jmax (at (i), at (i + 1));
             };
             for (int from = 0; from < (int) responseNow.size() - 1;)
