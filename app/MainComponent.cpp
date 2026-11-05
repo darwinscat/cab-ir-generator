@@ -225,6 +225,81 @@ State MainComponent::defaultState()
     return s;
 }
 
+int MainComponent::writeStills (const juce::File& folder, float scale)
+{
+    if (! folder.createDirectory())
+        return 1;
+    look().font = brandFont;
+    const auto table = synth::parseTable (std::string (BinaryData::cabinets_txt, (size_t) BinaryData::cabinets_txtSize));
+
+    // The panel as the app has it: no foot, FIND and DOWNLOAD IR offered.
+    CabPicker picker;
+    picker.showDefault = false;
+    picker.onFind = [] (int, CabPicker::Setup) {};
+    picker.onDownload = [] {};
+    picker.setBounds (0, 0, CabPicker::panelW, CabPicker::panelH - CabPicker::footRowH);
+
+    synth::PairRenderer renderer;
+    const auto shown = [&] (const State& s)
+    {
+        const auto ir = renderer.render (table, s.box, synth::pairOf (s), (size_t) 1 << 14);
+        const auto [cab, setup] = CabPicker::setupOf (s);
+        picker.show (cab, setup);
+        picker.showResponse (synth::responseOf (synth::as24Bit (ir.mix), 48000.0), {},
+                             ir.a.empty() ? std::vector<float>() : synth::combOf (ir.a, ir.b));
+    };
+    int failed = 0;
+    const auto write = [&] (const char* name)
+    {
+        // On the panel's own colour, as the window under it paints it in the app.
+        juce::Image image (juce::Image::ARGB, juce::roundToInt ((float) picker.getWidth() * scale),
+                           juce::roundToInt ((float) picker.getHeight() * scale), true);
+        {
+            juce::Graphics g (image);
+            g.addTransform (juce::AffineTransform::scale (scale));
+            g.fillAll (look().panel);
+            picker.paintEntireComponent (g, true);
+        }
+        const auto file = folder.getChildFile (name);
+        file.deleteFile();
+        juce::FileOutputStream out (file);
+        juce::PNGImageFormat png;
+        if (! out.openedOk() || ! png.writeImageToStream (image, out))
+            ++failed;
+    };
+
+    const auto first = defaultState();
+    shown (first);
+    write ("panel-default@2x.png");
+
+    // A pair that combs: B out in the room, on a clock of its own.
+    auto combing = first;
+    combing.b.x = 0.4;
+    combing.b.distance = 0.30;
+    combing.align = false;
+    shown (combing);
+    write ("panel-comb@2x.png");
+
+    // One mic: A alone.
+    auto alone = first;
+    alone.b.on = false;
+    shown (alone);
+    write ("panel-one-mic@2x.png");
+
+    // FIND: every place it judged on the speaker, B where it found the quietest.
+    auto found = first;
+    const auto place = synth::quietPlaceForB (table, first, (size_t) 1 << 13,
+                                              [&picker] (const synth::Place& p, double score) { picker.showSearch ((float) p.x, (float) p.y, (float) score); });
+    picker.endSearch();
+    found.b.x = place.x;
+    found.b.y = place.y;
+    found.b.distance = place.distance;
+    found.shiftMs = place.shiftMs;
+    shown (found);
+    write ("panel-find@2x.png");
+    return failed;
+}
+
 void MainComponent::keep (const State& s)
 {
     const bool bTakenUp = ! state.b.on && s.b.on;

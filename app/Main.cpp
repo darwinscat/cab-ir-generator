@@ -65,9 +65,21 @@ class Application final : public juce::JUCEApplication
 public:
     const juce::String getApplicationName() override    { return "Cab IR Generator"; }
     const juce::String getApplicationVersion() override { return CABIR_VERSION; }
-    bool moreThanOneInstanceAllowed() override          { return false; }
+    bool moreThanOneInstanceAllowed() override          { return getCommandLineParameterArray().contains ("--stills"); }
 
-    void initialise (const juce::String&) override { window = std::make_unique<Window>(); }
+    void initialise (const juce::String&) override
+    {
+        // --stills <folder>: the panel drawn to files, and out — no window, no audio (MainComponent::writeStills).
+        if (const auto args = getCommandLineParameterArray(); args.contains ("--stills"))
+        {
+            const int at = args.indexOf ("--stills");
+            const auto folder = juce::File::getCurrentWorkingDirectory().getChildFile (args[at + 1].isNotEmpty() ? args[at + 1] : "stills");
+            setApplicationReturnValue (MainComponent::writeStills (folder));
+            quit();
+            return;
+        }
+        window = std::make_unique<Window>();
+    }
     void shutdown() override                       { window.reset(); }
     void systemRequestedQuit() override            { quit(); }
 
