@@ -430,6 +430,11 @@ public:
             setup_.shiftMs = 0.0f;   // TIME back to where ALIGN leaves B
             send();
         }
+        else if (chosen >= 0 && bothHeard() && blendTrack().expanded (8.0f, 8.0f).contains (e.position))
+        {
+            setup_.blend = 0.5f;     // BLEND back to the middle, the two even (the owner, 05.11)
+            send();
+        }
     }
 
     void mouseUp (const ui::MouseEvent& e)
