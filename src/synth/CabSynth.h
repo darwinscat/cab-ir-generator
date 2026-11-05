@@ -27,6 +27,8 @@
 #include <string>
 #include <vector>
 
+#include "State.h"
+
 namespace cabir::synth
 {
 
@@ -927,6 +929,34 @@ inline PairParts renderPairParts (const Table& table, const std::string& cab, co
 inline std::vector<float> renderPair (const Table& table, const std::string& cab, const Pair& p, size_t n = 1 << 14)
 {
     return renderPairParts (table, cab, p, n).mix;
+}
+
+/** WHAT THE SYNTHESIS RENDERS of a state: its two mics on one clock, the horn and the back A's — or, with one mic on,
+    that one alone. */
+inline Pair pairOf (const State& s)
+{
+    const auto spot = [&s] (const cabir::Mic& m)   // the state's mic, not the synthesis's own Mic
+    {
+        Spot p;
+        p.x = m.x;
+        p.y = m.y;
+        p.distance = m.distance;
+        p.horn = s.horn;
+        p.mic = m.model;
+        p.angle = m.angle;
+        p.hornDb = s.hornDb;
+        p.back = s.back;
+        return p;
+    };
+    Pair pair { spot (s.a), spot (s.b), s.blend, s.align, s.invert };
+    if (! s.b.on)
+        pair.blend = 0;            // A alone: the blend not heard
+    else if (! s.a.on)
+    {
+        pair.a = spot (s.b);       // B alone, as one mic is rendered
+        pair.blend = 0;
+    }
+    return pair;
 }
 
 /** The cabinets the table holds, by the names their cap sections give them, in the table's order. */

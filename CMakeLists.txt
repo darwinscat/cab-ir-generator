@@ -30,6 +30,7 @@ add_library(cabir_synth INTERFACE)
 add_library(cabir::synth ALIAS cabir_synth)
 target_include_directories(cabir_synth INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_compile_features(cabir_synth INTERFACE cxx_std_20)
+target_sources(cabir_synth INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/src/synth/State.cpp")
 target_link_libraries(cabir_synth INTERFACE felitronics::toml)
 
 # THE CABINETS the synthesis reads: a host embeds the file the way it embeds its other data.

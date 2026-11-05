@@ -1,0 +1,94 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of Cab IR Generator — see LICENSE.
+
+#include "State.h"
+
+#include <felitronics/toml/Schema.h>
+#include <felitronics/toml/Toml.h>
+
+#include <algorithm>
+#include <cmath>
+
+namespace cabir
+{
+
+std::string toToml (const State& s)
+{
+    namespace t = felitronics::toml;
+    const auto decimal = [] (double x, std::uint8_t scale) { return t::Value (t::Decimal::fromDouble (x, scale)); };
+    t::Table root;
+    (void) root.insert ("cabir", t::Value (std::int64_t { 1 }));
+    (void) root.insert ("box", t::Value (s.box));
+    (void) root.insert ("back", t::Value (backNames[std::clamp (s.back, -1, 2) + 1]));
+    (void) root.insert ("horn", t::Value (s.horn));
+    (void) root.insert ("horn_db", t::Value ((std::int64_t) std::lround (s.hornDb)));
+    (void) root.insert ("blend", decimal (s.blend, 3));
+    (void) root.insert ("align", t::Value (s.align));
+    (void) root.insert ("invert", t::Value (s.invert));
+    const auto mic = [&decimal] (const Mic& m)
+    {
+        t::Table out;
+        (void) out.insert ("on", t::Value (m.on));
+        if (! m.model.empty())
+            (void) out.insert ("model", t::Value (m.model));
+        (void) out.insert ("x", decimal (m.x, 3));
+        (void) out.insert ("y", decimal (m.y, 3));
+        (void) out.insert ("distance", decimal (m.distance, 3));
+        (void) out.insert ("angle", decimal (m.angle, 1));
+        return out;
+    };
+    t::Table mics;
+    (void) mics.insert ("a", t::Value (mic (s.a)));
+    (void) mics.insert ("b", t::Value (mic (s.b)));
+    (void) root.insert ("mic", t::Value (std::move (mics)));
+    return t::write (root);
+}
+
+std::optional<State> fromToml (std::string_view text)
+{
+    namespace t = felitronics::toml;
+    auto parsed = t::parse (text);
+    const auto* root = std::get_if<t::Table> (&parsed);
+    if (root == nullptr)
+        return std::nullopt;
+
+    State s;
+    std::int64_t version = 0, hornDb = 0;
+    std::string back = backNames[0];
+    const auto report = t::read (*root, [&] (t::Reader& in)
+    {
+        in.required ("cabir", version, { 1, 1 });
+        in.required ("box", s.box);
+        in.optional ("back", back);
+        in.optional ("horn", s.horn);
+        in.optional ("horn_db", hornDb, { -12, 0 });
+        in.optional ("blend", s.blend, { 0.0, 1.0 });
+        in.optional ("align", s.align);
+        in.optional ("invert", s.invert);
+        const auto mic = [] (t::Reader& m, Mic& out)
+        {
+            m.optional ("on", out.on);
+            m.optional ("model", out.model);
+            m.optional ("x", out.x, { -1.5, 1.5 });
+            m.optional ("y", out.y, { -1.5, 1.5 });
+            m.optional ("distance", out.distance, { 0.001, 1.0 });
+            m.optional ("angle", out.angle, { 0.0, 90.0 });
+        };
+        in.table ("mic", t::Need::Optional, [&] (t::Reader& mics)
+        {
+            mics.table ("a", t::Need::Optional, [&] (t::Reader& m) { mic (m, s.a); });
+            mics.table ("b", t::Need::Optional, [&] (t::Reader& m) { mic (m, s.b); });
+        });
+    }, t::ReadOptions { t::Severity::Warning });
+    if (! report.ok() || s.box.empty())
+        return std::nullopt;
+
+    s.back = -1;
+    for (int i = 0; i < 4; ++i)
+        if (back == backNames[i])
+            s.back = i - 1;
+    s.hornDb = (double) hornDb;
+    return s;
+}
+
+} // namespace cabir

@@ -4,6 +4,7 @@
 // THE STATE'S TEXT: what is written reads back the same, a later version's key is passed over, a broken one refused,
 // and pairOf renders the mics that are on.
 
+#include "synth/CabSynth.h"
 #include "synth/State.h"
 
 #include <cstdio>
@@ -61,11 +62,11 @@ int main()
     // pairOf: B alone is rendered as one mic, at B's spot; A alone with the blend kept but not heard.
     State onlyB = full;
     onlyB.a.on = false;
-    const auto pairB = cabir::pairOf (onlyB);
+    const auto pairB = cabir::synth::pairOf (onlyB);
     check (pairB.blend <= 0 && pairB.a.mic == "u87" && pairB.a.x < -0.5, "B alone is rendered at B's spot");
     State onlyA = full;
     onlyA.b.on = false;
-    const auto pairA = cabir::pairOf (onlyA);
+    const auto pairA = cabir::synth::pairOf (onlyA);
     check (pairA.blend <= 0 && pairA.a.mic == "re20" && pairA.a.back == 2 && pairA.a.hornDb < -5, "A alone, its horn and back");
 
     std::printf ("%s\n%s", failures == 0 ? "state: all passed" : "state: FAILED", text.c_str());
