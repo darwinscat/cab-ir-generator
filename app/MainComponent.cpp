@@ -11,8 +11,8 @@
 
 #include <cstring>
 #include <iterator>
-#include <panel/Response.h>
 #include <synth/CabSynth.h>
+#include <synth/Response.h>
 
 namespace cabir::app
 {
@@ -197,8 +197,8 @@ void MainComponent::render (const State& s, bool live)
             heard = mine;
 
             juce::MemoryBlock bytes (wav.data(), wav.size());
-            auto now = responseOf (bytes);
-            auto comb = ir.a.empty() ? std::vector<float>() : combOf (ir.a, ir.b);
+            auto now = synth::responseOf (synth::as24Bit (ir.mix), 48000.0);   // the IR as the WAV holds it, as the page draws it
+            auto comb = ir.a.empty() ? std::vector<float>() : synth::combOf (ir.a, ir.b);
             auto before = keptCurve;
             engine.setIr (std::move (ir.mix), 48000.0);
             if (! live)

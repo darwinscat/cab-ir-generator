@@ -5,6 +5,7 @@
 
 #include "Look.h"
 #include "MicGlyphs.h"
+#include "../synth/Response.h"
 #include "../synth/State.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -313,8 +314,8 @@ public:
     /** THE RESPONSE of what plays, in dB at responseHz — `now` the cabinet heard, `before` what was kept before it
         (empty, none): each level to its own middle, so the two read as shapes; and with two mics heard `comb`, where
         they meet: dB above nought where they add in phase, below where they cancel (empty, one mic). */
-    static constexpr int responsePoints = 240;
-    static float responseHz (int i) { return 30.0f * std::pow (12000.0f / 30.0f, (float) i / (float) (responsePoints - 1)); }
+    static constexpr int responsePoints = synth::responsePoints;
+    static float responseHz (int i) { return synth::responseHz (i); }
 
     void showResponse (std::vector<float> now, std::vector<float> before, std::vector<float> comb = {})
     {

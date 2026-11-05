@@ -10,12 +10,11 @@
 namespace cabir
 {
 
-/** AN IR'S RESPONSE as the panel draws it (CabPicker::responseHz): a sixth of an octave wide each, in dB, levelled to its
-    own middle (100 Hz .. 5 kHz). Empty for bytes that do not decode. */
+/** AN IR'S RESPONSE as the panel draws it, from a WAV's bytes — synth::responseOf (synth/Response.h) once they are
+    decoded: a sixth of an octave wide each point, in dB, levelled to its own middle. Empty for bytes that do not decode. */
 std::vector<float> responseOf (const juce::MemoryBlock& bytes);
 
-/** ...and where a pair's two mics meet, at the same points — each mic's part of the pair at the mix's level, `rate` Hz:
-    in dB, the mix against the two powers apart, above nought where they add in phase, below where they cancel. */
+/** ...and where a pair's two mics meet, at the same points: synth::combOf. */
 std::vector<float> combOf (const std::vector<float>& a, const std::vector<float>& b, double rate = 48000.0);
 
 } // namespace cabir
