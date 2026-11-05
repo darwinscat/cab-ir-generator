@@ -5,7 +5,7 @@ box = "VB-88"
 back = "ported"
 horn = true
 horn_db = -6
-blend = 0.600
+blend = 0.650
 align = true
 invert = false
 
@@ -20,8 +20,8 @@ angle = 0.0
 [mic.b]
 on = true
 model = "u87"
-x = 0.300
-y = -0.425
-distance = 0.151
+x = -0.975
+y = -0.275
+distance = 0.191
 angle = 0.0
-shift = 0.000
+shift = 0.050

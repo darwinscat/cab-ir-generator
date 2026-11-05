@@ -12,8 +12,8 @@ invert = false
 [mic.a]
 on = true
 model = "sm57"
-x = 0.200
-y = 0.000
+x = 0.500
+y = 0.150
 distance = 0.020
 angle = 0.0
 

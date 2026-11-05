@@ -12,7 +12,7 @@ invert = false
 [mic.a]
 on = true
 model = "d112"
-x = 0.600
+x = 0.450
 y = 0.000
 distance = 0.050
 angle = 0.0
@@ -20,8 +20,8 @@ angle = 0.0
 [mic.b]
 on = true
 model = "re20"
-x = 0.150
-y = -0.275
-distance = 0.135
+x = 0.075
+y = -0.350
+distance = 0.152
 angle = 0.0
 shift = 0.000

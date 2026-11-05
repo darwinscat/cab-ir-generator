@@ -12,16 +12,16 @@ invert = false
 [mic.a]
 on = true
 model = "u47"
-x = 0.600
-y = -0.300
-distance = 0.100
+x = 0.750
+y = -0.600
+distance = 0.125
 angle = 0.0
 
 [mic.b]
 on = true
 model = "ribbon"
-x = 0.600
+x = -0.675
 y = 0.275
-distance = 0.200
+distance = 0.135
 angle = 0.0
 shift = 0.000

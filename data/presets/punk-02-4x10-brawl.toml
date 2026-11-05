@@ -5,23 +5,23 @@ box = "SVT-410HE"
 back = "closed"
 horn = true
 horn_db = -12
-blend = 0.400
+blend = 0.550
 align = true
 invert = false
 
 [mic.a]
 on = true
 model = "md421"
-x = 0.200
+x = 0.050
 y = 0.000
-distance = 0.020
+distance = 0.032
 angle = 0.0
 
 [mic.b]
 on = true
 model = "sm57"
-x = 0.825
-y = 0.075
-distance = 0.030
+x = 0.900
+y = -0.425
+distance = 0.024
 angle = 0.0
-shift = 0.025
+shift = -0.150
