@@ -309,6 +309,7 @@ struct Cab
     double floorGap = 0, floorRefl = 0;
     double lengthMs = 200, fadeMs = 30;
     double refDelay = -1;   // the time zero, s from the sound leaving: below zero, the first arrival's own
+    double rate = fs;       // the IR's sample rate: the panel's and the app's 48 kHz, a pack's 44.1 or 96 too
 };
 
 inline Cab build (const Section& s)
@@ -611,7 +612,7 @@ inline std::vector<double> render (const Cab& c, size_t n, size_t threads = 0)
     if (c.coilHz > 0)
     {
         std::vector<double> mag (n / 2 + 1);
-        for (size_t k = 0; k <= n / 2; ++k) { const double f = fs * (double) k / (double) n; mag[k] = std::pow (1 + (f / c.coilHz) * (f / c.coilHz), -0.25); }
+        for (size_t k = 0; k <= n / 2; ++k) { const double f = c.rate * (double) k / (double) n; mag[k] = std::pow (1 + (f / c.coilHz) * (f / c.coilHz), -0.25); }
         coil = minimumPhase (mag, n);
     }
     // The target cone's own near-field sum, as the cones' sum is scaled below: what the port and the horn stand against.
@@ -632,15 +633,15 @@ inline std::vector<double> render (const Cab& c, size_t n, size_t threads = 0)
     // The port against the cone at a cone-close mic (Keele's near field against the port's far field): n Sd / (2 pi r Delta).
     const double dc = c.micD + c.depthFrac * c.radius, delta = std::sqrt (dc * dc + c.radius * c.radius) - dc;
     std::vector<Biquad> bodyEq, presence, hornEq;
-    for (auto& e : c.body) bodyEq.push_back (Biquad::make ("peak", e[0], e[1], e[2], fs));
-    for (auto& e : c.presence) presence.push_back (Biquad::make ("peak", e[0], e[1], e[2], fs));
-    for (auto& e : c.hornEq) hornEq.push_back (Biquad::make ("peak", e[0], e[1], e[2], fs));
+    for (auto& e : c.body) bodyEq.push_back (Biquad::make ("peak", e[0], e[1], e[2], c.rate));
+    for (auto& e : c.presence) presence.push_back (Biquad::make ("peak", e[0], e[1], e[2], c.rate));
+    for (auto& e : c.hornEq) hornEq.push_back (Biquad::make ("peak", e[0], e[1], e[2], c.rate));
     const double stepDb = c.baffleStepDb, stepHz = 115.0 / c.bw;
 
     // Each bin on its own — nothing below writes what another bin reads — so the bins are spread over a few threads.
     const auto bin = [&] (size_t k)
     {
-        const double f = fs * (double) k / (double) n;
+        const double f = c.rate * (double) k / (double) n;
         cd cone, port;
         lowEnd (c, f, cone, port);
         cd pipe = 0.0;   // an open back's: what it hands out for what the cone moves
@@ -658,7 +659,7 @@ inline std::vector<double> render (const Cab& c, size_t n, size_t threads = 0)
             if (! (c.open && std::abs (m[0] - c0 / (2 * c.depth)) < 0.08 * m[0]))
                 box += m[2] * resonance (f, m[0], m[1]);
         for (auto& m : c.panel) box += m[2] * resonance (f, m[0], m[1]);
-        for (auto& b : bodyEq) box *= b.at (f, fs);
+        for (auto& b : bodyEq) box *= b.at (f, c.rate);
         // The baffle step: the low end, radiating into the whole room, a few tenths of a dB under the top.
         box *= std::pow (10.0, -stepDb / 20 * (1 / (1 + (f / stepHz) * (f / stepHz))));
 
@@ -750,7 +751,7 @@ inline std::vector<double> render (const Cab& c, size_t n, size_t threads = 0)
         if (c.horn)
         {
             cd hn = highpass2 (f, c.hornXo, c.hornQ) * lowpass2 (f, c.hornLp, 0.707) * std::pow (10.0, c.hornDb / 20);
-            for (auto& b : hornEq) hn *= b.at (f, fs);
+            for (auto& b : hornEq) hn *= b.at (f, c.rate);
             for (int img = 0; img < images; ++img)
             {
                 const double back = img == 0 ? 1.0 : c.floorRefl;
@@ -781,7 +782,7 @@ inline std::vector<double> render (const Cab& c, size_t n, size_t threads = 0)
 
         // The mic: its capsule's own response, and the proximity it hears at this distance.
         cd capsule = highpass2 (f, c.micHp, 0.707) * (c.micTop > 0 ? lowpass1 (f, c.micTop) : lowpass2 (f, c.micLp, 0.707));
-        for (auto& b : presence) capsule *= b.at (f, fs);
+        for (auto& b : presence) capsule *= b.at (f, c.rate);
         H[k] = sum * capsule;
     };
     forEachBin (bins, bin, threads);
@@ -789,7 +790,7 @@ inline std::vector<double> render (const Cab& c, size_t n, size_t threads = 0)
     H[0] = 0;
     fft (H, true);
 
-    const int len = (int) std::lround (c.lengthMs * fs / 1000), fade = (int) std::lround (c.fadeMs * fs / 1000);
+    const int len = (int) std::lround (c.lengthMs * c.rate / 1000), fade = (int) std::lround (c.fadeMs * c.rate / 1000);
     std::vector<double> ir ((size_t) len);
     for (int i = 0; i < len; ++i)
     {
@@ -838,13 +839,14 @@ constexpr double portAtFoot = 0.045;
 
 /** A cabinet of the table — its "<name> cap" section, the box as that section says, its mic or the one `spot` names
     laid over it — with the mic at `spot`, aimed straight at the baffle, its back as `spot` turns it. */
-inline Cab cabAt (const Table& table, const std::string& cab, const Spot& spot)
+inline Cab cabAt (const Table& table, const std::string& cab, const Spot& spot, double rate = fs)
 {
     auto s = resolve (table, cab + " cap");
     if (! spot.mic.empty())
         for (auto& [k, v] : resolve (table, "mic-" + spot.mic))
             s[k] = v;
     auto c = build (s);
+    c.rate    = rate;
     c.micOff  = spot.x;
     c.micOffY = spot.y;
     c.micD    = spot.distance;
@@ -917,7 +919,7 @@ struct Pair
 };
 
 /** `ir` moved later by `seconds` — a fraction of a sample as well as whole ones, through the spectrum, its length kept. */
-inline std::vector<double> delayed (const std::vector<double>& ir, double seconds)
+inline std::vector<double> delayed (const std::vector<double>& ir, double seconds, double rate = fs)
 {
     if (std::abs (seconds) < 1e-12 || ir.empty())
         return ir;
@@ -928,7 +930,7 @@ inline std::vector<double> delayed (const std::vector<double>& ir, double second
     fft (x, false);
     for (size_t k = 0; k <= m / 2; ++k)
     {
-        x[k] *= std::polar (1.0, -2 * pi * fs * (double) k / (double) m * seconds);
+        x[k] *= std::polar (1.0, -2 * pi * rate * (double) k / (double) m * seconds);
         if (k > 0 && k < m / 2) x[m - k] = std::conj (x[k]);
     }
     x[m / 2] = x[m / 2].real();
@@ -949,23 +951,23 @@ struct PairParts { std::vector<float> mix, a, b; };
 class PairRenderer
 {
 public:
-    PairParts render (const Table& table, const std::string& cab, const Pair& p, size_t n = 1 << 14)
+    PairParts render (const Table& table, const std::string& cab, const Pair& p, size_t n = 1 << 14, double rate = fs)
     {
         if (p.blend <= 0)
         {
-            auto ca = cabAt (table, cab, p.a);
-            return { peakAt (irOf (lastA, keyOf (cab, p.a, ca.refDelay, n), ca, n), 0.5), {}, {} };
+            auto ca = cabAt (table, cab, p.a, rate);
+            return { peakAt (irOf (lastA, keyOf (cab, p.a, ca.refDelay, n, rate), ca, n), 0.5), {}, {} };
         }
 
         auto bSpot = p.b;
         bSpot.horn = p.a.horn;
         bSpot.hornDb = p.a.hornDb;
         bSpot.back = p.a.back;
-        auto ca = cabAt (table, cab, p.a), cb = cabAt (table, cab, bSpot);
+        auto ca = cabAt (table, cab, p.a, rate), cb = cabAt (table, cab, bSpot, rate);
         const double da = firstArrival (ca), db = firstArrival (cb), first = std::min (da, db);
         ca.refDelay = p.align ? da : first;
         cb.refDelay = p.align ? db : first;
-        const auto ka = keyOf (cab, p.a, ca.refDelay, n), kb = keyOf (cab, bSpot, cb.refDelay, n);
+        const auto ka = keyOf (cab, p.a, ca.refDelay, n, rate), kb = keyOf (cab, bSpot, cb.refDelay, n, rate);
 
 #if defined(__EMSCRIPTEN__) && ! defined(__EMSCRIPTEN_PTHREADS__)
         const bool together = false;   // a page with no threads renders one after the other
@@ -981,15 +983,15 @@ public:
         const auto& ia0 = irOf (lastA, ka, ca, n);
         const auto& ib0 = irOf (lastB, kb, cb, n);
         // B moved in time against A: B later, or — moved earlier — A later instead, so neither's start is cut off.
-        const auto ia = p.shiftB < 0 ? delayed (ia0, -p.shiftB) : ia0;
-        const auto ib = p.shiftB > 0 ? delayed (ib0, p.shiftB) : ib0;
+        const auto ia = p.shiftB < 0 ? delayed (ia0, -p.shiftB, rate) : ia0;
+        const auto ib = p.shiftB > 0 ? delayed (ib0, p.shiftB, rate) : ib0;
 
-        const auto middle = [n] (const std::vector<double>& ir) {
+        const auto middle = [n, rate] (const std::vector<double>& ir) {
             std::vector<cd> x (n, 0.0);
             for (size_t i = 0; i < ir.size() && i < n; ++i) x[i] = ir[i];
             fft (x, false);
             double e = 1e-30;
-            for (size_t k = (size_t) (500.0 * (double) n / fs); k <= (size_t) (2000.0 * (double) n / fs); ++k) e += std::norm (x[k]);
+            for (size_t k = (size_t) (500.0 * (double) n / rate); k <= (size_t) (2000.0 * (double) n / rate); ++k) e += std::norm (x[k]);
             return std::sqrt (e);
         };
         const double ga = (1 - p.blend) / middle (ia), gb = p.blend / middle (ib) * (p.invertB ? -1 : 1);
@@ -1011,11 +1013,11 @@ private:
     struct Kept { std::string key; std::vector<double> ir; };
     Kept lastA, lastB;
 
-    static std::string keyOf (const std::string& cab, const Spot& s, double refDelay, size_t n)
+    static std::string keyOf (const std::string& cab, const Spot& s, double refDelay, size_t n, double rate)
     {
         char text[256];
-        std::snprintf (text, sizeof text, "|%.6f|%.6f|%.6f|%d|%.4f|%.4f|%d|%.12g|%zu|", s.x, s.y, s.distance, s.horn ? 1 : 0,
-                       s.angle, s.hornDb, s.back, refDelay, n);
+        std::snprintf (text, sizeof text, "|%.6f|%.6f|%.6f|%d|%.4f|%.4f|%d|%.12g|%zu|%.0f|", s.x, s.y, s.distance, s.horn ? 1 : 0,
+                       s.angle, s.hornDb, s.back, refDelay, n, rate);
         return cab + "|" + s.mic + text;
     }
 
@@ -1027,9 +1029,9 @@ private:
     }
 };
 
-inline PairParts renderPairParts (const Table& table, const std::string& cab, const Pair& p, size_t n = 1 << 14)
+inline PairParts renderPairParts (const Table& table, const std::string& cab, const Pair& p, size_t n = 1 << 14, double rate = fs)
 {
-    return PairRenderer{}.render (table, cab, p, n);
+    return PairRenderer{}.render (table, cab, p, n, rate);
 }
 
 inline std::vector<float> renderPair (const Table& table, const std::string& cab, const Pair& p, size_t n = 1 << 14)
