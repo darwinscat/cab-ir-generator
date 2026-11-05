@@ -12,15 +12,16 @@ invert = false
 [mic.a]
 on = true
 model = "md421"
-x = 0.300
-y = 0.300
-distance = 0.030
+x = 0.150
+y = 0.450
+distance = 0.038
 angle = 0.0
 
 [mic.b]
 on = true
 model = "re20"
-x = -0.100
-y = 0.700
-distance = 0.150
+x = -0.450
+y = 0.425
+distance = 0.101
 angle = 0.0
+shift = 0.000

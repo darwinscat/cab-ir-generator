@@ -5,14 +5,14 @@ box = "SVT-610HLF"
 back = "ported"
 horn = true
 horn_db = 0
-blend = 0.550
+blend = 0.700
 align = true
 invert = false
 
 [mic.a]
 on = true
 model = "md421"
-x = 0.300
+x = 0.450
 y = 0.200
 distance = 0.030
 angle = 0.0
@@ -21,7 +21,7 @@ angle = 0.0
 on = true
 model = "u87"
 x = -0.525
-y = -0.425
-distance = 0.092
+y = -0.075
+distance = 0.132
 angle = 0.0
 shift = 0.000

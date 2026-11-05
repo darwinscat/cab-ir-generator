@@ -12,16 +12,16 @@ invert = false
 [mic.a]
 on = true
 model = "sm57"
-x = 0.400
-y = 0.000
-distance = 0.020
+x = 0.250
+y = -0.300
+distance = 0.032
 angle = 0.0
 
 [mic.b]
 on = true
 model = "re20"
-x = 0.250
-y = 0.150
-distance = 0.134
+x = 0.375
+y = 0.425
+distance = 0.090
 angle = 0.0
-shift = 0.100
+shift = -0.050

@@ -13,7 +13,7 @@ invert = false
 on = true
 model = "d112"
 x = 0.400
-y = 0.000
+y = 0.150
 distance = 0.060
 angle = 15.0
 
@@ -24,3 +24,4 @@ x = 0.400
 y = 0.000
 distance = 0.250
 angle = 0.0
+shift = 0.000

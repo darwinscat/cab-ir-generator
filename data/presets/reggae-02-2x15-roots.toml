@@ -5,23 +5,23 @@ box = "SUBWAY-215"
 back = "ported"
 horn = false
 horn_db = -12
-blend = 0.400
+blend = 0.250
 align = true
 invert = false
 
 [mic.a]
 on = true
 model = "d112"
-x = 0.000
-y = 0.000
+x = -0.150
+y = 0.150
 distance = 0.040
 angle = 0.0
 
 [mic.b]
 on = true
 model = "re20"
-x = -0.375
+x = -0.900
 y = -0.425
-distance = 0.275
+distance = 0.300
 angle = 0.0
-shift = -0.075
+shift = -0.050

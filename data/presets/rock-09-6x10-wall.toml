@@ -5,23 +5,23 @@ box = "SVT-610HLF"
 back = "ported"
 horn = true
 horn_db = -12
-blend = 0.350
+blend = 0.200
 align = true
 invert = false
 
 [mic.a]
 on = true
 model = "md421"
-x = -0.300
-y = 0.200
-distance = 0.040
+x = -0.600
+y = 0.050
+distance = 0.032
 angle = 0.0
 
 [mic.b]
 on = true
 model = "re20"
-x = -0.825
-y = 0.075
-distance = 0.089
+x = 0.675
+y = 0.425
+distance = 0.120
 angle = 0.0
-shift = -0.025
+shift = 0.250

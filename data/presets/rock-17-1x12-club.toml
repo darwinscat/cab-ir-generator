@@ -14,7 +14,7 @@ on = true
 model = "md421"
 x = -0.300
 y = 0.000
-distance = 0.050
+distance = 0.040
 angle = 0.0
 
 [mic.b]
@@ -24,3 +24,4 @@ x = 0.400
 y = 0.000
 distance = 0.250
 angle = 0.0
+shift = 0.000
