@@ -96,6 +96,7 @@ MainComponent::MainComponent()
     {
         State first;
         first.box = "SVT-410HE";
+        first.back = 1;   // ported, as eight boxes of the ten are (the owner, 05.11)
         show (first);
         history.reset();
     }

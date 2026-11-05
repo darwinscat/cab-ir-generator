@@ -20,8 +20,8 @@ namespace cabir
     THE PILE: a box of each size, no maker's name over them (the owner, 05.11), to scale and stacked as a backline stands
     them, the small on the big; each with its speakers, its horn and its port where it has them; the chosen box's size
     big at their top left; under them DOWNLOAD IR, the cabinet that plays saved as a file; over them its BACK, CLOSED, PORTED or
-    OPEN, each the box drawn cut through from the side, a click each — a box comes with its own until the player turns
-    one, and the one turned goes on with every box after, as the mics do (the owner, 05.11); a sealed one turned
+    OPEN, each the box drawn cut through from the side, a click each — the back goes on from box to box unchanged, as
+    the mics do, the box's own marked by a dot and DEFAULT's to go back to (the owner, 05.11); a sealed one turned
     ported gets a port at its foot. Every bass of the family offers the same ten (the owner, 05.11): none knows a
     cabinet of its own.
     A click on a box picks it, the mics staying where they stand, and the horn too — but a box whose horn comes off
@@ -187,9 +187,12 @@ public:
     /** THE MICS A BOX IS PICKED WITH, `from` the one that was playing: where they stood — the same cap, the same
         centimetres, the way a cabinet is compared — only a mic never chosen following the box's own; the horn as it
         stood, unless the two boxes come with theirs otherwise (Cab::hornOn): the SVT-15E's and the 8x10's go off, the
-        next one's on — and the back as it was turned, or the box's own where none was. A click in the pile picks by it. */
+        next one's on — and the back as it stood: a box changed never changes it (the owner, 05.11), a back still the
+        box's own becoming that one, said. A click in the pile picks by it. */
     static Setup pickedWith (int from, int to, Setup s)
     {
+        if (s.back < 0 && from >= 0)
+            s.back = ownBack (from);
         if (from < 0 || cabs()[(size_t) from].hornOn != cabs()[(size_t) to].hornOn)
             s.a.horn = cabs()[(size_t) to].hornOn;
         if (s.a.mic.isEmpty())
@@ -732,6 +735,13 @@ private:
                            on ? look().orange : look().violet.withAlpha (0.6f));
                 g.setColour (on ? look().orange : look().txDim);
                 look().drawTracked (g, backWords[i], word, font, 0.06f, juce::Justification::centred);
+                // The box's own back, a dot before its word: where DEFAULT goes back to.
+                if (i == ownBack (chosen))
+                {
+                    const float w = look().trackedWidth (backWords[i], font, 0.06f);
+                    g.setColour (look().txDim);
+                    g.fillEllipse (juce::Rectangle<float> (4.0f, 4.0f).withCentre ({ word.getCentreX() - 0.5f * w - 8.0f, word.getCentreY() }));
+                }
             }
         }
     }
