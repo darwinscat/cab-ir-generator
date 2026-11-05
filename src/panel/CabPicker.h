@@ -6,6 +6,7 @@
 #include "Look.h"
 #include "MicGlyphs.h"
 #include "Panel.h"
+#include "SvgGraphics.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -65,6 +66,23 @@ public:
         useHostLook();
         Drawn drawn (g);
         Panel::paintSketch (drawn, cab, setup, { area.getX(), area.getY(), area.getWidth(), area.getHeight() });
+    }
+
+    /** One box alone in `box`, as the pile draws it unchosen: its speakers, its own back's port, its horn — no mics. */
+    static void paintBox (juce::Graphics& g, int cab, juce::Rectangle<float> box)
+    {
+        useHostLook();
+        Drawn drawn (g);
+        Panel::paintCab (drawn, cabs()[(size_t) cab], { box.getX(), box.getY(), box.getWidth(), box.getHeight() }, {}, false, false);
+    }
+
+    /** ...and the same box as SVG, `width` x `height` with the box at `box` in it (ui::SvgGraphics). */
+    static std::string boxSvg (int cab, float width, float height, juce::Rectangle<float> box)
+    {
+        useHostLook();
+        ui::SvgGraphics svg (width, height);
+        Panel::paintCab (svg, cabs()[(size_t) cab], { box.getX(), box.getY(), box.getWidth(), box.getHeight() }, {}, false, false);
+        return svg.text();
     }
 
     void paint (juce::Graphics& g) override
