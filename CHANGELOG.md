@@ -5,6 +5,18 @@ All notable changes to **Cab IR Generator** are documented here. The format foll
 [Keep a Changelog](https://keepachangelog.com/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.1.2] — 2026-11-06 — a WAV that says what made it, and a cabinet as a link
+
+### Added
+- **A cabinet as a link.** The page's address with the cabinet after its `#` —
+  `darwinscat.com/felitronics/cab-ir-generator#cab=1&box=8x10&back=closed&horn=off&a=re20,0,0,5,0&…` — opens the live
+  panel on exactly that cabinet: the box by its size, its back, its horn, both mics with their places, BLEND, ALIGN, Ø
+  and TIME, short enough to read and to change by hand.
+- **Every WAV says what made it**: DOWNLOAD IR, the page's download and every file of the IR packs carry, after the sound,
+  the cabinet's name, Darwin's Cat, the program and its version, the link that opens the cabinet on the page — and the
+  whole cabinet as its preset, so it can be opened again from the file. The sound is the same, sample for sample; a
+  loader that knows nothing of the rest skips it.
+
 ## [0.1.1] — 2026-11-06 — presets where the response stays green
 
 ### Changed
