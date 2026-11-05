@@ -19,6 +19,8 @@
 //   cabir_find_score (toml, x, y, d)   one place judged, in any worker: its score, its shift (ms) at cabir_find_shift()
 //   cabir_find_fine (judged, count)    the first round's scores and shifts (double pairs, in its order) in; the second
 //                                      round's places out, as coarse gives them — best first; a page stops at 2 s
+//   cabir_with_b (toml, x, y, d, shift)   the state with B put where FIND found: its TOML (until the next call)
+//   cabir_b_on (toml)                    1 while the state hears B — B just taken up is when the app searches on its own
 //   cabir_find_best (judged, count)    the second round's pairs in (-1e30 for one not reached; none without thorough):
 //                                      the place at cabir_found()
 //
@@ -60,6 +62,7 @@ namespace
         std::vector<synth::BSearch::Judged> firstJudged;
         std::vector<float> places;
         double shift = 0;
+        std::string withB;
     };
 
     Session& session()
@@ -224,4 +227,24 @@ CABIR_EXPORT int cabir_find_best (const double* judged, int count)
     s.found[2] = (float) place.distance;
     s.found[3] = (float) place.shiftMs;
     return 1;
+}
+
+CABIR_EXPORT const char* cabir_with_b (const char* toml, double x, double y, double distance, double shiftMs)
+{
+    auto& s = session();
+    auto state = fromToml (toml != nullptr ? toml : "");
+    if (! state)
+        return nullptr;
+    state->b.x = x;
+    state->b.y = y;
+    state->b.distance = distance;
+    state->shiftMs = shiftMs;
+    s.withB = toToml (*state);
+    return s.withB.c_str();
+}
+
+CABIR_EXPORT int cabir_b_on (const char* toml)
+{
+    const auto state = fromToml (toml != nullptr ? toml : "");
+    return state && state->b.on ? 1 : 0;
 }
