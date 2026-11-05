@@ -337,6 +337,29 @@ int MainComponent::writeStills (const juce::File& folder, float scale)
             if (! out.openedOk() || ! out.write (svg.data(), svg.size()))
                 ++failed;
         }
+
+    // Each mic's glyph alone as SVG, in the colour the panel draws a mic not chosen (txFaint) — its black turned to it at
+    // each part's own opacity, its white highlights kept, as tintGlyph does — 36 x 96 for all; mic-<name>.svg in mics/.
+    const auto mics = folder.getChildFile ("mics");
+    if (! mics.createDirectory())
+        return failed + 1;
+    const auto faint = "#" + look().txFaint.toDisplayString (false).toLowerCase();
+    for (const auto& name : Panel::mics())
+    {
+        const auto* svg = micSvg (name.toStdString());
+        if (svg == nullptr)
+        {
+            ++failed;
+            continue;
+        }
+        const auto text = juce::String::fromUTF8 (svg).replace ("#000000", faint)
+                              .replace ("viewBox=\"0 0 36 96\"", "width=\"36\" height=\"96\" viewBox=\"0 0 36 96\"") + "\n";
+        const auto file = mics.getChildFile ("mic-" + juce::String::fromUTF8 (name.toRawUTF8()) + ".svg");
+        file.deleteFile();
+        juce::FileOutputStream out (file);
+        if (! out.openedOk() || ! out.write (text.toRawUTF8(), text.getNumBytesAsUTF8()))
+            ++failed;
+    }
     return failed;
 }
 
