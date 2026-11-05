@@ -1,0 +1,34 @@
+# ── private / agent notes — this is a PUBLIC repo, never commit these ──
+# No trailing slash on the first three, deliberately: `.private/` matches a directory only, and a git
+# worktree can reach the real one through a symlink — a file, which only the bare name also matches.
+CLAUDE.md
+.claude
+.private
+AGENTS.md
+GEMINI.md
+.codex/
+.gemini/
+.cursor/
+.cursorrules
+.aider*
+.playwright-mcp/
+
+# ── build ──
+build/
+build-*/
+dist/
+cmake-build-*/
+*.o
+*.a
+*.dylib
+*.so
+
+# ── macOS / IDE / editors ──
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.iml
+
+# ── clangd / IDE index (machine-local, never useful to anyone else) ──
+.cache/
