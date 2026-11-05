@@ -338,18 +338,15 @@ public:
 
     void mouseMove (const juce::MouseEvent& e) override
     {
-        const int was = hover, wasDist = distHover;
+        const int was = hover;
         hover = cabAt (e.position);
-        distHover = distHoverAt (e.position);
-        if (hover != was || distHover != wasDist)
+        if (hover != was)
             repaint();
     }
 
     void mouseExit (const juce::MouseEvent&) override
     {
         hover = -1;
-        if (! dragging)
-            distHover = -1;
         repaint();
     }
 
@@ -414,13 +411,12 @@ public:
         }
     }
 
-    void mouseUp (const juce::MouseEvent& e) override
+    void mouseUp (const juce::MouseEvent&) override
     {
         if (drag != Drag::none)
         {
             drag = Drag::none;
             dragging = false;
-            distHover = distHoverAt (e.position);   // a slider out stays only while the hand is still on it
             send();
         }
     }
@@ -438,7 +434,6 @@ private:
     enum class Drag { none, spot, distance, angle, blend, shift };
 
     int chosen = -1, hover = -1;
-    int distHover = -1;                 // the mic whose distance the hand is over, on the speaker: its slider out
     struct SearchDot { float x, y, score; };
     std::vector<SearchDot> searchDots;  // the search's map (showSearch), fading once it is done
     bool searching = false;
@@ -967,7 +962,7 @@ private:
     // each its list of mics, its distance standing beside the list, its places and its angle; between them the speaker,
     // flat, as the player faces it, and on it the mics in perspective: the nearer the cone, the smaller (the farther
     // from the eye), a shadow on the cone that grows and fades with the distance, the glyph leaning back toward the cap
-    // by the angle, its centimetres under it — a slider out at the hand. BLEND right under the speaker, ALIGN and Ø
+    // by the angle, its centimetres under it. BLEND right under the speaker, ALIGN and Ø
     // after it (the owner, 05.11).
     static constexpr int colW = 108, rowH = 18, edge = 6;   // edge: B's column off the panel's
 
@@ -1040,36 +1035,12 @@ private:
 
     static juce::String cmOf (float distance) { return juce::String (juce::roundToInt (distance * 100.0f)) + " cm"; }
 
-    /** ...and by the mic on the speaker, under its spot; the hand over it brings a slider out beside it (the owner, 05.11). */
+    /** ...and by the mic on the speaker, under its spot — a word to read, no slider (the owner, 05.11). */
     juce::Rectangle<float> distLabel (int m) const
     {
         const auto at = spotOf (m);
         const float w = look().trackedWidth (cmOf (mic (m).distance), look().font (13.0f), 0.0f) + 8.0f;
         return { at.x - 0.5f * w, at.y + 8.0f, w, 16.0f };
-    }
-
-    juce::Rectangle<float> distPopup (int m) const
-    {
-        const auto at = spotOf (m);
-        const auto sc = scene();
-        const float h = 110.0f;
-        const float y = juce::jlimit (sc.getY() + 8.0f, sc.getBottom() - 8.0f - h, at.y + 16.0f - 0.5f * h);
-        float x = at.x + 34.0f;   // right of the value, or left where the scene ends
-        if (x + 15.0f > sc.getRight())
-            x = at.x - 40.0f;
-        return { x, y, 6.0f, h };
-    }
-
-    /** The mic whose value or slider the hand is over — a slider once out stays while the hand is on its way to it. */
-    int distHoverAt (juce::Point<float> p) const
-    {
-        if (chosen < 0)
-            return -1;
-        for (int m = 0; m < 2; ++m)
-            if (heard (m) && (distLabel (m).contains (p)
-                              || (distHover == m && distPopup (m).expanded (12.0f, 8.0f).getUnion (distLabel (m)).contains (p))))
-                return m;
-        return -1;
     }
 
     static constexpr int blendH = 26;   // BLEND's row, right under the speaker
@@ -1210,21 +1181,7 @@ private:
                     return;
                 }
 
-        // A distance: the slider out on the speaker, its value there (the slider's to come), or the column's.
-        for (int m = 0; m < 2; ++m)
-        {
-            if (distHover == m && distPopup (m).expanded (9.0f, 8.0f).contains (e.position))
-            {
-                drag = Drag::distance;
-                dragTrack = distPopup (m);
-                dragMic = m;
-                dragging = true;
-                mouseDrag (e);
-                return;
-            }
-            if (heard (m) && distLabel (m).contains (e.position))
-                return;
-        }
+        // A distance: the column's slider.
         for (int m = 0; m < 2; ++m)
             if (distArea (m).contains (pos))
             {
@@ -1500,26 +1457,13 @@ private:
 
             paintMicsOn (g, cab, setup_, o, R, 1.0f);
 
-            // Each heard mic's centimetres under it; the one the hand is over with its slider out beside it.
+            // Each heard mic's centimetres under it.
             for (int m = 0; m < 2; ++m)
-            {
-                if (! heard (m))
-                    continue;
-                g.setColour (colourOf (m));
-                look().drawTracked (g, cmOf (mic (m).distance), distLabel (m), font, 0.0f, juce::Justification::centred);
-                if (distHover != m && ! (drag == Drag::distance && dragMic == m && dragTrack == distPopup (m)))
-                    continue;
-                const auto t = distPopup (m);
-                const auto back = t.expanded (9.0f, 8.0f);
-                g.setColour (look().panel2.withAlpha (0.95f));
-                g.fillRoundedRectangle (back, 4.0f);
-                g.setColour (colourOf (m).withAlpha (0.6f));
-                g.drawRoundedRectangle (back, 4.0f, 1.0f);
-                g.setColour (look().hair2);
-                g.fillRoundedRectangle (t.withSizeKeepingCentre (2.0f, t.getHeight()), 1.0f);
-                g.setColour (colourOf (m));
-                g.fillRoundedRectangle (juce::Rectangle<float> (12.0f, 6.0f).withCentre ({ t.getCentreX(), t.getBottom() - nearness (mic (m).distance) * t.getHeight() }), 2.0f);
-            }
+                if (heard (m))
+                {
+                    g.setColour (colourOf (m));
+                    look().drawTracked (g, cmOf (mic (m).distance), distLabel (m), font, 0.0f, juce::Justification::centred);
+                }
         }
 
         // The blend: A..B on a track, ALIGN, and Ø for B — faint while one mic is heard, the blend not heard then.
