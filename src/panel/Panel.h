@@ -1,0 +1,1623 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of Cab IR Generator — see LICENSE.
+
+#pragma once
+
+#include "ui/Ui.h"
+#include "../synth/Response.h"
+#include "../synth/State.h"
+
+#include <functional>
+#include <vector>
+
+namespace cabir
+{
+
+/** THE BASS'S CABINETS, DRAWN — one panel, the boxes at the left and the chosen one's speaker at the right.
+
+    THE PILE: a box of each size, no maker's name over them (the owner, 05.11), to scale and stacked as a backline stands
+    them, the small on the big; each with its speakers, its horn and its port where it has them; the chosen box's size
+    big at their top left; under them DOWNLOAD IR, the cabinet that plays saved as a file; over them its BACK, CLOSED, PORTED or
+    OPEN, each the box drawn cut through from the side, a click each — the back goes on from box to box unchanged, as
+    the mics do, the box's own marked by a dot and DEFAULT's to go back to (the owner, 05.11); a sealed one turned
+    ported gets a port at its foot. Every bass of the family offers the same ten (the owner, 05.11): none knows a
+    cabinet of its own.
+    A click on a box picks it, the mics staying where they stand, and the horn too — but a box whose horn comes off
+    (Cab::hornOn, the SVT-15E's and the 8x10's) takes it off, and the next box puts it back; a click on the chosen box's
+    horn turns the horn off and on, its step kept.
+
+    THE SPEAKER: the chosen box's first speaker, flat, its neighbours at its edge, its horn big in the corner on the horn's
+    side — the speaker moved away from it — and beside it HORN's attenuator, OFF -12 -6 0; the mics in perspective on
+    the speaker, dragged across it and just past its rim; their two columns either side, each its mic, its places (CAP,
+    EDGE, OFF and ROOM, one click each), distance and angle; BLEND, ALIGN and Ø under it, and two buttons: DEFAULT, the
+    box's own mic back at its cap — SURE? at the first click, done at the second — and CLOSE. A mic's row clicked again
+    while both are heard turns that mic off where it stands, its column dark, BLEND left where it is and not heard while
+    one mic is (the owner, 04.11); a click in the dark column brings it back; the last one stays. While the hand moves,
+    the cabinet is heard as it goes (onMove) — each position the worker reaches next, a tenth of a second for one mic,
+    near a second for two on the 8x10 — and what is set is kept when the hand lets go (onSetup).
+
+    THE RESPONSE, across the panel under it all: what plays, 30 Hz to 12 kHz — the cabinet heard in orange, following
+    a moving hand, and the one kept before it a faint grey ghost, so every click and every drag reads as before and
+    after; with two mics heard, green under it where they add in phase and red where they cancel.
+
+    A dumb view: the cabinets in (cabs(), geometry from data/cabinets.txt — metres, the baffle's centre the
+    origin, up positive), what plays in (show, showResponse), a pick out (onSetup). */
+class Panel final
+{
+public:
+    Panel() = default;
+
+    // ---------------------------------------------------------------- what a host gives it
+    // Its size, a call to draw it again, and the time — ticked about thirty times a second while it wants frames (DOWNLOAD
+    // IR's pulse, the search map's fade, DEFAULT's question running out). A host draws it with paint and hands it the
+    // hand's moves; JUCE's CabPicker is one host, the page's module another.
+    void setSize (int width, int height) { wide = width; high = height; repaint(); }
+    int getWidth() const { return wide; }
+    int getHeight() const { return high; }
+    ui::Rectangle<int> getLocalBounds() const { return { 0, 0, wide, high }; }
+    std::function<void()> onRepaint;
+    std::function<void (ui::Rectangle<int>)> onRepaintArea;   // ...or only a part, where it can say which
+
+    void tick (double nowSeconds)
+    {
+        clock = nowSeconds;
+        if (defaultArmed && clock >= armedUntil)
+            disarmDefault();
+        timerCallback();
+    }
+
+    /** True while something moves on its own: a host ticks it then, and need not otherwise. */
+    bool wantsFrames() const { return ! downloadArea().isEmpty() || searchFade > 0.0f || defaultArmed; }
+
+    /** The size it is drawn for — small enough to open over a cabin's face too. */
+    static constexpr int panelW = 906, panelH = 518;
+
+    struct Spot
+    {
+        float x = 0.0f, y = 0.0f, distance = 0.05f;   // across the first speaker in radii from the cap; in front of it, m
+        bool horn = true;
+        ui::String mic;                             // one of mics(), or empty for the cabinet's own
+        float angle = 0.0f;                           // degrees it leans back toward the cap
+        float hornDb = 0.0f;                          // the horn's attenuator while it is on: 0, -6, -12 (A's counts)
+    };
+
+    /** Two mics on the box (the engine's setup, as a host keeps it), each on or off: both on, B mixed into A by `blend` on one clock
+        unless `align`, B turned over by `invert`; one on, that one alone, and `blend` not heard. The horn is A's. ALIGN
+        from the start: two mics at two distances, unaligned, comb — rarely what a second mic is put up for. */
+    struct Setup
+    {
+        Spot a { -0.3f, 0.0f, 0.05f, true, {} }, b { 0.4f, 0.0f, 0.25f, true, "u87" };   // A a little left of the cap, B right of it
+        float blend = 0.5f;
+        bool align = true, invert = false;
+        bool aOn = true, bOn = false;
+        int back = -1;   // the box's back as the player turned it — an index of backWords — or -1, the box's own (ownBack)
+        float shiftMs = 0.0f;   // B moved in time against A, ms, later positive (TIME)
+    };
+
+    /** The mics to choose from, as the table names them (its "mic-<name>" sections), and as the columns write them. */
+    static const ui::StringArray& mics()      { static const ui::StringArray m { "md421", "sm57", "re20", "d112", "u87", "u47", "ribbon" }; return m; }
+    static const ui::StringArray& micWords()  { static const ui::StringArray m { "MD421", "SM57", "RE20", "D112", "U87", "U47", "RIBB" }; return m; }
+
+    struct Cab
+    {
+        ui::String name;                       // as the table names it: "SVT-410HE"
+        int family = 0;                          // whose box it is, for its corners: 1 the rounded ones
+        float w = 0.6f, h = 0.6f;                // the baffle
+        std::vector<ui::Point<float>> drivers; // the first is the one the mic stands at
+        float radius = 0.105f;                   // a cone's radiating radius
+        bool horn = false;
+        ui::Point<float> hornAt;
+        bool port = false;
+        ui::Point<float> portAt;
+        ui::String mic = "md421";              // the one its table's cap section stands
+        bool hornOn = true;                      // how its horn comes when the box is picked: the SVT-15E's and the 8x10's off
+    };
+
+    static const std::vector<Cab>& cabs()
+    {
+        using P = ui::Point<float>;
+        static const std::vector<Cab> all {
+            { "SVT-15E",    0, 0.61f, 0.56f, { P (0, 0.02f) }, 0.165f, true, P (0.22f, 0.20f), true, P (0, -0.22f), "re20", false },
+            { "SVT-210AV",  0, 0.33f, 0.61f, { P (0, 0.14f), P (0, -0.14f) }, 0.105f, false, {}, false, {} },
+            { "SVT-210HE",  0, 0.61f, 0.46f, { P (-0.14f, 0), P (0.14f, 0) }, 0.105f, true, P (0, 0.16f), false, {} },
+            { "SVT-410HE",  0, 0.61f, 0.66f, { P (-0.145f, 0.145f), P (0.145f, 0.145f), P (-0.145f, -0.145f), P (0.145f, -0.145f) },
+              0.105f, true, P (0, 0), false, {} },
+            { "SVT-410HLF", 0, 0.61f, 0.76f, { P (-0.145f, 0.19f), P (0.145f, 0.19f), P (-0.145f, -0.10f), P (0.145f, -0.10f) },
+              0.105f, true, P (0, 0.045f), true, P (0, -0.31f) },
+            { "SVT-610HLF", 0, 0.61f, 1.02f, { P (-0.145f, 0.32f), P (0.145f, 0.32f), P (-0.145f, 0.03f), P (0.145f, 0.03f),
+                                                P (-0.145f, -0.26f), P (0.145f, -0.26f) },
+              0.105f, true, P (0, 0.175f), true, P (0, -0.45f) },
+            { "SVT-810",    0, 0.66f, 1.22f, { P (-0.15f, 0.42f), P (0.15f, 0.42f), P (-0.15f, 0.14f), P (0.15f, 0.14f),
+                                                P (-0.15f, -0.14f), P (0.15f, -0.14f), P (-0.15f, -0.42f), P (0.15f, -0.42f) },
+              0.105f, true, P (0, 0.565f), false, {}, "re20", false },
+            { "VB-112",     1, 0.52f, 0.40f, { P (-0.09f, 0) }, 0.13f, true, P (0.17f, 0.08f), true, P (0.17f, -0.12f) },
+            { "VB-115",     1, 0.56f, 0.58f, { P (0, -0.04f) }, 0.165f, true, P (0.18f, 0.19f), true, P (0, -0.25f), "d112" },
+            { "VB-210",     1, 0.56f, 0.42f, { P (-0.135f, -0.02f), P (0.135f, -0.02f) }, 0.105f, true, P (0, 0.13f), true, P (0, -0.17f) },
+            { "VB-212",     1, 0.63f, 0.48f, { P (-0.155f, -0.02f), P (0.155f, -0.02f) }, 0.13f, true, P (0, 0.16f), true, P (0, -0.19f) },
+            { "VB-410",     1, 0.58f, 0.66f, { P (-0.14f, 0.145f), P (0.14f, 0.145f), P (-0.14f, -0.145f), P (0.14f, -0.145f) },
+              0.105f, true, P (0, 0), true, P (0, -0.30f) },
+            { "VB-88",      1, 0.56f, 0.98f, { P (-0.13f, 0.33f), P (0.13f, 0.33f), P (-0.13f, 0.11f), P (0.13f, 0.11f),
+                                                P (-0.13f, -0.11f), P (0.13f, -0.11f), P (-0.13f, -0.33f), P (0.13f, -0.33f) },
+              0.085f, true, P (0, 0), true, P (0, -0.45f) },
+            { "OBC115",     2, 0.60f, 0.66f, { P (0, 0.03f) }, 0.165f, false, {}, false, {}, "d112" },
+            { "OBC210",     2, 0.60f, 0.40f, { P (-0.14f, 0), P (0.14f, 0) }, 0.105f, false, {}, false, {} },
+            { "OBC410",     2, 0.64f, 0.64f, { P (-0.15f, 0.15f), P (0.15f, 0.15f), P (-0.15f, -0.15f), P (0.15f, -0.15f) },
+              0.105f, false, {}, false, {} },
+            { "OBC810",     2, 0.64f, 1.24f, { P (-0.15f, 0.43f), P (0.15f, 0.43f), P (-0.15f, 0.145f), P (0.15f, 0.145f),
+                                                P (-0.15f, -0.145f), P (0.15f, -0.145f), P (-0.15f, -0.43f), P (0.15f, -0.43f) },
+              0.105f, false, {}, false, {}, "re20" },
+            { "STD-104HF",  3, 0.59f, 0.60f, { P (-0.14f, 0.16f), P (0.14f, 0.16f), P (-0.14f, -0.10f), P (0.14f, -0.10f) },
+              0.105f, true, P (0, 0.03f), true, P (0, -0.265f) },
+            { "STD-102HF",  3, 0.59f, 0.475f, { P (-0.14f, -0.03f), P (0.14f, -0.03f) }, 0.105f, true, P (0, 0.16f), true, P (0, -0.20f) },
+            { "STD-151HR",  3, 0.59f, 0.65f, { P (0, -0.04f) }, 0.165f, true, P (0, 0.23f), false, {}, "d112" },
+            { "NY-604",     3, 0.40f, 0.40f, { P (-0.09f, 0.07f), P (0.09f, 0.07f), P (-0.09f, -0.11f), P (0.09f, -0.11f) },
+              0.06f, true, P (0, 0.165f), false, {} },
+            { "NY-122",     3, 0.72f, 0.39f, { P (-0.17f, -0.01f), P (0.17f, -0.01f) }, 0.13f, true, P (0, 0.14f), false, {} },
+            { "SUBWAY-112", 4, 0.49f, 0.39f, { P (-0.06f, -0.01f) }, 0.13f, true, P (0.17f, 0.10f), true, P (0.17f, -0.13f) },
+            { "SUBWAY-115", 4, 0.49f, 0.49f, { P (0, -0.03f) }, 0.165f, true, P (0.17f, 0.19f), true, P (-0.17f, -0.21f), "d112" },
+            { "SUBWAY-210", 4, 0.49f, 0.53f, { P (-0.11f, 0.12f), P (0.11f, -0.11f) }, 0.105f, true, P (0.13f, 0.17f), true, P (-0.13f, -0.20f) },
+            { "SUBWAY-212", 4, 0.50f, 0.72f, { P (0, 0.13f), P (0, -0.19f) }, 0.13f, true, P (0, 0.31f), true, P (0.17f, -0.30f) },
+            { "SUBWAY-410", 4, 0.56f, 0.58f, { P (-0.13f, 0.15f), P (0.13f, 0.15f), P (-0.13f, -0.11f), P (0.13f, -0.11f) },
+              0.105f, true, P (0, 0.02f), true, P (0, -0.26f) },
+            { "SUBWAY-215", 4, 0.49f, 0.87f, { P (0, 0.20f), P (0, -0.16f) }, 0.165f, true, P (0, 0.40f), true, P (0, -0.38f), "d112" },
+        };
+        return all;
+    }
+
+    /** The boxes it offers, as they stand: a box of each size, no maker's name over them (the owner, 05.11), its columns
+        left to right, each from the floor up — the small on the big, the tall ones alone, the way a backline is stacked.
+        Every size the table holds — 1x15, 1x12, 8x10, 4x10, 2x10, 6x10, 2x12, 2x15, 4x6, 8x8 — the same for every bass
+        of the family (the owner, 05.11). The table's other boxes stay in cabs(): a state that kept one still reads as
+        its size. */
+    static const std::vector<ui::StringArray>& pile()
+    {
+        static const std::vector<ui::StringArray> every {
+            { "SVT-15E", "VB-112" }, { "SVT-810" }, { "SVT-410HE", "VB-210" }, { "SVT-610HLF", "VB-212" },
+            { "SUBWAY-215", "NY-604" }, { "VB-88" } };
+        return every;
+    }
+
+    /** A BOX AS THE PLAYER READS IT: its speakers and their size — "4x10" — and no maker's model (the owner, 05.11). The
+        table's name stays the key a state keeps. */
+    static ui::String wordOf (int cab)
+    {
+        const auto& c = cabs()[(size_t) cab];
+        const int inches = c.radius > 0.15f ? 15 : c.radius > 0.12f ? 12 : c.radius > 0.095f ? 10 : c.radius > 0.07f ? 8 : 6;
+        return ui::String ((int) c.drivers.size()) + "x" + ui::String (inches);
+    }
+
+    /** The boxes the table calls sealed (data/cabinets.txt, `alignment`); every other one is ported. */
+    static bool sealed (const ui::String& name)
+    {
+        static const ui::StringArray closed { "SVT-210AV", "SVT-410HE", "SVT-810", "OBC115", "OBC210", "OBC410", "OBC810" };
+        return closed.contains (name);
+    }
+
+    /** THE BOX'S BACK, as its switch is marked — a click each, the one it stands at in the block's orange; the index the
+        engine's (synth::Back). A box comes with its own (ownBack) until one is turned, and that one stays from
+        box to box; turned, a sealed one gets a port at its foot. */
+    static constexpr const char* backWords[] { "CLOSED", "PORTED", "OPEN" };
+    static constexpr int backs = 3;
+    static int ownBack (int cab) { return sealed (cabs()[(size_t) cab].name) ? 0 : 1; }
+    static int backOf (int cab, const Setup& s) { return s.back >= 0 ? s.back : ownBack (cab); }
+
+    /** Where a box's port is drawn: the table's, or the one a sealed box is given when turned ported — in the middle of
+        its foot (synth::portAtFoot). */
+    static ui::Point<float> portOf (const Cab& c) { return c.port ? c.portAt : ui::Point<float> (0.0f, -0.5f * c.h + 0.045f); }
+
+    /** THE MICS A BOX IS PICKED WITH, `from` the one that was playing: where they stood — the same cap, the same
+        centimetres, the way a cabinet is compared — only a mic never chosen following the box's own; the horn as it
+        stood, unless the two boxes come with theirs otherwise (Cab::hornOn): the SVT-15E's and the 8x10's go off, the
+        next one's on — and the back as it stood: a box changed never changes it (the owner, 05.11), a back still the
+        box's own becoming that one, said. A click in the pile picks by it. */
+    static Setup pickedWith (int from, int to, Setup s)
+    {
+        if (s.back < 0 && from >= 0)
+            s.back = ownBack (from);
+        if (from < 0 || cabs()[(size_t) from].hornOn != cabs()[(size_t) to].hornOn)
+            s.a.horn = cabs()[(size_t) to].hornOn;
+        if (s.a.mic.isEmpty())
+            s.a.mic = cabs()[(size_t) to].mic;
+        return s;
+    }
+
+    /** THE STATE AND THE PANEL'S SETUP, one into the other (synth/State.h) — the horn and its step the panel keeps on
+        A's spot. A state's box not in cabs() comes back as -1. */
+    static std::pair<int, Setup> setupOf (const State& s)
+    {
+        const auto spot = [&s] (const Mic& m)
+        { return Spot { (float) m.x, (float) m.y, (float) m.distance, s.horn, ui::String (m.model), (float) m.angle, (float) s.hornDb }; };
+        return { indexOf (ui::String (s.box)), { spot (s.a), spot (s.b), (float) s.blend, s.align, s.invert, s.a.on, s.b.on, s.back,
+                                                   (float) s.shiftMs } };
+    }
+
+    /** A STATE AS A LINE READS IT: its box's size, its back where turned from the box's own, and the mics heard —
+        "4x10 · MD421", "4x10 PORTED · MD421+U87", B's alone with A off. */
+    static ui::String labelOf (const State& s)
+    {
+        const int at = indexOf (ui::String (s.box));
+        const auto word = [at] (const Mic& m)
+        { return (m.model.empty() ? at >= 0 ? cabs()[(size_t) at].mic : ui::String() : ui::String (m.model)).toUpperCase(); };
+        const auto box = at < 0 ? ui::String (s.box)
+                       : wordOf (at) + (s.back >= 0 && s.back != ownBack (at) ? " " + ui::String (backWords[s.back]) : ui::String());
+        return box + ui::String::fromUTF8 (" \xc2\xb7 ")
+             + (s.a.on ? word (s.a) : ui::String()) + (s.a.on && s.b.on ? "+" : "") + (s.b.on ? word (s.b) : ui::String());
+    }
+
+    static State stateOf (int cab, const Setup& su)
+    {
+        const auto mic = [] (const Spot& sp, bool on) { return Mic { on, sp.mic.toStdString(), sp.x, sp.y, sp.distance, sp.angle }; };
+        State s;
+        s.box = cabs()[(size_t) cab].name.toStdString();
+        s.back = su.back;
+        s.horn = su.a.horn;
+        s.hornDb = su.a.hornDb;
+        s.a = mic (su.a, su.aOn);
+        s.b = mic (su.b, su.bOn);
+        s.blend = su.blend;
+        s.align = su.align;
+        s.invert = su.invert;
+        s.shiftMs = su.shiftMs;
+        return s;
+    }
+
+    static int indexOf (const ui::String& name)
+    {
+        for (int i = 0; i < (int) cabs().size(); ++i)
+            if (cabs()[(size_t) i].name == name)
+                return i;
+        return -1;
+    }
+
+    /** What plays: a cabinet of cabs() and its mics — or none (an IR of the player's own, or the factory's). */
+    void show (int cab, Setup setup)
+    {
+        if (dragging)
+            return;   // the hand's, until it lets go
+        chosen = cab;
+        setup_ = setup;
+        repaint();
+    }
+
+    std::function<void (int cab, Setup setup)> onSetup;
+
+    /** The hand still moving: what it would sound like there, heard and not kept — onSetup follows when it lets go. */
+    std::function<void (int cab, Setup setup)> onMove;
+
+    /** CLOSE: whoever opened the panel takes it away. No button without it. */
+    std::function<void()> onClose;
+
+    /** DOWNLOAD IR: whoever opened the panel saves the cabinet that plays as a file — a button over the response's top
+        right corner, its line pulsing gently. No button without it. */
+    std::function<void()> onDownload;
+
+    /** DEFAULT as a button in the foot — or not, where the host offers it another way (the app's preset menu). With
+        neither DEFAULT nor CLOSE the foot's row goes, and the panel is footRowH shorter. */
+    bool showDefault = true;
+    static constexpr int footRowH = 26;
+
+    /** FIND: where B combs least with A, asked of whoever opened the panel (synth::quietPlaceForB) — B taken up first
+        if it was off, which asks the same on its own. No button without it. The search draws itself as it goes
+        (showSearch) and lets go when it is done (endSearch). */
+    std::function<void (int cab, Setup setup)> onFind;
+
+    /** A place the search judged, across the first speaker in radii, and how much B there cancels against A — 0 none,
+        the more negative the more: a dot on the speaker, green to red, the best of its distances. Message thread. */
+    void showSearch (float x, float y, float score)
+    {
+        if (! searching)
+        {
+            searchDots.clear();
+            searching = true;
+        }
+        searchFade = 1.0f;
+        for (auto& d : searchDots)
+            if (std::abs (d.x - x) < 1.0e-3f && std::abs (d.y - y) < 1.0e-3f)
+            {
+                d.score = ui::jmax (d.score, score);
+                repaint();
+                return;
+            }
+        searchDots.push_back ({ x, y, score });
+        repaint();
+    }
+
+    /** ...and the search done: the map stays a moment, then fades. */
+    void endSearch()
+    {
+        searching = false;
+        searchHold = 45;    // ticks at 30 Hz: a second and a half, then a second's fade
+    }
+
+    /** THE RESPONSE of what plays, in dB at responseHz — `now` the cabinet heard, `before` what was kept before it
+        (empty, none): each level to its own middle, so the two read as shapes; and with two mics heard `comb`, where
+        they meet: dB above nought where they add in phase, below where they cancel (empty, one mic). */
+    static constexpr int responsePoints = synth::responsePoints;
+    static float responseHz (int i) { return synth::responseHz (i); }
+
+    void showResponse (std::vector<float> now, std::vector<float> before, std::vector<float> comb = {})
+    {
+        responseNow = std::move (now);
+        responseBefore = std::move (before);
+        responseComb = std::move (comb);
+        repaint (responseArea());
+    }
+
+
+    void paint (ui::Graphics& g) const
+    {
+        paintPile (g);
+        g.setColour (ui::look().hair);
+        const float x = (float) leftW + 0.5f * gutter;
+        g.fillRect (ui::Rectangle<float> (x, 0.0f, 1.0f, (float) bodyH()));
+        g.fillRect (ui::Rectangle<float> (x, (float) (getHeight() - footHeight()), 1.0f, (float) footHeight()));
+        paintSpeaker (g);
+        paintResponse (g);
+    }
+
+    void mouseMove (const ui::MouseEvent& e)
+    {
+        const int was = hover;
+        hover = cabAt (e.position);
+        if (hover != was)
+            repaint();
+    }
+
+    void mouseExit (const ui::MouseEvent&)
+    {
+        hover = -1;
+        repaint();
+    }
+
+    void mouseDown (const ui::MouseEvent& e)
+    {
+        if (defaultArmed && ! defaultArea().contains (e.getPosition()))
+            disarmDefault();   // a click anywhere else: DEFAULT's question withdrawn
+
+        if (downloadArea().contains (e.getPosition()))
+        {
+            onDownload();
+            return;
+        }
+
+        if (e.position.x < (float) leftW)
+            pileDown (e);
+        else if (chosen >= 0)
+            speakerDown (e);
+    }
+
+    void mouseDrag (const ui::MouseEvent& e)
+    {
+        if (chosen < 0 || drag == Drag::none)
+            return;
+        auto& m = mic (dragMic);
+        if (drag == Drag::spot)
+        {
+            const auto o = coneCentre();
+            const float R = radius();
+            auto p = (e.position - o) / R;
+            const float len = p.getDistanceFromOrigin();
+            if (len > maxReach)
+                p *= maxReach / len;
+            m.x = p.x;
+            m.y = -p.y;
+        }
+        else if (drag == Drag::distance)
+        {
+            const auto t = dragTrack;
+            m.distance = minCm * std::pow (maxCm / minCm, ui::jlimit (0.0f, 1.0f, (t.getBottom() - e.position.y) / t.getHeight())) / 100.0f;
+        }
+        else if (drag == Drag::angle)
+            m.angle = maxAngle * along (angleTrack (dragMic), e.position.x);
+        else if (drag == Drag::shift)
+        {
+            const float v = (2.0f * along (timeTrack(), e.position.x) - 1.0f) * maxShiftMs;
+            setup_.shiftMs = std::abs (v) < 0.03f * maxShiftMs ? 0.0f : v;   // a little stick at nought, where ALIGN leaves B
+        }
+        else if (drag == Drag::blend)
+            setup_.blend = along (blendTrack(), e.position.x);
+        repaint();
+        if (onMove != nullptr)
+            onMove (chosen, setup_);
+    }
+
+    void mouseDoubleClick (const ui::MouseEvent& e)
+    {
+        if (chosen >= 0 && timeTrack().expanded (2.0f, 10.0f).contains (e.position))
+        {
+            setup_.shiftMs = 0.0f;   // TIME back to where ALIGN leaves B
+            send();
+        }
+    }
+
+    void mouseUp (const ui::MouseEvent&)
+    {
+        if (drag != Drag::none)
+        {
+            drag = Drag::none;
+            dragging = false;
+            send();
+        }
+    }
+
+private:
+    static constexpr float maxReach = 1.1f;    // how far from the cap the mic may go, in radii: just past the rim, in sight
+    static constexpr float minCm = 1.0f, maxCm = 30.0f, maxAngle = 60.0f;
+    static constexpr int leftW = 460, gutter = 14;   // the pile's half; the hair between the halves
+    static constexpr int footH = footRowH, responseH = 208;  // the foot's row under it all; the response's band over it
+    int footHeight() const { return onClose != nullptr || showDefault ? footH : 0; }
+
+    /** Down to the response's band: the pile, the columns and the speaker over it, the feet under it. */
+    int bodyH() const { return getHeight() - footHeight() - responseH; }
+
+    enum class Drag { none, spot, distance, angle, blend, shift };
+
+    int chosen = -1, hover = -1;
+    struct SearchDot { float x, y, score; };
+    std::vector<SearchDot> searchDots;  // the search's map (showSearch), fading once it is done
+    bool searching = false;
+    float searchFade = 0.0f;
+    int searchHold = 0;
+
+    void timerCallback()
+    {
+        if (const auto d = downloadArea(); ! d.isEmpty())
+            repaint (d);
+        if (searchFade <= 0.0f || searching)
+            return;
+        if (searchHold > 0)
+        {
+            --searchHold;
+            return;
+        }
+        searchFade -= 1.0f / 30.0f;
+        if (searchFade <= 0.0f)
+        {
+            searchFade = 0.0f;
+            searchDots.clear();
+        }
+        repaint();
+    }
+    ui::Rectangle<float> dragTrack;   // the distance track a drag began on: the column's, or the one out on the speaker
+    Setup setup_;
+    bool dragging = false;
+    Drag drag = Drag::none;
+    int dragMic = 0;
+    bool defaultArmed = false;   // DEFAULT asked SURE? and waits for its second click
+    double armedUntil = 0;       // ...for three seconds
+    int wide = panelW, high = panelH;
+    double clock = 0;            // seconds, the host's (tick)
+
+    void repaint() const { if (onRepaint != nullptr) onRepaint(); }
+    void repaint (ui::Rectangle<int> r) const { if (onRepaintArea != nullptr) onRepaintArea (r); else repaint(); }
+
+    void disarmDefault()
+    {
+        if (! defaultArmed)
+            return;
+        defaultArmed = false;
+        repaint();
+    }
+
+    Spot& mic (int m) { return m == 0 ? setup_.a : setup_.b; }
+    const Spot& mic (int m) const { return m == 0 ? setup_.a : setup_.b; }
+
+    void send()
+    {
+        repaint();
+        if (onSetup != nullptr && chosen >= 0)
+            onSetup (chosen, setup_);
+    }
+
+    void toggleHorn()
+    {
+        setup_.a.horn = ! setup_.a.horn;
+        send();
+    }
+
+    // ---------------------------------------------------------------- the pile
+    // Over it the chosen box's back, in the room the pile leaves there (the owner, 05.11); under it the box's size.
+    static constexpr int backTop = 6, backIconH = 40, backWordH = 16, nameH = footH;
+    static constexpr int pileTop = backTop + backIconH + 2 + backWordH + 6;
+
+    ui::Rectangle<int> pileArea() const { return { 0, pileTop, leftW, bodyH() - pileTop - 2 }; }
+
+    /** The line under the pile: DOWNLOAD IR at its right. */
+    ui::Rectangle<int> nameRow() const { return { 0, getHeight() - nameH + 4, leftW, nameH - 4 }; }
+
+    ui::Rectangle<int> downloadArea() const
+    {
+        if (onDownload == nullptr || chosen < 0)
+            return {};
+        const auto plot = responsePlot().toNearestInt();
+        const int w = wordW ("DOWNLOAD IR") + 14;
+        return { plot.getRight() - w - 6, plot.getY() + 6, w, 24 };
+    }
+
+    /** THE BACK over the pile, centred: BACK, then a cell each — the box cut through from the side (paintBack), its word
+        under it. */
+    static constexpr float backCellW = 84.0f, backCellGap = 18.0f, backLabelGap = 16.0f;
+
+    ui::Rectangle<float> backWordArea() const
+    {
+        const float label = ui::look().trackedWidth ("BACK", ui::look().font (13.0f), 0.08f) + 4.0f;
+        const float total = label + backLabelGap + (float) backs * backCellW + (float) (backs - 1) * backCellGap;
+        return { 0.5f * ((float) leftW - total), (float) backTop, label, (float) backIconH };
+    }
+
+    ui::Rectangle<float> backCell (int i) const
+    {
+        const float x = backWordArea().getRight() + backLabelGap + (float) i * (backCellW + backCellGap);
+        return { x, (float) backTop, backCellW, (float) (backIconH + 2 + backWordH) };
+    }
+
+    /** A BOX CUT THROUGH FROM THE SIDE, as its back is: the baffle at the left with the speaker on it in profile, its cone
+        narrowing in to the magnet, the top and the bottom, and at the right the back — whole (CLOSED); whole, the port's
+        tube in from the baffle under the speaker (PORTED); gone but for a lip at the top, the sound out of it (OPEN). */
+    static void paintBack (ui::Graphics& g, int kind, ui::Rectangle<float> b, ui::Colour colour)
+    {
+        const float x0 = b.getX(), x1 = b.getRight(), y0 = b.getY(), y1 = b.getBottom(), w = b.getWidth(), h = b.getHeight();
+        const float line = 1.2f, baffle = 1.8f;
+        g.setColour (colour);
+        g.drawLine (x0, y0, x1, y0, line);
+        g.drawLine (x0, y1, x1, y1, line);
+
+        const float portTop = y1 - 0.30f * h, portBottom = y1 - 0.12f * h;
+        if (kind == 1)
+        {
+            g.drawLine (x0, y0, x0, portTop, baffle);
+            g.drawLine (x0, portBottom, x0, y1, baffle);
+            g.drawLine (x0, portTop, x0 + 0.45f * w, portTop, line);
+            g.drawLine (x0, portBottom, x0 + 0.45f * w, portBottom, line);
+        }
+        else
+            g.drawLine (x0, y0, x0, y1, baffle);
+
+        if (kind != 2)
+            g.drawLine (x1, y0, x1, y1, line);
+        else
+        {
+            g.drawLine (x1, y0, x1, y0 + 0.22f * h, line);
+            ui::Path out;
+            for (const float r : { 5.0f, 10.0f })
+                out.addCentredArc (x1 - 1.0f, y0 + 0.62f * h, r, r, 0.0f, 0.5f * ui::MathConstants<float>::pi - 0.7f,
+                                   0.5f * ui::MathConstants<float>::pi + 0.7f, true);
+            g.strokePath (out, ui::PathStrokeType (line));
+        }
+
+        const float cy = kind == 1 ? y0 + 0.40f * h : b.getCentreY(), half = 0.27f * h;
+        ui::Path cone;
+        cone.startNewSubPath (x0, cy - half);
+        cone.lineTo (x0 + 0.22f * w, cy - 0.09f * h);
+        cone.lineTo (x0 + 0.22f * w, cy + 0.09f * h);
+        cone.lineTo (x0, cy + half);
+        g.strokePath (cone, ui::PathStrokeType (line));
+        g.fillRect (ui::Rectangle<float> (0.10f * w, 0.18f * h).withPosition (x0 + 0.22f * w, cy - 0.09f * h));
+    }
+
+    /** The chosen box's horn over its speaker, big, always in the scene's top right corner, wherever it stands on the
+        box — a horn that moves with the box jumps under the eye (the owner, 05.11); none where the box has none. */
+    ui::Rectangle<float> hornCorner() const
+    {
+        if (chosen < 0 || ! cabs()[(size_t) chosen].horn)
+            return {};
+        const auto sc = scene();
+        const float w = 0.30f * sc.getWidth(), h = 0.54f * w;
+        return { sc.getRight() - 6.0f - w, sc.getY() + 6.0f, w, h };
+    }
+
+    /** HORN's attenuator, as a cabinet's switch is marked: OFF, -12, -6, 0 — a click each. */
+    static constexpr const char* hornWords[] { "OFF", "-12", "-6", "0" };
+    static constexpr float hornSteps[] { 0.0f, -12.0f, -6.0f, 0.0f };   // dB; OFF takes the horn out instead
+    static constexpr float hornGap = 8.0f;
+
+    int hornStep() const
+    {
+        if (! setup_.a.horn)
+            return 0;
+        return setup_.a.hornDb < -9.0f ? 1 : setup_.a.hornDb < -3.0f ? 2 : 3;
+    }
+
+    /** Left of the horn, two lines: HORN, then its steps — flush to the horn's side. */
+    ui::Rectangle<float> hornBlock() const
+    {
+        const auto hc = hornCorner();
+        const auto font = ui::look().font (13.0f);
+        float w = 3.0f * hornGap;
+        for (const auto* word : hornWords)
+            w += ui::look().trackedWidth (word, font, 0.06f) + 4.0f;
+        return { hc.getX() - 8.0f - w, hc.getCentreY() - 15.0f, w, 30.0f };
+    }
+
+    ui::Rectangle<float> hornWordArea() const { return hornBlock().withHeight (14.0f); }
+
+    ui::Rectangle<float> hornStepArea (int i) const
+    {
+        const auto font = ui::look().font (13.0f);
+        const auto block = hornBlock();
+        float x = block.getX();
+        for (int k = 0; k < i; ++k)
+            x += ui::look().trackedWidth (hornWords[k], font, 0.06f) + 4.0f + hornGap;
+        return { x, block.getBottom() - 14.0f, ui::look().trackedWidth (hornWords[i], font, 0.06f) + 4.0f, 14.0f };
+    }
+
+    /** The speaker's centre: the scene's, moved down under a horn, so the horn has its room. */
+    ui::Point<float> coneCentre() const
+    {
+        const auto sc = scene();
+        if (chosen < 0 || ! cabs()[(size_t) chosen].horn)
+            return sc.getCentre();
+        const float shift = ui::jlimit (0.0f, 28.0f, 0.5f * (sc.getHeight() - 2.12f * radius()) - 4.0f);
+        return sc.getCentre().translated (0.0f, shift);
+    }
+
+    static constexpr float columnGapM = 0.04f;   // between a pile's columns, m
+    static constexpr float stackGapPx = 2.0f;    // between a box and the one on it
+
+    /** One scale for the whole pile, so a box is as big as itself against the others: its width and its tallest column
+        fitted to the area. */
+    float pileScale() const
+    {
+        const auto area = pileArea().toFloat();
+        float w = 0, h = 0;
+        for (const auto& column : pile())
+        {
+            float cw = 0, ch = 0;
+            for (const auto& name : column)
+            {
+                const auto& c = cabs()[(size_t) indexOf (name)];
+                cw = ui::jmax (cw, c.w);
+                ch += c.h;
+            }
+            w += cw;
+            h = ui::jmax (h, ch);
+        }
+        w += columnGapM * (float) (pile().size() - 1);
+        return ui::jmin ((area.getWidth() - 8.0f) / w, (area.getHeight() - 8.0f) / h);
+    }
+
+    /** Each box, to scale, standing as pile() stacks them, the pile centred on its floor. */
+    std::vector<std::pair<int, ui::Rectangle<float>>> layOut() const
+    {
+        const auto area = pileArea().toFloat();
+        const float s = pileScale();
+        const auto& columns = pile();
+
+        float width = columnGapM * (float) (columns.size() - 1);
+        for (const auto& column : columns)
+        {
+            float cw = 0;
+            for (const auto& name : column)
+                cw = ui::jmax (cw, cabs()[(size_t) indexOf (name)].w);
+            width += cw;
+        }
+
+        std::vector<std::pair<int, ui::Rectangle<float>>> out;
+        float x = area.getCentreX() - 0.5f * width * s;
+        const float floor = area.getBottom() - 2.0f;
+        for (const auto& column : columns)
+        {
+            float cw = 0;
+            for (const auto& name : column)
+                cw = ui::jmax (cw, cabs()[(size_t) indexOf (name)].w);
+            float bottom = floor;
+            for (const auto& name : column)
+            {
+                const int i = indexOf (name);
+                const auto& c = cabs()[(size_t) i];
+                out.push_back ({ i, { x + 0.5f * (cw - c.w) * s, bottom - c.h * s, c.w * s, c.h * s } });
+                bottom -= c.h * s + stackGapPx;
+            }
+            x += (cw + columnGapM) * s;
+        }
+        return out;
+    }
+
+    ui::Rectangle<float> boxOf (int index) const
+    {
+        for (const auto& [i, box] : layOut())
+            if (i == index)
+                return box;
+        return {};
+    }
+
+    int cabAt (ui::Point<float> p) const
+    {
+        for (const auto& [i, box] : layOut())
+            if (box.expanded (1.0f).contains (p))
+                return i;
+        return -1;
+    }
+
+    static ui::Point<float> onBox (ui::Rectangle<float> box, float s, ui::Point<float> p)
+    {
+        return { box.getCentreX() + p.x * s, box.getCentreY() - p.y * s };
+    }
+
+    void pileDown (const ui::MouseEvent& e)
+    {
+
+        // The chosen box's back, a cell each: kept as turned, its own one too, so every box after comes with it.
+        if (chosen >= 0)
+            for (int i = 0; i < backs; ++i)
+                if (backCell (i).expanded (backCellGap / 2, 2.0f).contains (e.position))
+                {
+                    setup_.back = i;
+                    send();
+                    return;
+                }
+
+        const int at = cabAt (e.position);
+        if (at < 0)
+            return;
+
+        if (at != chosen)
+        {
+            setup_ = pickedWith (chosen, at, setup_);
+            chosen = at;
+            send();
+            return;
+        }
+
+        // The chosen box again: its horn turned over where the hand found it.
+        const auto& cab = cabs()[(size_t) at];
+        const auto box = boxOf (at);
+        const float s = box.getWidth() / cab.w;
+        if (cab.horn && e.position.getDistanceFrom (onBox (box, s, cab.hornAt)) < ui::jmax (7.0f, 0.06f * s))
+            toggleHorn();
+    }
+
+    /** A HF horn as it faces the player: its mouth a rounded rectangle, its walls narrowing to the throat, the driver a
+        dark slot at the bottom of it — `s` px a metre; dim when it is turned off. */
+    static void paintHorn (ui::Graphics& g, ui::Point<float> c, float s, ui::Colour colour)
+    {
+        // A tunnel: the mouth, the flare narrowing inside it a little above the centre, the throat dark at its end.
+        const auto mouth  = ui::Rectangle<float> (0.12f * s, 0.065f * s).withCentre (c);
+        const auto flare  = ui::Rectangle<float> (0.075f * s, 0.038f * s).withCentre (c.translated (0, -0.004f * s));
+        const auto throat = ui::Rectangle<float> (0.03f * s, 0.016f * s).withCentre (c.translated (0, -0.007f * s));
+        const float line = ui::jlimit (0.7f, 1.2f, 0.01f * s);
+        g.setColour (ui::Colours::black.withAlpha (0.6f));
+        g.fillRoundedRectangle (mouth, 0.014f * s);
+        g.setColour (colour.withMultipliedAlpha (0.10f));
+        g.fillRoundedRectangle (mouth.reduced (line), 0.012f * s);
+        g.setColour (ui::Colours::black.withAlpha (0.45f));
+        g.fillRoundedRectangle (flare, 0.009f * s);
+        g.setColour (ui::Colours::black);
+        g.fillRoundedRectangle (throat, 0.005f * s);
+        g.setColour (colour.withMultipliedAlpha (0.45f));
+        g.drawRoundedRectangle (flare, 0.009f * s, line * 0.7f);
+        g.setColour (colour.withMultipliedAlpha (0.8f));
+        g.drawRoundedRectangle (throat, 0.005f * s, line * 0.7f);
+        g.setColour (colour);
+        g.drawRoundedRectangle (mouth, 0.014f * s, line);
+    }
+
+    void paintPile (ui::Graphics& g) const
+    {
+        const auto font = ui::look().font (13.0f);
+        const auto area = pileArea();
+        g.setColour (ui::look().hair);
+        g.fillRect (ui::Rectangle<float> ((float) area.getX(), (float) area.getBottom() - 1.0f, (float) area.getWidth(), 1.0f));
+        // The back over the pile kept apart from it, as the halves are, by a hair across up to theirs (the owner, 05.11).
+        g.fillRect (ui::Rectangle<float> (0.0f, (float) pileTop - 3.0f, (float) leftW + 0.5f * gutter, 1.0f));
+
+        for (const auto& [index, box] : layOut())
+            paintCab (g, cabs()[(size_t) index], box, setup_, index == chosen, index == hover);
+
+        // In the pile at its top left, big: the box under the hand, else the chosen one — its letters' tops level with the
+        // pile's top, the 2x12's (the owner, 05.11).
+        const int named = hover >= 0 ? hover : chosen;
+        if (named >= 0)
+        {
+            const auto big = ui::look().font (24.0f);
+            float left = (float) area.getRight(), top = (float) area.getBottom();
+            for (const auto& [index, box] : layOut())
+            {
+                left = ui::jmin (left, box.getX());
+                top = ui::jmin (top, box.getY());
+            }
+            const float capGap = big.getAscent() - 0.72f * big.getHeight();   // the ascent over the capitals' tops
+            g.setColour (named == chosen ? ui::look().tx : ui::look().txDim);
+            ui::look().drawTracked (g, wordOf (named), { left, top - capGap, (float) leftW - left, big.getHeight() }, big, 0.06f,
+                                ui::Justification::topLeft);
+        }
+
+        // Over the pile the chosen box's back: BACK, then each drawn with its word, the one it stands at in the block's
+        // orange line.
+        if (chosen >= 0)
+        {
+            g.setColour (ui::look().txFaint);
+            ui::look().drawTracked (g, "BACK", backWordArea(), font, 0.08f, ui::Justification::centredLeft);
+            for (int i = 0; i < backs; ++i)
+            {
+                const bool on = i == backOf (chosen, setup_);
+                auto cell = backCell (i);
+                const auto word = cell.removeFromBottom ((float) backWordH);
+                paintBack (g, i, cell.withHeight ((float) backIconH).withSizeKeepingCentre (56.0f, 34.0f),
+                           on ? ui::look().orange : ui::look().violet.withAlpha (0.6f));
+                g.setColour (on ? ui::look().orange : ui::look().txDim);
+                ui::look().drawTracked (g, backWords[i], word, font, 0.06f, ui::Justification::centred);
+                // The box's own back, a dot before its word: where DEFAULT goes back to.
+                if (i == ownBack (chosen))
+                {
+                    const float w = ui::look().trackedWidth (backWords[i], font, 0.06f);
+                    g.setColour (ui::look().txDim);
+                    g.fillEllipse (ui::Rectangle<float> (4.0f, 4.0f).withCentre ({ word.getCentreX() - 0.5f * w - 8.0f, word.getCentreY() }));
+                }
+            }
+        }
+    }
+
+public:
+    /** One box as the pile draws it, `setup` its mics and horn when it is the chosen one, framed in the block's orange
+        unless `plainFrame`; its tolex `body` opaque — the block's picture draws it over its IR (paintSketch) with the IR
+        showing through, in a plain frame: alone there, it has nothing to be told from. */
+    static void paintCab (ui::Graphics& g, const Cab& c, ui::Rectangle<float> box, const Setup& setup, bool isChosen, bool isHover,
+                          float body = 1.0f, bool plainFrame = false)
+    {
+        const float s = box.getWidth() / c.w;
+
+        // The box: the tolex, a grille's hint, its outline — the chosen one in the block's orange line.
+        g.setColour (ui::look().panel2.withMultipliedAlpha (body));
+        g.fillRoundedRectangle (box, c.family == 1 ? 4.0f : 2.0f);
+        g.setColour (ui::look().bezel.withMultipliedAlpha (body));
+        g.fillRoundedRectangle (box.reduced (ui::jmax (1.5f, 0.025f * s)), 1.5f);
+        const bool orange = isChosen && ! plainFrame;
+        g.setColour (orange ? ui::look().orange : isHover ? ui::look().violet.withAlpha (0.7f) : ui::look().hair2);
+        g.drawRoundedRectangle (box, c.family == 1 ? 4.0f : 2.0f, orange ? 1.5f : 1.0f);
+
+        // The port where the back the chosen one is turned to has one: none closed, at its foot on a sealed box ported.
+        if (const int back = isChosen ? setup.back : -1; back < 0 || back == (sealed (c.name) ? 0 : 1) ? c.port : back == 1)
+        {
+            const auto at = portOf (c);
+            g.setColour (ui::Colours::black);
+            const float w = ui::jmin (0.20f, 2.0f * (0.5f * c.w - std::abs (at.x)) - 0.04f);
+            g.fillRoundedRectangle (ui::Rectangle<float> (w * s, ui::jmax (2.0f, 0.035f * s)).withCentre (onBox (box, s, at)), 1.0f);
+        }
+
+        const auto line = ui::look().violet.withAlpha (isChosen ? 0.85f : 0.5f);
+        for (const auto& d : c.drivers)
+        {
+            const auto o = onBox (box, s, d);
+            const float r = c.radius * s;
+            g.setColour (line);
+            g.drawEllipse (ui::Rectangle<float> (2 * r, 2 * r).withCentre (o), 1.0f);
+            g.drawEllipse (ui::Rectangle<float> (0.5f * r, 0.5f * r).withCentre (o), 0.8f);
+        }
+
+        if (c.horn)
+        {
+            paintHorn (g, onBox (box, s, c.hornAt), s,
+                       isChosen && ! setup.a.horn ? ui::look().txFaint.withAlpha (0.4f) : ui::look().lilac.withAlpha (isChosen ? 0.9f : 0.55f));
+        }
+
+        // The mics where they stand on the first speaker, A orange and B lilac.
+        if (isChosen)
+        {
+            const auto o = onBox (box, s, c.drivers.front());
+            const float r = c.radius * s;
+            for (int m = 1; m >= 0; --m)
+            {
+                if (! (m == 0 ? setup.aOn : setup.bOn))
+                    continue;
+                const auto& sp = m == 0 ? setup.a : setup.b;
+                g.setColour (m == 0 ? ui::look().orange : ui::look().lilac);
+                g.fillEllipse (ui::Rectangle<float> (5, 5).withCentre (o + ui::Point<float> (sp.x * r, -sp.y * r)));
+            }
+        }
+    }
+
+    /** A speaker, flat as the player faces it — its surround, its cone in rings, its cap — `R` its radius; its paper
+        `body` opaque (the sketch over the IR lets the IR through). */
+    static void paintCone (ui::Graphics& g, ui::Point<float> o, float R, float body = 1.0f)
+    {
+        g.setColour (ui::look().panel2.withMultipliedAlpha (body));
+        g.fillEllipse (ui::Rectangle<float> (2.12f * R, 2.12f * R).withCentre (o));
+        g.setGradientFill (ui::ColourGradient (ui::look().panel.withMultipliedAlpha (body), o.x, o.y, ui::look().bezel.withMultipliedAlpha (body), o.x + R, o.y, true));
+        g.fillEllipse (ui::Rectangle<float> (2 * R, 2 * R).withCentre (o));
+        g.setColour (ui::look().violet.withAlpha (0.8f));
+        g.drawEllipse (ui::Rectangle<float> (2 * R, 2 * R).withCentre (o), 1.2f);
+        g.setColour (ui::look().violet.withAlpha (0.18f));
+        for (float k : { 0.45f, 0.7f, 0.88f })
+            g.drawEllipse (ui::Rectangle<float> (2 * k * R, 2 * k * R).withCentre (o), 0.8f);
+        g.setColour (ui::look().panel2.brighter (0.15f));
+        g.fillEllipse (ui::Rectangle<float> (0.5f * R, 0.5f * R).withCentre (o));
+        g.setColour (ui::look().violet.withAlpha (0.6f));
+        g.drawEllipse (ui::Rectangle<float> (0.5f * R, 0.5f * R).withCentre (o), 1.0f);
+    }
+
+    /** The mics on a speaker drawn at `o`, radius `R`, in perspective, the farther from the cone drawn last (nearest the
+        eye): its shadow on the cone, then the glyph, its capsule over the spot, as tall as it is near the eye, leaning back
+        toward the cap; each only while it is on. `k` the scene's size, the panel's 1. */
+    static void paintMicsOn (ui::Graphics& g, const Cab& cab, const Setup& setup, ui::Point<float> o, float R, float k)
+    {
+        int order[2] { 0, 1 };
+        if (setup.b.distance < setup.a.distance) std::swap (order[0], order[1]);
+        for (int m : order)
+        {
+            if (! (m == 0 ? setup.aOn : setup.bOn))
+                continue;
+            const auto& sp = m == 0 ? setup.a : setup.b;
+            const float near = nearness (sp.distance);
+            const auto at = o + ui::Point<float> (sp.x * R, -sp.y * R);
+            const auto colour = colourOf (m);
+
+            const float sh = (6.0f + 26.0f * near) * k;
+            g.setColour (ui::Colours::black.withAlpha (0.55f - 0.35f * near));
+            g.fillEllipse (ui::Rectangle<float> (sh, sh * 0.6f).withCentre (at + ui::Point<float> (10.0f * near, 8.0f * near) * k));
+            g.setColour (colour.withAlpha (0.9f));
+            g.fillEllipse (ui::Rectangle<float> (5, 5).withCentre (at));
+
+            const float h = (30.0f + 70.0f * near) * k, w = h * 36.0f / 96.0f;
+            const float side = at.x >= o.x ? 1.0f : -1.0f;   // leaning back from the cap: its top away from the centre
+            const float lean = side * sp.angle * ui::MathConstants<float>::pi / 180.0f;
+            const auto box = ui::Rectangle<float> (w, h).withPosition (at.x - w * 0.5f, at.y - h * 0.94f);
+            paintMicGlyph (g, sp.mic.isNotEmpty() ? sp.mic : cab.mic, box, colour, lean, at);
+        }
+    }
+
+    /** THE CABINET THAT PLAYS, SMALL, in `area` (the band of the IR's picture between its words): its speaker at the
+        right edge, the mics on it as the panel's scene stands them (a tall one over the band's top); the box beside it on
+        the band's floor, its mics' dots on its first speaker, every box at one scale — the tallest as tall as the band — so an 8x10 stands
+        taller than a 2x10. A host's cabinet block draws it over its IR, the IR showing through the tolex. */
+    static void paintSketch (ui::Graphics& g, int cab, const Setup& setup, ui::Rectangle<float> area)
+    {
+        if (cab < 0 || cab >= (int) cabs().size())
+            return;
+
+        const auto& c = cabs()[(size_t) cab];
+        const float R = ui::jmax (8.0f, ui::jmin (0.45f * area.getHeight(), 0.09f * area.getWidth() + 18.0f));
+        const ui::Point<float> o (area.getRight() - R - 28.0f, area.getCentreY());   // clear of the picture's dB marks
+
+        static const auto tallest = [] { float h = 0.0f, w = 0.0f; for (const auto& b : cabs()) { h = ui::jmax (h, b.h); w = ui::jmax (w, b.w); } return ui::Point<float> (w, h); }();
+        const float right = o.x - R - 10.0f;
+        const float s = ui::jmin (area.getHeight() / tallest.y, 0.3f * area.getWidth() / tallest.x);
+        paintCab (g, c, ui::Rectangle<float> (c.w * s, c.h * s).withPosition (right - c.w * s, area.getBottom() - c.h * s),   // on the floor
+                  setup, true, false, 0.55f, true);
+
+        paintCone (g, o, R, 0.55f);
+        paintMicsOn (g, c, setup, o, R, R / 80.0f);   // the panel's speaker is about 80 px across its radius
+    }
+
+private:
+
+    // ---------------------------------------------------------------- the speaker
+    // Its mics in two columns, A at the left in the block's orange and B at the right in lilac, B's a mirror of A's —
+    // each its list of mics, its distance standing beside the list, its places and its angle; between them the speaker,
+    // flat, as the player faces it, and on it the mics in perspective: the nearer the cone, the smaller (the farther
+    // from the eye), a shadow on the cone that grows and fades with the distance, the glyph leaning back toward the cap
+    // by the angle, its centimetres under it. BLEND right under the speaker, ALIGN and Ø
+    // after it (the owner, 05.11).
+    static constexpr int colW = 108, rowH = 18, edge = 6;   // edge: B's column off the panel's
+
+    static ui::Colour colourOf (int m) { return m == 0 ? ui::look().orange : ui::look().lilac; }
+
+    int rightX() const { return leftW + gutter; }
+
+    ui::Rectangle<int> column (int m) const
+    {
+        const int h = bodyH() - blendH;   // down to BLEND's row
+        return m == 0 ? ui::Rectangle<int> (rightX(), 0, colW, h) : ui::Rectangle<int> (getWidth() - edge - colW, 0, colW, h);
+    }
+
+    ui::Rectangle<int> micRow (int m, int i) const
+    {
+        const auto c = column (m);
+        return { c.getX(), c.getY() + rowH + 4 + i * rowH, c.getWidth(), rowH };
+    }
+
+    /** A column's places under its mics, two to a line: CAP EDGE, OFF ROOM. */
+    ui::Rectangle<int> placeArea (int m, int i) const
+    {
+        const auto c = column (m);
+        const int top = micRow (m, mics().size() - 1).getBottom() + 4;
+        return { c.getX() + 4 + (i % 2) * (c.getWidth() / 2), top + (i / 2) * rowH, c.getWidth() / 2 - 4, rowH };
+    }
+
+    /** A column's angle: a word and its value over a track. */
+    ui::Rectangle<float> angleTrack (int m) const
+    {
+        const auto c = column (m);
+        const int top = placeArea (m, 3).getBottom() + 6;
+        return ui::Rectangle<float> ((float) c.getX() + (m == 0 ? 4.0f : 8.0f), (float) (top + rowH + 2), (float) c.getWidth() - 12.0f, 6.0f);
+    }
+
+    /** B's TIME, under its angle: B moved against A, -1 ms to +1, nought in the middle (the owner, 05.11). */
+    static constexpr float maxShiftMs = 1.0f;
+    ui::Rectangle<float> timeTrack() const
+    {
+        const auto a = angleTrack (1);
+        return a.translated (0.0f, (float) rowH + 12.0f);
+    }
+
+    /** A mic's distance in its column, along its list of mics and no lower (the owner, 05.11) — over EDGE's GE in A's,
+        over CAP's CA in B's, where the names leave room — its centimetres level with the column's name, far at the top. */
+    float distX (int m) const
+    {
+        const auto font = ui::look().font (13.0f);
+        const auto width = [&font] (const ui::String& word) { return ui::look().trackedWidth (word, font, 0.06f); };
+        float longest = 0.0f;   // ...and clear of the longest name by a little
+        for (const auto& word : micWords())
+            longest = ui::jmax (longest, width (word));
+        const auto c = column (m).toFloat();
+        if (m == 0)
+            return ui::jmax ((float) placeArea (0, 1).getX() + width ("EDGE") - 0.5f * width ("GE"), c.getX() + 20.0f + longest + 14.0f);
+        return ui::jmin ((float) placeArea (1, 0).getRight() - 4.0f - width ("CAP") + 0.5f * width ("CA"), c.getRight() - 20.0f - longest - 14.0f);
+    }
+
+    ui::Rectangle<int> distArea (int m) const   // the hand's: the value over the track and the track
+    {
+        const int top = column (m).getY(), bottom = micRow (m, mics().size() - 1).getBottom();
+        return { ui::roundToInt (distX (m)) - 12, top, 24, bottom - top };
+    }
+
+    ui::Rectangle<float> distTrack (int m) const
+    {
+        const float top = (float) micRow (m, 0).getY() + 4.0f, bottom = (float) micRow (m, mics().size() - 1).getBottom() - 4.0f;
+        return { distX (m) - 3.0f, top, 6.0f, bottom - top };
+    }
+
+    static ui::String cmOf (float distance) { return ui::String (ui::roundToInt (distance * 100.0f)) + " cm"; }
+
+    /** ...and by the mic on the speaker, under its spot — a word to read, no slider (the owner, 05.11). */
+    ui::Rectangle<float> distLabel (int m) const
+    {
+        const auto at = spotOf (m);
+        const float w = ui::look().trackedWidth (cmOf (mic (m).distance), ui::look().font (13.0f), 0.0f) + 8.0f;
+        return { at.x - 0.5f * w, at.y + 8.0f, w, 16.0f };
+    }
+
+    static constexpr int blendH = 26;   // BLEND's row, right under the speaker
+
+    ui::Rectangle<float> scene() const
+    {
+        const int x0 = column (0).getRight() + 8, x1 = column (1).getX() - 8;
+        return ui::Rectangle<int> (x0, 4, x1 - x0, bodyH() - 4 - blendH).toFloat();
+    }
+
+    float radius() const { const auto s = scene(); return ui::jmax (10.0f, ui::jmin (s.getWidth(), s.getHeight()) * 0.5f / 1.2f); }
+
+    /** Under the speaker (the owner, 05.11): BLEND, A, its track as wide as the speaker's scene, B — ALIGN and Ø after. */
+    ui::Rectangle<int> blendRow() const
+    {
+        const int y = scene().toNearestInt().getBottom() + 2;
+        return { rightX(), y, getWidth() - rightX(), bodyH() - y };
+    }
+
+    ui::Rectangle<int> foot() const { return { rightX(), getHeight() - footHeight() + 4, getWidth() - rightX(), footHeight() - 4 }; }
+
+    /** The foot: CLOSE and DEFAULT, buttons, at the right. */
+    static int wordW (const char* word) { return ui::roundToInt (ui::look().trackedWidth (word, ui::look().font (13.0f), 0.06f)) + 4; }
+
+    ui::Rectangle<int> closeArea() const
+    {
+        const int w = onClose != nullptr ? wordW ("CLOSE") + 14 : 0;
+        return { getWidth() - w, foot().getY(), w, foot().getHeight() };
+    }
+
+    ui::Rectangle<int> defaultArea() const
+    {
+        if (! showDefault)
+            return {};
+        const int w = wordW ("DEFAULT") + 14;
+        return { closeArea().getX() - (onClose != nullptr ? 6 : 0) - w, foot().getY(), w, foot().getHeight() };
+    }
+
+    ui::Rectangle<int> alignArea() const { return { column (1).getX(), blendRow().getY(), wordW ("ALIGN"), blendRow().getHeight() }; }
+
+    ui::Rectangle<int> invertArea() const { return { alignArea().getRight() + 8, blendRow().getY(), 20, blendRow().getHeight() }; }
+
+    ui::Rectangle<float> blendTrack() const
+    {
+        const auto sc = scene();
+        return { sc.getX() + 18.0f, blendRow().toFloat().getCentreY() - 3.0f, sc.getWidth() - 36.0f, 6.0f };
+    }
+
+    ui::Rectangle<int> findArea() const
+    {
+        if (onFind == nullptr)
+            return {};
+        const auto row = blendRow();
+        return { column (0).getX(), row.getY() + 2, wordW ("FIND") + 14, row.getHeight() - 4 };
+    }
+
+    ui::Rectangle<float> blendWordArea() const
+    {
+        const float w = ui::look().trackedWidth ("BLEND", ui::look().font (13.0f), 0.06f) + 4.0f;
+        const auto row = blendRow().toFloat();
+        return { blendTrack().getX() - 22.0f - w, row.getY(), w, row.getHeight() };
+    }
+
+    /** The places a mic is put at with one click, as the table's positions stand them: at the cap, at the cone's edge,
+        half way out and turned 35° to the cap, and as far off as it goes. Across the cone on the mic's own side. */
+    struct Place { const char* word; float r, distance, angle; };
+    static constexpr Place places[] { { "CAP", 0.0f, 0.05f, 0.0f }, { "EDGE", 0.8f, 0.04f, 0.0f },
+                                      { "OFF", 0.5f, 0.05f, 35.0f }, { "ROOM", 0.0f, 0.30f, 0.0f } };
+    void putAt (int m, const Place& p)
+    {
+        takeUp (m);
+        auto& sp = mic (m);
+        float side = sp.x > 0.0f ? 1.0f : -1.0f;
+        if (std::abs (sp.x) <= 0.05f)   // on the axis: the side away from the other mic, while that one is on
+            side = mic (1 - m).x > 0.0f && heard (1 - m) ? -1.0f : 1.0f;
+        sp.x = side * p.r;
+        sp.y = 0.0f;
+        sp.distance = p.distance;
+        sp.angle = p.angle;
+        send();
+    }
+
+    bool standsAt (const Spot& sp, const Place& p) const
+    {
+        return std::abs (std::abs (sp.x) - p.r) < 0.02f && std::abs (sp.y) < 0.02f
+            && std::abs (sp.distance - p.distance) < 0.004f && std::abs (sp.angle - p.angle) < 1.0f;
+    }
+
+    static float along (ui::Rectangle<float> t, float x) { return ui::jlimit (0.0f, 1.0f, (x - t.getX()) / t.getWidth()); }
+
+    /** Where a mic stands on the cone, on the screen. */
+    ui::Point<float> spotOf (int m) const
+    {
+        const auto o = coneCentre();
+        const float R = radius();
+        return o + ui::Point<float> (mic (m).x * R, -mic (m).y * R);
+    }
+
+    static float nearness (float distance)   // 0 at the cone, 1 at 30 cm
+    {
+        return std::log (ui::jlimit (minCm, maxCm, distance * 100.0f) / minCm) / std::log (maxCm / minCm);
+    }
+
+    bool heard (int m) const { return m == 0 ? setup_.aOn : setup_.bOn; }
+    bool bothHeard() const { return setup_.aOn && setup_.bOn; }
+
+    /** A dark column taken up: its mic heard again where it stood, BLEND where it was left. B taken up on top of A
+        stands to A's right, not where it was only waiting — and a host may then move it where the two comb least
+        (synth::quietPlaceForB). */
+    void takeUp (int m)
+    {
+        if (heard (m))
+            return;
+        if (m == 0)
+        {
+            setup_.aOn = true;
+            return;
+        }
+        setup_.bOn = true;
+        if (std::hypot (setup_.b.x - setup_.a.x, setup_.b.y - setup_.a.y) < 0.4f)
+        {
+            setup_.b.x = ui::jmin (1.05f, setup_.a.x + 0.7f);
+            setup_.b.y = 0.0f;
+        }
+    }
+
+    void speakerDown (const ui::MouseEvent& e)
+    {
+        const auto pos = e.getPosition();
+        if (! hornCorner().isEmpty())
+            for (int i = 0; i < 4; ++i)
+                if (hornStepArea (i).expanded (hornGap / 2, 3.0f).contains (e.position))
+                {
+                    setup_.a.horn = i > 0;
+                    if (i > 0)
+                        setup_.a.hornDb = hornSteps[i];
+                    send();
+                    return;
+                }
+
+        // A distance: the column's slider.
+        for (int m = 0; m < 2; ++m)
+            if (distArea (m).contains (pos))
+            {
+                takeUp (m);
+                drag = Drag::distance;
+                dragTrack = distTrack (m);
+                dragMic = m;
+                dragging = true;
+                mouseDrag (e);
+                return;
+            }
+
+        for (int m = 0; m < 2; ++m)
+        {
+            if (! column (m).contains (pos))
+                continue;
+            for (int i = 0; i < 4; ++i)
+                if (placeArea (m, i).contains (pos))
+                {
+                    putAt (m, places[i]);
+                    return;
+                }
+            for (int i = 0; i < mics().size(); ++i)
+                if (micRow (m, i).contains (pos))
+                {
+                    // The lit one clicked again, with both mics heard: that mic goes off where it stands, the other
+                    // stays where it is, BLEND too. The last mic never goes.
+                    const auto& own = mic (m).mic.isNotEmpty() ? mic (m).mic : cabs()[(size_t) chosen].mic;
+                    if (bothHeard() && mics()[i] == own)
+                    {
+                        (m == 0 ? setup_.aOn : setup_.bOn) = false;
+                        send();
+                        return;
+                    }
+                    takeUp (m);
+                    mic (m).mic = mics()[i];
+                    send();
+                    return;
+                }
+            if (angleTrack (m).expanded (2.0f, 10.0f).contains (e.position))
+            {
+                takeUp (m);
+                drag = Drag::angle;
+                dragMic = m;
+                dragging = true;
+                mouseDrag (e);
+                return;
+            }
+            if (m == 1 && timeTrack().expanded (2.0f, 10.0f).contains (e.position))
+            {
+                takeUp (1);
+                drag = Drag::shift;
+                dragMic = 1;
+                dragging = true;
+                mouseDrag (e);
+                return;
+            }
+            return;
+        }
+
+        if (closeArea().contains (pos) && onClose != nullptr)
+        {
+            onClose();
+            return;
+        }
+        // DEFAULT asks first: the first click turns it into SURE? for three seconds, the second resets.
+        if (defaultArea().contains (pos))
+        {
+            if (! defaultArmed)
+            {
+                defaultArmed = true;
+                armedUntil = clock + 3.0;
+                repaint();
+                return;
+            }
+            disarmDefault();
+            setup_ = {};
+            setup_.a.mic = cabs()[(size_t) chosen].mic;
+            setup_.a.horn = cabs()[(size_t) chosen].hornOn;
+            send();
+            return;
+        }
+        if (findArea().contains (pos))
+        {
+            if (! heard (1))
+            {
+                takeUp (1);   // B taken up: the host searches for it on its own
+                send();
+            }
+            else
+                onFind (chosen, setup_);
+            return;
+        }
+        if (alignArea().expanded (4, 2).contains (pos)) { setup_.align = ! setup_.align; send(); return; }
+        if (invertArea().expanded (4, 2).contains (pos)) { setup_.invert = ! setup_.invert; send(); return; }
+        if (bothHeard() && blendTrack().expanded (8.0f, 8.0f).contains (e.position))
+        {
+            drag = Drag::blend;
+            dragging = true;
+            mouseDrag (e);
+            return;
+        }
+
+        if (scene().contains (e.position))
+        {
+            // The nearer mic of the two heard is the one taken; with one heard, that one.
+            int m = heard (0) ? 0 : 1;
+            if (bothHeard() && e.position.getDistanceFrom (spotOf (1)) < e.position.getDistanceFrom (spotOf (0)))
+                m = 1;
+            drag = Drag::spot;
+            dragMic = m;
+            dragging = true;
+            mouseDrag (e);
+        }
+    }
+
+    static void paintMicGlyph (ui::Graphics& g, const ui::String& name, ui::Rectangle<float> box, ui::Colour colour, float lean,
+                               ui::Point<float> pivot)
+    {
+        g.drawGlyph (name, box, colour, lean, pivot);
+    }
+
+    void paintColumn (ui::Graphics& g, int m) const
+    {
+        const auto font = ui::look().font (13.0f);
+        const auto c = column (m);
+        const auto colour = colourOf (m);
+        const bool live = heard (m);
+        const float dim = live ? 1.0f : 0.45f;
+        const auto& sp = mic (m);
+        const auto& cab = cabs()[(size_t) chosen];
+        const auto heardBy = sp.mic.isNotEmpty() ? sp.mic : cab.mic;
+
+        // B's a mirror of A's: its words at the right, each mic's glyph after its name (the owner, 05.11).
+        const auto side = m == 0 ? ui::Justification::centredLeft : ui::Justification::centredRight;
+        g.setColour (colour.withMultipliedAlpha (dim));
+        ui::look().drawTracked (g, m == 0 ? "MIC A" : "MIC B", c.toFloat().withHeight ((float) rowH), font, 0.08f, side);
+
+        for (int i = 0; i < mics().size(); ++i)
+        {
+            auto r = micRow (m, i).toFloat();
+            const bool lit = mics()[i] == heardBy;
+            const auto tint = (lit ? colour : ui::look().txFaint).withMultipliedAlpha (dim);
+            const auto glyph = m == 0 ? r.removeFromLeft (12.0f) : r.removeFromRight (12.0f);
+            paintMicGlyph (g, mics()[i], glyph.reduced (0, 1), tint, 0.0f, {});
+            g.setColour (tint);
+            ui::look().drawTracked (g, micWords()[i], m == 0 ? r.withTrimmedLeft (8.0f) : r.withTrimmedRight (8.0f), font, 0.06f, side);
+        }
+
+        // Its places, in its colour where it stands.
+        for (int i = 0; i < 4; ++i)
+        {
+            g.setColour ((standsAt (sp, places[i]) ? colour : ui::look().txDim).withMultipliedAlpha (dim));
+            auto cell = placeArea (m, i).toFloat();
+            ui::look().drawTracked (g, places[i].word, m == 0 ? cell : cell.withTrimmedRight (4.0f), font, 0.06f, side);
+        }
+
+        // Its angle, a word and its value over a track — the value on the side away from the word.
+        {
+            const auto t = angleTrack (m);
+            const auto label = ui::Rectangle<float> (t.getX(), t.getY() - (float) rowH - 2.0f, t.getWidth(), (float) rowH);
+            g.setColour (ui::look().txFaint.withMultipliedAlpha (dim));
+            ui::look().drawTracked (g, "ANGLE", label, font, 0.06f, side);
+            g.setColour (ui::look().txDim.withMultipliedAlpha (dim));
+            ui::look().drawTracked (g, ui::String (ui::roundToInt (sp.angle)) + ui::String::fromUTF8 ("\xc2\xb0"), label, font, 0.0f,
+                                m == 0 ? ui::Justification::centredRight : ui::Justification::centredLeft);
+            g.setColour (ui::look().hair2);
+            g.fillRoundedRectangle (t.withSizeKeepingCentre (t.getWidth(), 2.0f), 1.0f);
+            g.setColour (colour.withMultipliedAlpha (dim));
+            g.fillRoundedRectangle (ui::Rectangle<float> (6.0f, 12.0f).withCentre ({ t.getX() + sp.angle / maxAngle * t.getWidth(), t.getCentreY() }), 2.0f);
+        }
+
+        // B's TIME under its angle: the word, its milliseconds, a track with nought marked in its middle.
+        if (m == 1)
+        {
+            const auto t = timeTrack();
+            const auto label = ui::Rectangle<float> (t.getX(), t.getY() - (float) rowH - 2.0f, t.getWidth(), (float) rowH);
+            g.setColour (ui::look().txFaint.withMultipliedAlpha (dim));
+            ui::look().drawTracked (g, "TIME", label, font, 0.06f, side);
+            g.setColour ((std::abs (setup_.shiftMs) > 0.0f ? colour : ui::look().txDim).withMultipliedAlpha (dim));
+            ui::look().drawTracked (g, (setup_.shiftMs > 0.0f ? "+" : "") + ui::String (setup_.shiftMs, 2) + " ms", label, font, 0.0f,
+                                ui::Justification::centredLeft);
+            g.setColour (ui::look().hair2);
+            g.fillRoundedRectangle (t.withSizeKeepingCentre (t.getWidth(), 2.0f), 1.0f);
+            g.fillRect (ui::Rectangle<float> (1.0f, 8.0f).withCentre (t.getCentre()));
+            g.setColour (colour.withMultipliedAlpha (dim));
+            const float at = t.getX() + (0.5f + 0.5f * setup_.shiftMs / maxShiftMs) * t.getWidth();
+            g.fillRoundedRectangle (ui::Rectangle<float> (6.0f, 12.0f).withCentre ({ at, t.getCentreY() }), 2.0f);
+        }
+
+        // Its distance, beside its list: its centimetres level with the column's name, far at the top.
+        {
+            const auto t = distTrack (m);
+            g.setColour (ui::look().txDim.withMultipliedAlpha (dim));
+            ui::look().drawTracked (g, cmOf (sp.distance), { t.getCentreX() - 24.0f, (float) c.getY(), 48.0f, (float) rowH }, font, 0.0f,
+                                ui::Justification::centred);
+            g.setColour (ui::look().hair2);
+            g.fillRoundedRectangle (t.withSizeKeepingCentre (2.0f, t.getHeight()), 1.0f);
+            g.setColour (colour.withMultipliedAlpha (dim));
+            g.fillRoundedRectangle (ui::Rectangle<float> (12.0f, 6.0f).withCentre ({ t.getCentreX(), t.getBottom() - nearness (sp.distance) * t.getHeight() }), 2.0f);
+        }
+    }
+
+    void paintSpeaker (ui::Graphics& g) const
+    {
+        const auto font = ui::look().font (13.0f);
+        if (chosen < 0)
+        {
+            // An IR of the player's own plays (or the factory's): the speaker waits for a box.
+            g.setColour (ui::look().txFaint);
+            ui::look().drawTracked (g, "CHOOSE A CABINET", ui::Rectangle<int> (rightX(), 0, getWidth() - rightX(), bodyH()).toFloat(),
+                                font, 0.08f, ui::Justification::centred);
+            return;
+        }
+
+        const auto& cab = cabs()[(size_t) chosen];
+        paintColumn (g, 0);
+        paintColumn (g, 1);
+
+        const auto sc = scene();
+        const float R = radius();
+        const auto o = coneCentre();
+        const float s = R / cab.radius;   // px a metre
+
+        // The neighbours and the horn, at the same scale, cut off at the scene's edge.
+        {
+            ui::Graphics::ScopedSaveState keep (g);
+            g.reduceClipRegion (sc.toNearestInt());
+            g.setColour (ui::look().bezel);
+            g.fillRoundedRectangle (sc, 4.0f);
+            for (size_t i = 1; i < cab.drivers.size(); ++i)
+            {
+                const auto d = cab.drivers[i] - cab.drivers.front();
+                g.setColour (ui::look().violet.withAlpha (0.25f));
+                g.drawEllipse (ui::Rectangle<float> (2 * R, 2 * R).withCentre (o + ui::Point<float> (d.x * s, -d.y * s)), 1.0f);
+            }
+            // The horn, big, in its corner; beside it HORN and its steps, the one it stands at in the block's orange.
+            if (const auto hc = hornCorner(); ! hc.isEmpty())
+            {
+                paintHorn (g, hc.getCentre(), hc.getWidth() / 0.12f, setup_.a.horn ? ui::look().lilac.withAlpha (0.8f) : ui::look().txFaint.withAlpha (0.35f));
+                const auto side = ui::Justification::centredRight;
+                g.setColour (ui::look().txFaint);
+                ui::look().drawTracked (g, "HORN", hornWordArea(), font, 0.08f, side);
+                for (int i = 0; i < 4; ++i)
+                {
+                    g.setColour (i == hornStep() ? ui::look().orange : ui::look().txDim);
+                    ui::look().drawTracked (g, hornWords[i], hornStepArea (i), font, 0.06f, ui::Justification::centred);
+                }
+            }
+
+            paintCone (g, o, R);
+
+            // The search's map: each place it judged a dot, green where B and A add, red where they cancel.
+            if (searchFade > 0.0f)
+                for (const auto& d : searchDots)
+                {
+                    const float t = ui::jlimit (0.0f, 1.0f, -d.score / 60.0f);
+                    const auto at = o + ui::Point<float> (d.x * R, -d.y * R);
+                    const auto dot = ui::Rectangle<float> (12.0f, 12.0f).withCentre (at);
+                    g.setColour (ui::Colour (0xff3fae6a).interpolatedWith (ui::Colour (0xffd5455a), t).withMultipliedAlpha (0.85f * searchFade));
+                    g.fillEllipse (dot);
+                    g.setColour (ui::Colours::black.withAlpha (0.5f * searchFade));
+                    g.drawEllipse (dot, 1.0f);
+                }
+
+            paintMicsOn (g, cab, setup_, o, R, 1.0f);
+
+            // Each heard mic's centimetres under it.
+            for (int m = 0; m < 2; ++m)
+                if (heard (m))
+                {
+                    g.setColour (colourOf (m));
+                    ui::look().drawTracked (g, cmOf (mic (m).distance), distLabel (m), font, 0.0f, ui::Justification::centred);
+                }
+        }
+
+        // The blend: A..B on a track, ALIGN, and Ø for B — faint while one mic is heard, the blend not heard then.
+        {
+            const float dim = bothHeard() ? 1.0f : 0.45f;
+            const auto row = blendRow().toFloat();
+            g.setColour (ui::look().txFaint);
+            ui::look().drawTracked (g, "BLEND", blendWordArea(), font, 0.06f, ui::Justification::centredRight);
+            const auto t = blendTrack();
+            g.setColour (ui::look().orange.withMultipliedAlpha (dim));
+            ui::look().drawTracked (g, "A", ui::Rectangle<float> (t.getX() - 18.0f, row.getY(), 14.0f, row.getHeight()), font, 0.0f, ui::Justification::centred);
+            g.setColour (ui::look().lilac.withMultipliedAlpha (dim));
+            ui::look().drawTracked (g, "B", ui::Rectangle<float> (t.getRight() + 4.0f, row.getY(), 14.0f, row.getHeight()), font, 0.0f, ui::Justification::centred);
+            g.setColour (ui::look().hair2);
+            g.fillRoundedRectangle (t.withSizeKeepingCentre (t.getWidth(), 2.0f), 1.0f);
+            g.setColour (ui::look().orange.interpolatedWith (ui::look().lilac, setup_.blend).withMultipliedAlpha (dim));
+            g.fillRoundedRectangle (ui::Rectangle<float> (6.0f, 14.0f).withCentre ({ t.getX() + setup_.blend * t.getWidth(), t.getCentreY() }), 2.0f);
+            g.setColour (bothHeard() && setup_.align ? ui::look().orange : ui::look().txFaint);
+            ui::look().drawTracked (g, "ALIGN", alignArea().toFloat(), font, 0.06f, ui::Justification::centredLeft);
+            g.setColour (bothHeard() && setup_.invert ? ui::look().orange : ui::look().txFaint);
+            ui::look().drawTracked (g, ui::String::fromUTF8 ("\xc3\x98"), invertArea().toFloat(), font, 0.0f, ui::Justification::centred);
+            paintButton (g, "FIND", findArea(), searching);
+            paintButton (g, defaultArmed ? "SURE?" : "DEFAULT", defaultArea(), defaultArmed);
+            paintButton (g, "CLOSE", closeArea(), false);
+        }
+    }
+
+    /** A button: a box round its word — DEFAULT, CLOSE, DOWNLOAD IR — orange while it asks. */
+    static void paintButton (ui::Graphics& g, const char* word, ui::Rectangle<int> r, bool asking)
+    {
+        if (r.isEmpty())
+            return;
+        const auto b = r.toFloat().reduced (0.5f, 1.5f);
+        g.setColour (ui::look().panel2);
+        g.fillRoundedRectangle (b, 4.0f);
+        g.setColour (asking ? ui::look().orange : ui::look().txFaint);
+        g.drawRoundedRectangle (b, 4.0f, asking ? 1.2f : 1.0f);
+        g.setColour (asking ? ui::look().orange : ui::look().txDim);
+        ui::look().drawTracked (g, word, b, ui::look().font (13.0f), 0.06f, ui::Justification::centred);
+    }
+
+    // ---------------------------------------------------------------- the response
+    // Across the panel under it all: the cabinet's response, 30 Hz to 12 kHz on a log scale, +15 to -30 dB — the one
+    // heard in the block's orange line, the one kept before it a faint grey ghost; dB at the left, the frequencies under.
+    std::vector<float> responseNow, responseBefore, responseComb;
+    // +15 over the middle, -30 under it: a cabinet's response rarely climbs past +10, its roll-offs and a comb's dips
+    // go to -20 and -30, and under that nothing more is heard (the owner, 05.11).
+    static constexpr float responseTop = 15.0f, responseBottom = -30.0f;
+
+    ui::Rectangle<int> responseArea() const { return { 0, bodyH(), getWidth(), responseH }; }
+
+    ui::Rectangle<float> responsePlot() const
+    {
+        return responseArea().toFloat().withTrimmedLeft (36.0f).withTrimmedRight (12.0f).withTrimmedTop (9.0f).withTrimmedBottom (20.0f);
+    }
+
+    void paintResponse (ui::Graphics& g) const
+    {
+        const auto font = ui::look().font (13.0f);
+        const auto area = responseArea().toFloat();
+        const auto p = responsePlot();
+        g.setColour (ui::look().hair);
+        g.fillRect (area.withHeight (1.0f));
+
+        const auto xOf = [p] (float hz) { return p.getX() + p.getWidth() * std::log (hz / 30.0f) / std::log (12000.0f / 30.0f); };
+        const auto yOf = [p] (float db) { return p.getY() + (responseTop - db) / (responseTop - responseBottom) * p.getHeight(); };
+
+        // Under it all, with two mics heard, where they meet (the owner, 05.11): green where they add in phase, red
+        // where they cancel — the stronger, the deeper, full at 6 dB.
+        if ((int) responseComb.size() == responsePoints)
+            for (int i = 0; i < responsePoints; ++i)
+            {
+                const float x0 = i == 0 ? p.getX() : 0.5f * (xOf (responseHz (i - 1)) + xOf (responseHz (i)));
+                const float x1 = i == responsePoints - 1 ? p.getRight() : 0.5f * (xOf (responseHz (i)) + xOf (responseHz (i + 1)));
+                const float v = responseComb[(size_t) i];
+                g.setColour ((v > 0.0f ? ui::Colour (0xff3fae6a) : ui::Colour (0xffd5455a)).withAlpha (0.45f * ui::jmin (1.0f, std::abs (v) / 6.0f)));
+                g.fillRect (ui::Rectangle<float> (x0, p.getY(), x1 - x0 + 0.5f, p.getHeight()));
+            }
+
+        struct Mark { float hz; const char* word; };
+        static constexpr Mark marks[] { { 50.0f, "50" }, { 100.0f, "100" }, { 200.0f, "200" }, { 500.0f, "500" },
+                                        { 1000.0f, "1k" }, { 2000.0f, "2k" }, { 5000.0f, "5k" }, { 10000.0f, "10k" } };
+        for (const auto& m : marks)
+        {
+            const float x = xOf (m.hz);
+            g.setColour (ui::look().hair);
+            g.fillRect (ui::Rectangle<float> (x, p.getY(), 1.0f, p.getHeight()));
+            g.setColour (ui::look().txFaint);
+            ui::look().drawTracked (g, m.word, { x - 20.0f, p.getBottom() + 3.0f, 40.0f, 16.0f }, font, 0.0f, ui::Justification::centred);
+        }
+        struct Level { float db; const char* word; };
+        static constexpr Level levels[] { { 10.0f, "+10" }, { 0.0f, "0" }, { -10.0f, "-10" }, { -20.0f, "-20" }, { -30.0f, "-30" } };
+        for (const auto& l : levels)
+        {
+            const float y = yOf (l.db);
+            g.setColour (std::abs (l.db) < 1.0f ? ui::look().hair2 : ui::look().hair);
+            g.fillRect (ui::Rectangle<float> (p.getX(), y, p.getWidth(), 1.0f));
+            g.setColour (ui::look().txFaint);
+            ui::look().drawTracked (g, l.word, { area.getX() + 2.0f, y - 8.0f, 28.0f, 16.0f }, font, 0.0f, ui::Justification::centredRight);
+        }
+
+        const auto curve = [&] (const std::vector<float>& db, ui::Colour colour, float width)
+        {
+            if ((int) db.size() != responsePoints)
+                return;
+            ui::Path path;
+            for (int i = 0; i < responsePoints; ++i)
+            {
+                // Past the scale it goes out of the frame, as a dip does, not along its floor (the owner, 05.11).
+                const ui::Point<float> at (xOf (responseHz (i)), yOf (ui::jlimit (3.0f * responseBottom, 3.0f * responseTop, db[(size_t) i])));
+                if (i == 0)
+                    path.startNewSubPath (at);
+                else
+                    path.lineTo (at);
+            }
+            g.setColour (colour);
+            g.strokePath (path, ui::PathStrokeType (width, ui::PathStrokeType::curved, ui::PathStrokeType::rounded));
+        };
+        ui::Graphics::ScopedSaveState keep (g);
+        g.reduceClipRegion (p.toNearestInt().expanded (0, 2));
+        curve (responseBefore, ui::look().txDim.withAlpha (0.3f), 1.2f);   // barely there: a second line reads as a second mic
+        curve (responseNow, ui::look().orange, 1.6f);
+
+        // DOWNLOAD IR over the corner, its line pulsing slowly — the one thing the response invites a hand to do.
+        if (const auto d = downloadArea(); ! d.isEmpty())
+        {
+            const float pulse = 0.5f + 0.5f * (float) std::sin (ui::MathConstants<double>::twoPi * 0.5 * clock);
+            const auto b = d.toFloat().reduced (0.5f);
+            g.reduceClipRegion (d.expanded (2));
+            g.setColour (ui::look().panel2.withAlpha (0.92f));
+            g.fillRoundedRectangle (b, 4.0f);
+            g.setColour (ui::look().orange.withAlpha (0.35f + 0.55f * pulse));
+            g.drawRoundedRectangle (b, 4.0f, 1.3f);
+            g.setColour (ui::look().orange.withAlpha (0.75f + 0.25f * pulse));
+            ui::look().drawTracked (g, "DOWNLOAD IR", b, ui::look().font (13.0f), 0.06f, ui::Justification::centred);
+        }
+    }
+
+};
+
+} // namespace cabir
