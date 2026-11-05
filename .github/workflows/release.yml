@@ -73,7 +73,12 @@ jobs:
           KEYCHAIN="$HOME/Library/Keychains/login.keychain-db"
           # The notary profile lives in the login keychain too (--keychain below), so it is found with the screen locked.
           security unlock-keychain -p "$KCH_PWD" "$KEYCHAIN"
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KCH_PWD" "$KEYCHAIN" >/dev/null
+          # The partition list is a precaution, refused on this host at times (SecKeychainItemSetAccessWithPassword) even
+          # with the password that just unlocked the keychain — the key's ACL written in another security session; codesign
+          # right below is the real gate (as tabby-eq's release has it).
+          if ! security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KCH_PWD" "$KEYCHAIN" >/dev/null 2>&1; then
+            echo "::warning::set-key-partition-list refused the keychain password (the unlock above succeeded); continuing — codesign is the gate"
+          fi
 
           VER="${{ needs.version.outputs.version }}"
           APP="build/CabIrGenerator_artefacts/Release/Cab IR Generator.app"
