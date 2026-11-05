@@ -611,7 +611,7 @@ inline std::vector<double> render (const Cab& c, size_t n, size_t threads = 0)
     if (c.coilHz > 0)
     {
         std::vector<double> mag (n / 2 + 1);
-        for (size_t k = 0; k <= n / 2; ++k) { const double f = fs * k / n; mag[k] = std::pow (1 + (f / c.coilHz) * (f / c.coilHz), -0.25); }
+        for (size_t k = 0; k <= n / 2; ++k) { const double f = fs * (double) k / (double) n; mag[k] = std::pow (1 + (f / c.coilHz) * (f / c.coilHz), -0.25); }
         coil = minimumPhase (mag, n);
     }
     // The target cone's own near-field sum, as the cones' sum is scaled below: what the port and the horn stand against.
@@ -790,12 +790,12 @@ inline std::vector<double> render (const Cab& c, size_t n, size_t threads = 0)
     fft (H, true);
 
     const int len = (int) std::lround (c.lengthMs * fs / 1000), fade = (int) std::lround (c.fadeMs * fs / 1000);
-    std::vector<double> ir (len);
+    std::vector<double> ir ((size_t) len);
     for (int i = 0; i < len; ++i)
     {
         double w = 1;
         if (i >= len - fade) w = 0.5 + 0.5 * std::cos (pi * (i - (len - fade)) / fade);
-        ir[i] = H[i].real() * w;
+        ir[(size_t) i] = H[(size_t) i].real() * w;
     }
     return ir;
 }
@@ -809,7 +809,7 @@ inline double loudness (const std::vector<double>& ir, size_t n)
     double e = 0;
     for (size_t k = 1; k < n / 2; ++k)
     {
-        const double f = fs * k / n;
+        const double f = fs * (double) k / (double) n;
         if (f < 40 || f > 5000) continue;
         e += std::norm (X[k]) / f;
     }
@@ -989,7 +989,7 @@ public:
             for (size_t i = 0; i < ir.size() && i < n; ++i) x[i] = ir[i];
             fft (x, false);
             double e = 1e-30;
-            for (size_t k = (size_t) (500.0 * n / fs); k <= (size_t) (2000.0 * n / fs); ++k) e += std::norm (x[k]);
+            for (size_t k = (size_t) (500.0 * (double) n / fs); k <= (size_t) (2000.0 * (double) n / fs); ++k) e += std::norm (x[k]);
             return std::sqrt (e);
         };
         const double ga = (1 - p.blend) / middle (ia), gb = p.blend / middle (ib) * (p.invertB ? -1 : 1);
@@ -1101,7 +1101,7 @@ inline Place quietPlaceForB (const Table& table, const State& s, size_t n = 1 <<
         for (size_t i = 0; i < ir.size() && i < n; ++i) x[i] = ir[i];
         fft (x, false);
         double e = 1e-30;
-        for (size_t k = (size_t) (500.0 * n / fs); k <= (size_t) (2000.0 * n / fs); ++k) e += std::norm (x[k]);
+        for (size_t k = (size_t) (500.0 * (double) n / fs); k <= (size_t) (2000.0 * (double) n / fs); ++k) e += std::norm (x[k]);
         return std::sqrt (e);
     };
     const auto power = [] (const std::vector<cd>& x, double hz, double ratio, const std::vector<cd>* plus)

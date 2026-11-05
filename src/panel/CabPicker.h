@@ -1113,8 +1113,8 @@ private:
     {
         takeUp (m);
         auto& sp = mic (m);
-        float side = sp.x > 0.05f ? 1.0f : sp.x < -0.05f ? -1.0f : 0.0f;
-        if (side == 0.0f)   // on the axis: the side away from the other mic, while that one is on
+        float side = sp.x > 0.0f ? 1.0f : -1.0f;
+        if (std::abs (sp.x) <= 0.05f)   // on the axis: the side away from the other mic, while that one is on
             side = mic (1 - m).x > 0.0f && heard (1 - m) ? -1.0f : 1.0f;
         sp.x = side * p.r;
         sp.y = 0.0f;
