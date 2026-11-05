@@ -326,7 +326,7 @@ public:
     void endSearch()
     {
         searching = false;
-        searchHold = 45;    // ticks at 30 Hz: a second and a half, then a second's fade
+        searchEnded = -1.0;    // from the next tick: a second and a half held, then a second's fade, however often it comes
     }
 
     /** THE RESPONSE of what plays, in dB at responseHz — `now` the cabinet heard, `before` what was kept before it
@@ -457,7 +457,7 @@ private:
     std::vector<SearchDot> searchDots;  // the search's map (showSearch), fading once it is done
     bool searching = false;
     float searchFade = 0.0f;
-    int searchHold = 0;
+    double searchEnded = 0;            // the host's clock when it was done; -1 until the tick after
 
     void timerCallback()
     {
@@ -465,12 +465,12 @@ private:
             repaint (d);
         if (searchFade <= 0.0f || searching)
             return;
-        if (searchHold > 0)
-        {
-            --searchHold;
+        if (searchEnded < 0.0)
+            searchEnded = clock;
+        const double since = clock - searchEnded;
+        if (since < 1.5)
             return;
-        }
-        searchFade -= 1.0f / 30.0f;
+        searchFade = (float) (1.0 - (since - 1.5));
         if (searchFade <= 0.0f)
         {
             searchFade = 0.0f;

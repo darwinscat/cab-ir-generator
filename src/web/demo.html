@@ -83,26 +83,36 @@ function judge (state, places, deadline)
     const id = ++job;
     return new Promise ((resolve) =>
     {
-        let busy = 0;
-        const done = () => resolve (scores);
-        const timer = deadline !== null ? setTimeout (done, deadline) : 0;
-        const per = Math.ceil (n / workers.length);
-        workers.forEach ((w, k) =>
+        // A place at a time to whichever worker is free, so the deadline stops the handing out at once; and once the
+        // round is over a late answer is not drawn — a place drawn after the search ended would start its map again.
+        let next = 0, busy = 0, open = true;
+        const finish = () => { if (! open) return; open = false; clearTimeout (timer); resolve (scores); };
+        const timer = deadline !== null ? setTimeout (finish, deadline) : 0;
+        const give = (w) =>
         {
-            const first = k * per, part = places.slice (3 * first, 3 * Math.min (n, first + per));
-            if (part.length === 0) return;
+            if (! open || next >= n)
+            {
+                if (busy === 0) finish ();
+                return;
+            }
+            const i = next++;
             ++busy;
+            w.postMessage ({ job: id, toml: state, places: places.slice (3 * i, 3 * i + 3), first: i });
+        };
+        workers.forEach ((w) =>
+        {
             w.onmessage = ({ data }) =>
             {
                 if (data.job !== id) return;
-                if (data.done) { if (--busy === 0) { clearTimeout (timer); done (); } return; }
+                if (data.done) { --busy; give (w); return; }
+                if (! open) return;
                 scores[2 * data.index] = data.score;
                 scores[2 * data.index + 1] = data.shift;
                 call ('cabir_panel_search', null, ['number', 'number', 'number'], [data.x, data.y, data.score]);
                 frame ();
             };
-            w.postMessage ({ job: id, toml: state, places: part, first });
         });
+        workers.forEach (give);
     });
 }
 
