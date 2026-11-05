@@ -1,20 +1,25 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of Cab IR Generator — see LICENSE.
 
-// THE PRESETS' PAIRS SPREAD APART — B off A's spot, where the two comb least as the panel draws it.
+// THE PRESETS' MICS WHERE THE PANEL'S LINE STAYS GREEN — a single mic off its pit, a pair's B off A's spot.
 //
 //   respread <cabinets.txt> <preset.toml>... [--write]
 //
-// Judged twice, as the panel draws a pair: where the two mics meet (synth::combOf, 30 Hz to 12 kHz) — its worst point,
-// green above -3 dB — and the pit, how far the heard response (a sixth of an octave, as the band draws it) falls under
-// its own third of an octave either side, 40 Hz to 8 kHz — a dip a player hears, which no comb shows; 6 dB at most.
-// A pair whose B stands on A's spot (under half a radius across), or that fails either, is moved: its mics, A's place,
-// the blend and the clock kept, B tried across the speaker at least half a radius from A — a coarse round at its own
-// distance and a quarter either side, each place at its best TIME (-0.5 to +0.5 ms), then finer round the six best —
-// the place whose worse margin is the widest kept, ties to the smaller shift, then the nearer place. Up to two pairs a
-// style that stand on one axis and pass already stay as they are: a close mic and a far one on one axis is a way too.
+// Judged as the panel draws a cabinet: the pit, how far the heard response (a sixth of an octave, as the band draws it)
+// falls under its own third of an octave either side, 40 Hz to 8 kHz — a dip a player hears, which no comb shows, 3 dB at
+// most, where the line starts to redden (the owner, 05.11) — and with two mics where they meet (synth::combOf, 30 Hz to
+// 12 kHz), its worst point green above -3 dB.
+// A single mic with a pit moves as FIND moves one (synth::MicSearch): about where it stands, the nearest place without
+// one. A pair, in two steps (the owner, 05.11): first A alone, the same way, if A by itself has a pit — B rarely fills
+// one — then B. A pair whose B stands on A's spot (under half a radius across), or that fails either, has B moved: its
+// mics, A's place, the blend and the clock kept, B tried across the speaker at least half a radius from A — a coarse
+// round at its own distance and a quarter either side, each place at its best TIME (-0.5 to +0.5 ms), then finer round
+// the six best — the place whose worse margin is the widest kept, ties to the smaller shift, then the nearer place. Up to
+// two pairs a style that stand on one axis and pass already stay as they are: a close mic and a far one on one axis is a
+// way too.
 
 #include <synth/CabSynth.h>
+#include <synth/MicSearch.h>
 #include <synth/Response.h>
 #include <synth/State.h>
 
@@ -39,7 +44,7 @@ namespace
 
     constexpr double apartRadii = 0.5;   // B at least this far across from A
     constexpr double greenDb = -3.0;     // a worst point above this: the band green
-    constexpr double pitDb = 6.0;        // the response at most this far under its neighbours
+    constexpr double pitDb = 3.0;        // the response at most this far under its neighbours: where the panel's line reddens
 
     /** How far the response falls under its own third of an octave either side, 40 Hz to 8 kHz, at its worst. */
     double pitOf (const std::vector<double>& db)
@@ -180,7 +185,25 @@ namespace
         return best;
     }
 
-    struct Preset { std::string path, name, style, head; State state; bool pair = false; double worst = 0, pit = 0, apart = 0; };
+    /** One mic heard (A, else B) moved where it has no pit, about where it stands (synth::MicSearch, as FIND moves it). */
+    State smoothed (const synth::Table& table, const State& s)
+    {
+        const auto place = synth::smoothPlaceForMic (table, s);
+        auto out = s;
+        auto& m = s.a.on ? out.a : out.b;
+        m.x = place.x;
+        m.y = place.y;
+        m.distance = place.distance;
+        return out;
+    }
+
+    struct Preset
+    {
+        std::string path, name, style, head;
+        State state, was;
+        bool pair = false, aMoved = false;
+        double worst = 0, pit = 0, apart = 0, aPit = 0;
+    };
     bool passes (double worst, double pit) { return worst >= greenDb && pit <= pitDb; }
 }
 
@@ -205,7 +228,46 @@ int main (int argc, char** argv)
         p.style = field (text, "style");
         p.state = *state;
         p.pair = state->a.on && state->b.on && state->blend > 0;
+        p.was = *state;
         all.push_back (std::move (p));
+    }
+
+    // A single mic, and a pair's A heard alone: off its pit first, each search on all the machine's threads.
+    int singles = 0, singlesMoved = 0, singlesClear = 0;
+    for (auto& p : all)
+    {
+        auto alone = p.state;
+        if (p.pair)
+            alone.b.on = false;
+        const double before = judgeOf (table, alone).second;
+        double now = before;
+        if (before > pitDb)
+        {
+            const auto moved = smoothed (table, alone);
+            now = judgeOf (table, moved).second;
+            if (p.pair)
+            {
+                p.state.a = moved.a;
+                p.aMoved = true;
+            }
+            else
+                p.state = moved;
+        }
+        if (p.pair)
+        {
+            p.aPit = now;
+            continue;
+        }
+        ++singles;
+        singlesMoved += now < before;
+        singlesClear += now <= pitDb;
+        const auto& m = p.state.a.on ? p.state.a : p.state.b;
+        const auto& w = p.was.a.on ? p.was.a : p.was.b;
+        if (before > pitDb)
+            std::printf ("ONE   %-34s pit %5.1f -> %5.1f   %+.2f %+.2f %4.1f cm -> %+.2f %+.2f %4.1f cm%s\n", p.name.c_str(), before, now,
+                         w.x, w.y, w.distance * 100, m.x, m.y, m.distance * 100, now <= pitDb ? "" : "  STILL RED");
+        else
+            std::printf ("ONE   %-34s pit %5.1f   kept\n", p.name.c_str(), before);
     }
 
     // Where each pair stands now, judged as the band draws it.
@@ -287,16 +349,35 @@ int main (int argc, char** argv)
         for (auto& w : work) w.get();
     }
 
-    int moved = 0, green = 0, red = 0, kept = 0;
+    const auto save = [] (const Preset& p, const State& s)
+    {
+        t::Table head;
+        (void) head.insert ("name", t::Value (p.name));
+        (void) head.insert ("style", t::Value (p.style));
+        std::ofstream (p.path) << t::write (head) + toToml (s);
+    };
+    if (write)
+        for (const auto& p : all)
+            if (! p.pair && ! (p.state.a == p.was.a && p.state.b == p.was.b))
+                save (p, p.state);
+
+    int moved = 0, green = 0, red = 0, kept = 0, aMoved = 0;
     for (size_t i = 0; i < all.size(); ++i)
     {
         const auto& p = all[i];
         if (! p.pair)
             continue;
+        aMoved += p.aMoved;
+        char aSays[96] = "";
+        if (p.aMoved)
+            std::snprintf (aSays, sizeof aSays, "  A %+.2f %+.2f %4.1f cm -> %+.2f %+.2f %4.1f cm (alone pit %.1f)", p.was.a.x, p.was.a.y,
+                           p.was.a.distance * 100, p.state.a.x, p.state.a.y, p.state.a.distance * 100, p.aPit);
         if (std::find (moving.begin(), moving.end(), i) == moving.end())
         {
             ++kept;
-            std::printf ("KEPT  %-34s apart %.2f  comb %6.1f pit %5.1f%s\n", p.name.c_str(), p.apart, p.worst, p.pit, keep[i] ? "  (one axis)" : "");
+            std::printf ("KEPT  %-34s apart %.2f  comb %6.1f pit %5.1f%s%s\n", p.name.c_str(), p.apart, p.worst, p.pit, keep[i] ? "  (one axis)" : "", aSays);
+            if (write && p.aMoved)
+                save (p, p.state);
             continue;
         }
         ++moved;
@@ -305,10 +386,10 @@ int main (int argc, char** argv)
         char was[24] = "";
         if (std::abs (found[i].blend - p.state.blend) > 1e-9)
             std::snprintf (was, sizeof was, " (was %.2f)", p.state.blend);
-        std::printf ("MOVED %-34s apart %.2f comb %6.1f pit %5.1f -> B %+.3f %+.3f %4.1f cm %+.3f ms blend %.2f%s, apart %.2f comb %6.1f pit %5.1f%s\n",
+        std::printf ("MOVED %-34s apart %.2f comb %6.1f pit %5.1f -> B %+.3f %+.3f %4.1f cm %+.3f ms blend %.2f%s, apart %.2f comb %6.1f pit %5.1f%s%s\n",
                      p.name.c_str(), p.apart, p.worst, p.pit, found[i].x, found[i].y, found[i].distance * 100, found[i].shiftMs,
                      found[i].blend, was,
-                     std::hypot (found[i].x - p.state.a.x, found[i].y - p.state.a.y), after[i].first, after[i].second, ok ? "" : "  FAILS");
+                     std::hypot (found[i].x - p.state.a.x, found[i].y - p.state.a.y), after[i].first, after[i].second, ok ? "" : "  FAILS", aSays);
         if (write)
         {
             auto s = p.state;
@@ -317,12 +398,11 @@ int main (int argc, char** argv)
             s.b.distance = found[i].distance;
             s.shiftMs = found[i].shiftMs;
             s.blend = found[i].blend;
-            t::Table head;
-            (void) head.insert ("name", t::Value (p.name));
-            (void) head.insert ("style", t::Value (p.style));
-            std::ofstream (p.path) << t::write (head) + toToml (s);
+            save (p, s);
         }
     }
-    std::printf ("%d pairs: %d kept, %d moved — %d pass, %d still fail%s\n", kept + moved, kept, moved, green, red, write ? "; written" : "");
+    std::printf ("%d single mics: %d moved off a pit, %d clear of 3 dB now\n", singles, singlesMoved, singlesClear);
+    std::printf ("%d pairs: %d with A moved first; %d kept, %d moved — %d pass, %d still fail%s\n", kept + moved, aMoved, kept, moved, green,
+                 red, write ? "; written" : "");
     return 0;
 }
