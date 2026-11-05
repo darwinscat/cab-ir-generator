@@ -53,8 +53,15 @@ target_sources(cabir_panel INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/src/panel/Look
 target_include_directories(cabir_panel INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(cabir_panel INTERFACE cabir_synth)
 
+# A page's build (emscripten) makes the page's module alone: no JUCE there, and the tools are the native build's.
+if(EMSCRIPTEN)
+    set(cabirNative OFF)
+else()
+    set(cabirNative ${PROJECT_IS_TOP_LEVEL})
+endif()
+
 # THE TOOLS — no JUCE: cabgen renders a table to files, irlook reads an IR's response back.
-option(CABIR_TOOLS "Build cabgen and irlook" ${PROJECT_IS_TOP_LEVEL})
+option(CABIR_TOOLS "Build cabgen and irlook" ${cabirNative})
 if(CABIR_TOOLS)
     add_executable(cabgen tools/cabgen.cpp)
     target_link_libraries(cabgen PRIVATE cabir_synth)
@@ -65,7 +72,7 @@ if(CABIR_TOOLS)
 endif()
 
 # THE TESTS — no JUCE: the state's text, read and written.
-option(CABIR_TESTS "Build the tests" ${PROJECT_IS_TOP_LEVEL})
+option(CABIR_TESTS "Build the tests" ${cabirNative})
 if(CABIR_TESTS)
     enable_testing()
     add_executable(cabir_state_test tests/StateTests.cpp)
@@ -75,7 +82,49 @@ if(CABIR_TESTS)
 endif()
 
 # THE APP — Cab IR Generator itself: the panel, a player through the family's convolver, the family's version window.
-option(CABIR_APP "Build the standalone app" ${PROJECT_IS_TOP_LEVEL})
+option(CABIR_APP "Build the standalone app" ${cabirNative})
+option(CABIR_WEB "Build the page's module (src/web) and irdump, the check of it against the native build" ${PROJECT_IS_TOP_LEVEL})
+
+# felitronics-core — the convolver the plugins play their cabinets through, on pffft; the page's module asks it only
+# the level it plays an IR at, on core's own FFT.
+if((CABIR_APP OR CABIR_WEB) AND NOT TARGET felitronics::convolution)
+    if(EMSCRIPTEN)
+        set(FELITRONICS_WITH_PFFFT OFF CACHE BOOL "the page's module on core's own FFT" FORCE)
+    else()
+        set(FELITRONICS_WITH_PFFFT ON CACHE BOOL "the cabinet's convolver on the pffft SIMD FFT" FORCE)
+    endif()
+    set(CABIR_CORE_TAG "v0.61.2" CACHE STRING "felitronics-core release tag (fetched when no local checkout)")
+    set(CABIR_CORE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../felitronics-core" CACHE PATH "Local felitronics-core checkout (used if present)")
+    if(CABIR_CORE_DIR AND EXISTS "${CABIR_CORE_DIR}/CMakeLists.txt")
+        FetchContent_Declare(felitronics_core SOURCE_DIR "${CABIR_CORE_DIR}")
+        set(cabirCoreVersion "local")
+    else()
+        FetchContent_Declare(felitronics_core GIT_REPOSITORY https://github.com/darwinscat/felitronics-core.git GIT_TAG ${CABIR_CORE_TAG} GIT_SHALLOW TRUE)
+        set(cabirCoreVersion "${CABIR_CORE_TAG}")
+    endif()
+    FetchContent_MakeAvailable(felitronics_core)
+endif()
+
+# THE PAGE'S MODULE — the synthesis behind a C ABI (src/web/CabirWeb.cpp). Built native too, under irdump, which renders
+# the factory presets through it: the same call from both builds, written to a file, the two files compared.
+if(CABIR_WEB)
+    add_library(cabir_web_abi STATIC src/web/CabirWeb.cpp)
+    target_link_libraries(cabir_web_abi PUBLIC cabir_synth felitronics::convolution)
+    add_executable(irdump tools/irdump.cpp)
+    target_link_libraries(irdump PRIVATE cabir_web_abi)
+    if(EMSCRIPTEN)
+        target_link_options(irdump PRIVATE -sNODERAWFS=1 -sALLOW_MEMORY_GROWTH=1 -sENVIRONMENT=node)
+        add_executable(cabir_web src/web/CabirWeb.cpp)
+        target_link_libraries(cabir_web PRIVATE cabir_synth felitronics::convolution)
+        set_target_properties(cabir_web PROPERTIES OUTPUT_NAME cabir SUFFIX ".mjs")
+        target_link_options(cabir_web PRIVATE
+            -sMODULARIZE=1 -sEXPORT_ES6=1 -sEXPORT_NAME=createCabir -sENVIRONMENT=web,worker,node
+            -sALLOW_MEMORY_GROWTH=1 -sFILESYSTEM=0
+            "-sEXPORTED_RUNTIME_METHODS=['ccall','cwrap','HEAPF32','HEAPU8','UTF8ToString','stringToNewUTF8']"
+            "-sEXPORTED_FUNCTIONS=['_malloc','_free']")
+    endif()
+endif()
+
 if(CABIR_APP)
     # JUCE, pinned as the family's plugins pin it; a local tree first.
     set(CABIR_JUCE_TAG "8.0.16-security" CACHE STRING "JUCE git tag to build against")
@@ -88,19 +137,6 @@ if(CABIR_APP)
         FetchContent_Declare(juce GIT_REPOSITORY https://github.com/juce-framework/JUCE.git GIT_TAG ${CABIR_JUCE_TAG} GIT_SHALLOW TRUE)
     endif()
     FetchContent_MakeAvailable(juce)
-
-    # felitronics-core — the convolver the plugins play their cabinets through, on pffft.
-    set(FELITRONICS_WITH_PFFFT ON CACHE BOOL "the cabinet's convolver on the pffft SIMD FFT" FORCE)
-    set(CABIR_CORE_TAG "v0.61.2" CACHE STRING "felitronics-core release tag (fetched when no local checkout)")
-    set(CABIR_CORE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../felitronics-core" CACHE PATH "Local felitronics-core checkout (used if present)")
-    if(CABIR_CORE_DIR AND EXISTS "${CABIR_CORE_DIR}/CMakeLists.txt")
-        FetchContent_Declare(felitronics_core SOURCE_DIR "${CABIR_CORE_DIR}")
-        set(cabirCoreVersion "local")
-    else()
-        FetchContent_Declare(felitronics_core GIT_REPOSITORY https://github.com/darwinscat/felitronics-core.git GIT_TAG ${CABIR_CORE_TAG} GIT_SHALLOW TRUE)
-        set(cabirCoreVersion "${CABIR_CORE_TAG}")
-    endif()
-    FetchContent_MakeAvailable(felitronics_core)
 
     # felitronics-appkit — the brand, the version window, the audio settings.
     set(CABIR_APPKIT_TAG "v0.22.0" CACHE STRING "felitronics-appkit release tag (fetched when no local checkout)")
