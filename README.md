@@ -1,5 +1,7 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 
+<p align="center"><img src="assets/logo/lockup.svg" alt="Cab IR Generator" width="520"></p>
+
 # Cab IR Generator
 
 Bass cabinet impulse responses, synthesized: a box of each size, its back closed, ported or open, a
@@ -20,6 +22,7 @@ One code base for three homes:
 - `data/cabinets.txt` — the cabinets, mics and positions the synthesis reads.
 - `src/panel/` — the panel and the miniature, JUCE views; colours and type come from the host (`Look`).
 - `tools/` — `cabgen` renders a table to files, `irlook` reads an IR's response back.
+- `assets/logo/` — the mark (the app's icon) and the lockup with the name.
 
 ## Licence
 
