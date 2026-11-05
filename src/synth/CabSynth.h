@@ -1077,60 +1077,92 @@ inline Pair pairOf (const State& s)
     turn of B's spectrum, no render — and the place carries it. */
 struct Place { double x = 0, y = 0, distance = 0.05, shiftMs = 0; };
 
-inline Place quietPlaceForB (const Table& table, const State& s, size_t n = 1 << 13,
-                             const std::function<void (const Place&, double score)>& tried = {}, bool thorough = false)
+/** THE SEARCH IN ITS STEPS, for whoever spreads it: the places of the first round (coarse), one place judged (score) —
+    nothing a place's judging reads is written by another's, so they go to any thread or worker in any order — the
+    places of the second round about the four best of the first (fine), and the one kept (best). quietPlaceForB below
+    runs them on this machine's threads; a page runs them on its workers, through the same calls. */
+class BSearch
 {
-    const auto started = std::chrono::steady_clock::now();
-    State both = s;
-    both.a.on = both.b.on = true;
-    const auto pair = pairOf (both);
-    auto ca = cabAt (table, s.box, pair.a);
-    const double da = firstArrival (ca);
+public:
+    struct Judged { double score = -1e30, shiftMs = 0; };   // -1e30: not judged
 
-    constexpr size_t spectrum = 1 << 15;   // padded past the IR: a 24th of an octave at 40 Hz still spans bins
-    const auto spectrumOf = [] (const std::vector<double>& ir, double gain)
+    BSearch (const Table& t, const State& s, size_t size = 1 << 13)
+        : table (t), state (s), n (size)
     {
-        std::vector<cd> x (spectrum, 0.0);
-        for (size_t i = 0; i < ir.size() && i < spectrum; ++i) x[i] = gain * ir[i];
-        fft (x, false);
-        return x;
-    };
-    const auto middle = [n] (const std::vector<double>& ir)
-    {
-        std::vector<cd> x (n, 0.0);
-        for (size_t i = 0; i < ir.size() && i < n; ++i) x[i] = ir[i];
-        fft (x, false);
-        double e = 1e-30;
-        for (size_t k = (size_t) (500.0 * (double) n / fs); k <= (size_t) (2000.0 * (double) n / fs); ++k) e += std::norm (x[k]);
-        return std::sqrt (e);
-    };
-    const auto power = [] (const std::vector<cd>& x, double hz, double ratio, const std::vector<cd>* plus)
-    {
-        const double bin = fs / (double) spectrum;
-        const auto lo = (size_t) std::max (1.0, std::floor (hz / ratio / bin)), hi = (size_t) std::ceil (hz * ratio / bin);
-        double e = 0;
-        for (size_t k = lo; k <= hi; ++k) e += std::norm (plus != nullptr ? x[k] + (*plus)[k] : x[k]);
-        return e + 1e-30;
-    };
-
-    std::vector<double> iaAligned;
-    if (both.align)
-    {
-        ca.refDelay = da;
-        iaAligned = render (ca, n);
+        both = s;
+        both.a.on = both.b.on = true;
+        pair = pairOf (both);
+        ca = cabAt (table, s.box, pair.a);
+        da = firstArrival (ca);
+        if (both.align)
+        {
+            ca.refDelay = da;
+            iaAligned = render (ca, n);
+        }
     }
 
-    struct Candidate { Place place; double score = -1e30; };
-    const auto onA = [&pair] (const Place& p)
-    { return std::hypot (p.x - pair.a.x, p.y - pair.a.y) < 0.1 && std::abs (p.distance - pair.a.distance) < 0.01; };
+    /** The first round: eight across, three up and down, four distances — those not right on A. */
+    std::vector<Place> coarse() const
+    {
+        std::vector<Place> out;
+        for (const double x : { -0.9, -0.65, -0.4, -0.15, 0.15, 0.4, 0.65, 0.9 })
+            for (const double y : { -0.35, 0.0, 0.35 })
+                for (const double distance : { 0.02, 0.04, 0.07, 0.12 })
+                    if (const Place p { x, y, distance }; ! onA (p))
+                        out.push_back (p);
+        return out;
+    }
 
-    const auto score = [&] (Candidate& c)
+    /** The second round, about the four best of the first (`judged` in coarse()'s order): nine places about each, four
+        distances about its own — the best's first, so a deadline cuts the least likely. */
+    std::vector<Place> fine (const std::vector<Place>& first, const std::vector<Judged>& judged) const
+    {
+        const auto order = ranked (first, judged);
+        std::vector<Place> out;
+        for (size_t seed = 0; seed < std::min<size_t> (4, order.size()); ++seed)
+        {
+            const auto& at = first[order[seed]];
+            for (const double dx : { -0.08, 0.0, 0.08 })
+                for (const double dy : { -0.08, 0.0, 0.08 })
+                    for (const double k : { 0.75, 0.9, 1.1, 1.3 })
+                    {
+                        const Place p { std::clamp (at.x + dx, -1.05, 1.05), std::clamp (at.y + dy, -1.05, 1.05),
+                                        std::clamp (at.distance * k, 0.01, 0.30) };
+                        if (std::hypot (p.x, p.y) <= 1.05 && ! onA (p))
+                            out.push_back (p);
+                    }
+        }
+        return out;
+    }
+
+    /** The place kept: the first round's best, unless the second found one better (its unjudged passed over). */
+    Place best (const std::vector<Place>& first, const std::vector<Judged>& firstJudged,
+                const std::vector<Place>& second = {}, const std::vector<Judged>& secondJudged = {}) const
+    {
+        const auto order = ranked (first, firstJudged);
+        if (order.empty())
+            return { pair.b.x, pair.b.y, pair.b.distance };
+        Place kept = first[order.front()];
+        kept.shiftMs = firstJudged[order.front()].shiftMs;
+        double keptScore = firstJudged[order.front()].score;
+        for (size_t i = 0; i < second.size() && i < secondJudged.size(); ++i)
+            if (secondJudged[i].score > keptScore + 1e-9)
+            {
+                kept = second[i];
+                kept.shiftMs = secondJudged[i].shiftMs;
+                keptScore = secondJudged[i].score;
+            }
+        return kept;
+    }
+
+    /** One place judged, as the pair hears it, at its best shift of B in time. */
+    Judged score (const Place& place) const
     {
         auto spot = pair.b;
-        spot.x = c.place.x;
-        spot.y = c.place.y;
-        spot.distance = c.place.distance;
-        auto cb = cabAt (table, s.box, spot);
+        spot.x = place.x;
+        spot.y = place.y;
+        spot.distance = place.distance;
+        auto cb = cabAt (table, state.box, spot);
         auto aHere = ca;
         const double db = firstArrival (cb), first = std::min (da, db);
         cb.refDelay = both.align ? db : first;
@@ -1144,7 +1176,7 @@ inline Place quietPlaceForB (const Table& table, const State& s, size_t n = 1 <<
         for (int i = 0; i < 72; ++i)
         {
             hzOf[i] = 40.0 * std::pow (12000.0 / 40.0, i / 71.0);
-            apart[i] = power (a, hzOf[i], ratio, nullptr) + power (b, hzOf[i], ratio, nullptr);
+            apart[i] = power (a, hzOf[i], ratio) + power (b, hzOf[i], ratio);
         }
         double bestSum = -1e30, bestShift = 0;
         for (int step = -10; step <= 10; ++step)
@@ -1165,17 +1197,95 @@ inline Place quietPlaceForB (const Table& table, const State& s, size_t n = 1 <<
                 bestShift = tau;
             }
         }
-        c.score = bestSum;
-        c.place.shiftMs = bestShift * 1000.0;
-        if (tried)
-            tried (c.place, bestSum);
-    };
+        return { bestSum, bestShift * 1000.0 };
+    }
 
-    // Every candidate judged, the first first — or, given a deadline, those reached before it.
-    using Clock = std::chrono::steady_clock;
-    const auto judgeAll = [&score] (std::vector<Candidate>& all, Clock::time_point deadline)
+private:
+    static constexpr size_t spectrum = 1 << 15;   // padded past the IR: a 24th of an octave at 40 Hz still spans bins
+
+    const Table& table;
+    State state, both;
+    size_t n;
+    Pair pair;
+    Cab ca;
+    double da = 0;
+    std::vector<double> iaAligned;   // A rendered once, when the pair is aligned
+
+    bool onA (const Place& p) const   // two of one mic there are one mic
+    { return std::hypot (p.x - pair.a.x, p.y - pair.a.y) < 0.1 && std::abs (p.distance - pair.a.distance) < 0.01; }
+
+    /** The judged, best first. Places that score the same — often several with no dip at all — nearest where B stands
+        first, so B moves no further than it must; then nearest its distance; then in their order. The same on every
+        build, whatever its sort. */
+    std::vector<size_t> ranked (const std::vector<Place>& places, const std::vector<Judged>& judged) const
     {
-        const auto judge = [&] (size_t i) { if (Clock::now() < deadline) score (all[i]); };
+        std::vector<size_t> order (std::min (places.size(), judged.size()));
+        for (size_t i = 0; i < order.size(); ++i) order[i] = i;
+        const auto across = [this, &places] (size_t i) { return std::hypot (places[i].x - pair.b.x, places[i].y - pair.b.y); };
+        const auto deep = [this, &places] (size_t i) { return std::abs (places[i].distance - pair.b.distance); };
+        std::stable_sort (order.begin(), order.end(), [&] (size_t a, size_t b)
+        {
+            if (judged[a].score > judged[b].score) return true;
+            if (judged[a].score < judged[b].score) return false;
+            const double na = across (a), nb = across (b);
+            if (na < nb) return true;
+            if (na > nb) return false;
+            return deep (a) < deep (b);
+        });
+        return order;
+    }
+
+    static std::vector<cd> spectrumOf (const std::vector<double>& ir, double gain)
+    {
+        std::vector<cd> x (spectrum, 0.0);
+        for (size_t i = 0; i < ir.size() && i < spectrum; ++i) x[i] = gain * ir[i];
+        fft (x, false);
+        return x;
+    }
+
+    double middle (const std::vector<double>& ir) const
+    {
+        std::vector<cd> x (n, 0.0);
+        for (size_t i = 0; i < ir.size() && i < n; ++i) x[i] = ir[i];
+        fft (x, false);
+        double e = 1e-30;
+        for (size_t k = (size_t) (500.0 * (double) n / fs); k <= (size_t) (2000.0 * (double) n / fs); ++k) e += std::norm (x[k]);
+        return std::sqrt (e);
+    }
+
+    static double power (const std::vector<cd>& x, double hz, double ratio)
+    {
+        const double bin = fs / (double) spectrum;
+        const auto lo = (size_t) std::max (1.0, std::floor (hz / ratio / bin)), hi = (size_t) std::ceil (hz * ratio / bin);
+        double e = 0;
+        for (size_t k = lo; k <= hi; ++k) e += std::norm (x[k]);
+        return e + 1e-30;
+    }
+};
+
+inline Place quietPlaceForB (const Table& table, const State& s, size_t n = 1 << 13,
+                             const std::function<void (const Place&, double score)>& tried = {}, bool thorough = false)
+{
+    const auto started = std::chrono::steady_clock::now();
+    const BSearch search (table, s, n);
+
+    // Every place judged, the first first — or, given a deadline, those reached before it.
+    using Clock = std::chrono::steady_clock;
+    const auto judgeAll = [&search, &tried] (const std::vector<Place>& all, Clock::time_point deadline)
+    {
+        std::vector<BSearch::Judged> judged (all.size());
+        const auto judge = [&] (size_t i)
+        {
+            if (Clock::now() >= deadline)
+                return;
+            judged[i] = search.score (all[i]);
+            if (tried)
+            {
+                auto p = all[i];
+                p.shiftMs = judged[i].shiftMs;
+                tried (p, judged[i].score);
+            }
+        };
 #if defined(__EMSCRIPTEN__) && ! defined(__EMSCRIPTEN_PTHREADS__)
         for (size_t i = 0; i < all.size(); ++i)
             judge (i);
@@ -1189,40 +1299,16 @@ inline Place quietPlaceForB (const Table& table, const State& s, size_t n = 1 <<
         for (auto& f : others)
             f.get();
 #endif
+        return judged;
     };
 
-    std::vector<Candidate> coarse;
-    for (const double x : { -0.9, -0.65, -0.4, -0.15, 0.15, 0.4, 0.65, 0.9 })
-        for (const double y : { -0.35, 0.0, 0.35 })
-            for (const double distance : { 0.02, 0.04, 0.07, 0.12 })
-                if (const Place p { x, y, distance }; ! onA (p))
-                    coarse.push_back ({ p });
-    judgeAll (coarse, Clock::time_point::max());
-    std::sort (coarse.begin(), coarse.end(), [] (const Candidate& a, const Candidate& b) { return a.score > b.score; });
-
-    Candidate best = coarse.empty() ? Candidate { { pair.b.x, pair.b.y, pair.b.distance } } : coarse.front();
-    if (thorough && ! coarse.empty())
-    {
-        std::vector<Candidate> fine;
-        for (size_t seed = 0; seed < std::min<size_t> (4, coarse.size()); ++seed)
-        {
-            const auto& at = coarse[seed].place;
-            for (const double dx : { -0.08, 0.0, 0.08 })
-                for (const double dy : { -0.08, 0.0, 0.08 })
-                    for (const double k : { 0.75, 0.9, 1.1, 1.3 })
-                    {
-                        const Place p { std::clamp (at.x + dx, -1.05, 1.05), std::clamp (at.y + dy, -1.05, 1.05),
-                                        std::clamp (at.distance * k, 0.01, 0.30) };
-                        if (std::hypot (p.x, p.y) <= 1.05 && ! onA (p))
-                            fine.push_back ({ p });
-                    }
-        }
-        judgeAll (fine, started + std::chrono::seconds (2));   // the nearest the best first: what is reached in two seconds
-        for (const auto& c : fine)
-            if (c.score > best.score + 1e-9)
-                best = c;
-    }
-    return best.place;
+    const auto first = search.coarse();
+    const auto firstJudged = judgeAll (first, Clock::time_point::max());
+    if (! thorough)
+        return search.best (first, firstJudged);
+    const auto second = search.fine (first, firstJudged);
+    const auto secondJudged = judgeAll (second, started + std::chrono::seconds (2));   // what is reached in two seconds
+    return search.best (first, firstJudged, second, secondJudged);
 }
 
 /** The cabinets the table holds, by the names their cap sections give them, in the table's order. */
