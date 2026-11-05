@@ -5,7 +5,7 @@ All notable changes to **Cab IR Generator** are documented here. The format foll
 [Keep a Changelog](https://keepachangelog.com/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
-## [0.1.0] — unreleased — the first release
+## [0.1.0] — 2026-11-05 — the first release
 
 Bass cabinet IRs, synthesized while you place the mics: a standalone app for macOS, Windows and Linux,
 and the same panel for the web page.
