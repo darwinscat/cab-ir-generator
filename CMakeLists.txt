@@ -69,6 +69,8 @@ if(CABIR_TOOLS)
     target_link_libraries(irlook PRIVATE cabir_synth)
     add_executable(presetcheck tools/presetcheck.cpp)
     target_link_libraries(presetcheck PRIVATE cabir_synth)
+    add_executable(cabpack tools/cabpack.cpp)   # the IR packs a page offers (tools/cabpack.sh)
+    target_link_libraries(cabpack PRIVATE cabir_synth)
 endif()
 
 # THE TESTS — no JUCE: the state's text, read and written.
