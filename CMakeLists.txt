@@ -2,6 +2,13 @@
 # Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of Cab IR Generator — see LICENSE.
 
 cmake_minimum_required(VERSION 3.22)
+
+# Before project(): the oldest macOS the app runs on (left unset it is the build machine's own), and the
+# C++ runtime inside the Windows .exe so a zip runs alone. Both slices of a macOS release, Apple silicon
+# and Intel, are asked for by release.yml, so a build while we work compiles one.
+set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "The oldest macOS the binaries run on")
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+
 project(cab_ir_generator VERSION 0.1.0 LANGUAGES C CXX)
 
 include(FetchContent)
