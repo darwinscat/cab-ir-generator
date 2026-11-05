@@ -1,0 +1,26 @@
+name = "MODERN · 4x6 CRYSTAL"
+style = "Modern"
+cabir = 1
+box = "NY-604"
+back = "ported"
+horn = true
+horn_db = -6
+blend = 0.400
+align = true
+invert = false
+
+[mic.a]
+on = true
+model = "md421"
+x = 0.000
+y = 0.000
+distance = 0.030
+angle = 0.0
+
+[mic.b]
+on = true
+model = "u87"
+x = 0.000
+y = 0.000
+distance = 0.150
+angle = 0.0

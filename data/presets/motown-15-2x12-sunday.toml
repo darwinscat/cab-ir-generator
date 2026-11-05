@@ -1,0 +1,26 @@
+name = "MOTOWN · 2x12 SUNDAY"
+style = "Motown"
+cabir = 1
+box = "VB-212"
+back = "ported"
+horn = false
+horn_db = -12
+blend = 0.500
+align = true
+invert = false
+
+[mic.a]
+on = true
+model = "re20"
+x = 0.300
+y = 0.000
+distance = 0.100
+angle = 0.0
+
+[mic.b]
+on = false
+model = "u87"
+x = 0.400
+y = 0.000
+distance = 0.250
+angle = 0.0
