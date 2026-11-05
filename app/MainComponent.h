@@ -30,11 +30,13 @@ public:
     MainComponent();
     ~MainComponent() override;
 
-    static constexpr int headerH = 38, stripH = 34;
+    static constexpr int brandH = 56, presetH = 40, headerH = brandH + presetH, stripH = 34;
 
     void paint (juce::Graphics&) override;
     void resized() override;
     void mouseDown (const juce::MouseEvent&) override;
+    void mouseMove (const juce::MouseEvent&) override;
+    void mouseExit (const juce::MouseEvent&) override;
     bool keyPressed (const juce::KeyPress&) override;
 
     bool isInterestedInFileDrag (const juce::StringArray&) override { return true; }
@@ -59,7 +61,8 @@ private:
     std::unique_ptr<juce::FileChooser> chooser;
 
     felitronics::appkit::CompareHistory history;   // undo/redo and A/B/C/D over `state`, as its TOML
-    std::unique_ptr<juce::Drawable> mark;          // the logo's mark, in the header
+    std::unique_ptr<juce::Drawable> mark, cat;     // the logo's mark and the family's cat, in the header
+    bool brandHover = false;                       // the hand over the brand: it links to the product's page
     juce::String presetName;                       // the preset last loaded or saved — dim once edited
     std::string presetText;                        // ...as its state's TOML, to tell
 
@@ -80,6 +83,9 @@ private:
     void timerCallback() override;
 
     juce::Rectangle<int> header() const { return getLocalBounds().removeFromTop (headerH); }
+    juce::Rectangle<int> brandRow() const;
+    juce::Rectangle<int> presetRow() const;
+    juce::Rectangle<int> brandLink() const;
     juce::Rectangle<int> undoArea() const;
     juce::Rectangle<int> redoArea() const;
     juce::Rectangle<int> presetArea() const;

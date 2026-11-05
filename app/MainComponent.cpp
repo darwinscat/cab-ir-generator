@@ -7,6 +7,8 @@
 #include <felitronics/appkit/AudioSettingsPanel.h>
 #include <felitronics/appkit/BrandAssets.h>
 #include <felitronics/toml/Toml.h>
+
+#include <cstring>
 #include <panel/Response.h>
 #include <synth/CabSynth.h>
 
@@ -15,7 +17,24 @@ namespace cabir::app
 
 namespace
 {
-    std::unique_ptr<juce::Drawable> markOf() { return juce::Drawable::createFromImageData (BinaryData::mark_svg, (size_t) BinaryData::mark_svgSize); }
+    /** The logo's mark for the header: its icon's tile left out (the first rounded rectangle), the lines alone on the
+        panel, the way the family's headers draw the orbit. */
+    std::unique_ptr<juce::Drawable> markOf()
+    {
+        auto xml = juce::parseXML (juce::String::fromUTF8 (BinaryData::mark_svg, BinaryData::mark_svgSize));
+        if (xml == nullptr)
+            return {};
+        if (auto* tile = xml->getChildByName ("rect"))
+            xml->removeChildElement (tile, true);
+        return juce::Drawable::createFromSVG (*xml);
+    }
+
+    std::unique_ptr<juce::Drawable> catOf()
+    {
+        return juce::Drawable::createFromImageData (felitronics::appkit::brand::assets::catSvg, std::strlen (felitronics::appkit::brand::assets::catSvg));
+    }
+
+    const juce::String productUrl = "https://github.com/darwinscat/cab-ir-generator";
 
     juce::PropertiesFile::Options storage()
     {
@@ -77,6 +96,7 @@ MainComponent::MainComponent()
 {
     properties.setStorageParameters (storage());
     mark = markOf();
+    cat = catOf();
 
     // The panel in the family's look: its palette, Michroma, and the tracking the panel lays its words out by.
     look().font = brandFont;
@@ -443,6 +463,24 @@ void MainComponent::timerCallback()
     engine.flush();
 }
 
+void MainComponent::mouseMove (const juce::MouseEvent& e)
+{
+    const bool over = brandLink().contains (e.getPosition());
+    setMouseCursor (over ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
+    if (over != brandHover)
+    {
+        brandHover = over;
+        repaint (brandRow());
+    }
+}
+
+void MainComponent::mouseExit (const juce::MouseEvent&)
+{
+    brandHover = false;
+    setMouseCursor (juce::MouseCursor::NormalCursor);
+    repaint (brandRow());
+}
+
 bool MainComponent::keyPressed (const juce::KeyPress& key)
 {
     const auto command = juce::ModifierKeys::commandModifier;
@@ -454,15 +492,26 @@ bool MainComponent::keyPressed (const juce::KeyPress& key)
 }
 
 // ---------------------------------------------------------------- the header
-juce::Rectangle<int> MainComponent::undoArea() const   { return header().reduced (8, 6).withX (220).withWidth (64); }
-juce::Rectangle<int> MainComponent::redoArea() const   { return undoArea().translated (70, 0); }
-juce::Rectangle<int> MainComponent::prevArea() const   { return { redoArea().getRight() + 18, undoArea().getY(), 28, undoArea().getHeight() }; }
-juce::Rectangle<int> MainComponent::presetArea() const { return { prevArea().getRight() + 4, undoArea().getY(), 300, undoArea().getHeight() }; }
-juce::Rectangle<int> MainComponent::nextArea() const   { return { presetArea().getRight() + 4, undoArea().getY(), 28, undoArea().getHeight() }; }
+// Two rows: the brand — the cat, the mark, the name and the byline, as the family's headers carry them — with UNDO,
+// REDO and A/B/C/D at its right; under it the preset, centred (the owner, 05.11).
+juce::Rectangle<int> MainComponent::brandRow() const   { return header().removeFromTop (brandH); }
+juce::Rectangle<int> MainComponent::presetRow() const  { return header().withTrimmedTop (brandH); }
 juce::Rectangle<int> MainComponent::registerArea (int i) const
 {
-    const auto h = header().reduced (8, 6);
-    return { h.getRight() - (4 - i) * 34 + 4, h.getY(), 30, h.getHeight() };
+    const auto b = brandRow();
+    return { b.getRight() - 12 - (4 - i) * 36 + 4, b.getCentreY() - 15, 30, 30 };
+}
+juce::Rectangle<int> MainComponent::redoArea() const   { return registerArea (0).translated (-52, 0); }
+juce::Rectangle<int> MainComponent::undoArea() const   { return redoArea().translated (-38, 0); }
+juce::Rectangle<int> MainComponent::presetArea() const { return presetRow().withSizeKeepingCentre (460, presetRow().getHeight() - 10); }
+juce::Rectangle<int> MainComponent::prevArea() const   { return presetArea().withWidth (30).translated (-36, 0); }
+juce::Rectangle<int> MainComponent::nextArea() const   { return presetArea().withX (presetArea().getRight() + 6).withWidth (30); }
+juce::Rectangle<int> MainComponent::brandLink() const
+{
+    const float h = (float) brandH;
+    const auto name = look().font (h * 0.40f), by = look().font (h * 0.26f);
+    const float right = h * 2.0f + 18.0f + look().trackedWidth ("Cab IR Generator", name, 0.0f) + 14.0f + look().trackedWidth ("by Darwin's Cat", by, 0.0f) + 8.0f;
+    return { 0, 0, juce::roundToInt (right), brandH };
 }
 
 // ---------------------------------------------------------------- the strip
@@ -486,17 +535,74 @@ void MainComponent::paint (juce::Graphics& g)
         look().drawTracked (g, word, b, font, 0.06f, juce::Justification::centred);
     };
 
-    // The header: the mark and the name; UNDO, REDO; the preset; A/B/C/D.
+    // The header's brand row: the cat, the mark, the name and the byline; UNDO and REDO; A/B/C/D.
     {
-        const auto h = header();
-        g.setColour (look().hair);
-        g.fillRect (h.withTop (h.getBottom() - 1));
+        const auto b = brandRow().toFloat();
+        const float h = b.getHeight();
+        if (brandHover)
+        {
+            g.setColour (look().violet.withAlpha (0.14f));   // the link run lit under the hand
+            g.fillRoundedRectangle (brandLink().toFloat().reduced (2.0f), 8.0f);
+        }
+        if (cat != nullptr)
+            cat->drawWithin (g, juce::Rectangle<float> (6.0f, 4.0f, h - 8.0f, h - 8.0f), juce::RectanglePlacement::centred, 1.0f);
         if (mark != nullptr)
-            mark->drawWithin (g, juce::Rectangle<float> (26.0f, 26.0f).withCentre ({ 22.0f, (float) h.getCentreY() }), juce::RectanglePlacement::centred, 1.0f);
-        g.setColour (look().tx);
-        look().drawTracked (g, "CAB IR GENERATOR", { 42.0f, (float) h.getY(), 170.0f, (float) h.getHeight() }, font, 0.08f, juce::Justification::centredLeft);
-        button ("UNDO", undoArea(), false, history.canUndo());
-        button ("REDO", redoArea(), false, history.canRedo());
+            mark->drawWithin (g, juce::Rectangle<float> (h + 6.0f, 4.0f, h - 8.0f, h - 8.0f), juce::RectanglePlacement::centred, 1.0f);
+        const auto name = look().font (h * 0.40f), by = look().font (h * 0.26f);
+        float x = h * 2.0f + 18.0f;
+        g.setColour (brandHover ? juce::Colours::white : look().tx);
+        look().drawTracked (g, "Cab IR Generator", { x, b.getY(), 400.0f, h }, name, 0.0f, juce::Justification::centredLeft);
+        x += look().trackedWidth ("Cab IR Generator", name, 0.0f) + 14.0f;
+        g.setColour (brandHover ? look().violet.brighter (0.3f) : look().violet);
+        // the byline on the name's baseline
+        const float baseline = b.getCentreY() + (name.getAscent() - name.getDescent()) * 0.5f;
+        look().drawTracked (g, "by Darwin's Cat", { x, baseline - by.getAscent(), 260.0f, by.getHeight() }, by, 0.0f, juce::Justification::topLeft);
+
+        const auto arrow = [&] (juce::Rectangle<int> r, bool back, bool enabled)
+        {
+            // a round arrow, as the family's headers draw undo and redo
+            const auto c = r.toFloat().getCentre();
+            const float rad = 8.0f;
+            juce::Path p;
+            p.addCentredArc (c.x, c.y, rad, rad, 0.0f, back ? 1.1f : -1.1f, back ? 1.1f + 4.6f : -1.1f - 4.6f, true);
+            g.setColour ((enabled ? look().txDim : look().txFaint).withMultipliedAlpha (enabled ? 1.0f : 0.5f));
+            g.strokePath (p, juce::PathStrokeType (2.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+            const float a = back ? 1.1f : -1.1f;
+            const juce::Point<float> tip (c.x + rad * std::sin (a), c.y - rad * std::cos (a));
+            juce::Path head;
+            head.addTriangle (tip.translated (back ? -4.5f : 4.5f, -3.0f), tip.translated (back ? 3.0f : -3.0f, -4.0f), tip.translated (0.0f, 4.0f));
+            g.fillPath (head);
+        };
+        arrow (undoArea(), true, history.canUndo());
+        arrow (redoArea(), false, history.canRedo());
+
+        static const char* const letters[] { "A", "B", "C", "D" };
+        const auto letter = look().font (16.0f);
+        for (int i = 0; i < 4; ++i)
+        {
+            const auto r = registerArea (i).toFloat();
+            const bool on = i == history.active();
+            if (on)
+            {
+                g.setColour (look().panel2);
+                g.fillRoundedRectangle (r, 6.0f);
+                g.setColour (look().lilac);
+                g.drawRoundedRectangle (r.reduced (0.5f), 6.0f, 1.4f);
+            }
+            g.setColour (on ? juce::Colours::white : look().txDim);
+            look().drawTracked (g, letters[i], r, letter, 0.0f, juce::Justification::centred);
+            if (history.registerEdited (i))   // a register changed since it was filled: an orange dot at its corner
+            {
+                g.setColour (look().orange);
+                g.fillEllipse (juce::Rectangle<float> (7.0f, 7.0f).withCentre (r.getTopRight().translated (-3.0f, 3.0f)));
+            }
+        }
+        g.setColour (look().hair);
+        g.fillRect (header().withTop (header().getBottom() - 1));
+    }
+
+    // ...and its preset row: one before, the preset, one after.
+    {
         const bool edited = presetName.isEmpty() || toToml (state) != presetText;
         const auto pr = presetArea().toFloat().reduced (0.5f);
         g.setColour (look().panel2);
@@ -509,9 +615,6 @@ void MainComponent::paint (juce::Graphics& g)
         look().drawTracked (g, juce::String::fromUTF8 ("\xe2\x96\xbe"), pr.reduced (10.0f, 0.0f), font, 0.0f, juce::Justification::centredRight);
         button (juce::String::fromUTF8 ("\xe2\x97\x80"), prevArea(), false);
         button (juce::String::fromUTF8 ("\xe2\x96\xb6"), nextArea(), false);
-        static const char* const letters[] { "A", "B", "C", "D" };
-        for (int i = 0; i < 4; ++i)
-            button (letters[i], registerArea (i), i == history.active(), true);
     }
 
     const auto s = strip();
@@ -541,6 +644,11 @@ void MainComponent::resized()
 void MainComponent::mouseDown (const juce::MouseEvent& e)
 {
     const auto p = e.getPosition();
+    if (brandLink().contains (p))
+    {
+        juce::URL (productUrl).launchInDefaultBrowser();
+        return;
+    }
     if (undoArea().contains (p))
         history.undo();
     else if (redoArea().contains (p))
