@@ -4,7 +4,9 @@
 // PRESETCHECK <table.txt> <preset.toml> ... [--suggest] — each preset read as the app reads it, rendered as the app renders
 // it, and said in one line: its box and mics known or not, how much its two mics cancel where they meet (the worst point,
 // 40 Hz-2 kHz and 2-12 kHz, in dB: 0 none, -3 a dip you hear), and its response's shape against its own 500 Hz-2 kHz middle
-// at 60, 100, 250, 1k, 3k and 6k Hz. --suggest adds where FIND would put B. No JUCE.
+// at 60, 100, 250, 1k, 3k and 6k Hz. --suggest adds where FIND would put B. --tune-shift moves B in time where that combs
+// less — B's place kept, -0.5 to +0.5 ms by 0.02 — and writes it into the file, only where a worst point gets at least
+// 0.3 dB better and neither gets worse. No JUCE.
 
 #include "../src/synth/CabSynth.h"
 #include "../src/synth/State.h"
@@ -71,13 +73,17 @@ int main (int argc, char** argv)
 {
     if (argc < 3) { std::fprintf (stderr, "presetcheck <table.txt> <preset.toml> ... [--suggest]\n"); return 2; }
     const auto table = synth::readTable (argv[1]);
-    bool suggest = false;
-    for (int i = 2; i < argc; ++i) suggest = suggest || std::strcmp (argv[i], "--suggest") == 0;
+    bool suggest = false, tune = false;
+    for (int i = 2; i < argc; ++i)
+    {
+        suggest = suggest || std::strcmp (argv[i], "--suggest") == 0;
+        tune = tune || std::strcmp (argv[i], "--tune-shift") == 0;
+    }
 
     int bad = 0;
     for (int i = 2; i < argc; ++i)
     {
-        if (std::strcmp (argv[i], "--suggest") == 0) continue;
+        if (std::strcmp (argv[i], "--suggest") == 0 || std::strcmp (argv[i], "--tune-shift") == 0) continue;
         std::ifstream in (argv[i]);
         std::stringstream ss;
         ss << in.rdbuf();
@@ -93,6 +99,46 @@ int main (int argc, char** argv)
         {
             std::printf ("BAD  %s:%s%s%s\n", argv[i], unknown.c_str(), name.empty() ? " no name" : "", style.empty() ? " no style" : "");
             ++bad;
+            continue;
+        }
+
+        // --tune-shift: B's time where its worst points comb least, B's place kept; written only where it pays.
+        if (tune && state->a.on && state->b.on)
+        {
+            synth::PairRenderer renderer;
+            const auto worstOf = [&] (double shiftMs)
+            {
+                auto s = *state;
+                s.shiftMs = shiftMs;
+                const auto pp = renderer.render (table, s.box, synth::pairOf (s));
+                const auto a = spectrumOf (pp.a), b = spectrumOf (pp.b);
+                return std::pair<double, double> { worstComb (a, b, 40, 2000), worstComb (a, b, 2000, 12000) };
+            };
+            const auto [lo0, hi0] = worstOf (state->shiftMs);
+            double bestShift = state->shiftMs, bestLo = lo0, bestHi = hi0;
+            for (int k = -25; k <= 25; ++k)
+            {
+                const double shift = k * 0.02;
+                const auto [lo, hi] = worstOf (shift);
+                const bool noWorse = lo >= lo0 - 0.05 && hi >= hi0 - 0.05, pays = lo - lo0 >= 0.3 || hi - hi0 >= 0.3;
+                if (noWorse && pays && lo + hi > bestLo + bestHi + 1e-6)
+                {
+                    bestShift = shift;
+                    bestLo = lo;
+                    bestHi = hi;
+                }
+            }
+            if (std::abs (bestShift - state->shiftMs) > 1e-9)
+            {
+                auto tuned = *state;
+                tuned.shiftMs = bestShift;
+                namespace t = felitronics::toml;
+                t::Table head;
+                (void) head.insert ("name", t::Value (name));
+                (void) head.insert ("style", t::Value (style));
+                std::ofstream (argv[i]) << t::write (head) + toToml (tuned);
+                std::printf ("TUNED %-40s shift %+.2f ms: comb %5.1f / %5.1f -> %5.1f / %5.1f\n", name.c_str(), bestShift, lo0, hi0, bestLo, bestHi);
+            }
             continue;
         }
 

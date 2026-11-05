@@ -43,7 +43,12 @@ std::string toToml (const State& s)
     (void) b.insert ("shift", decimal (s.shiftMs, 3));   // ms against A
     (void) mics.insert ("b", t::Value (std::move (b)));
     (void) root.insert ("mic", t::Value (std::move (mics)));
-    return t::write (root);
+    // The writer heads the mics' parent table too; with nothing of its own it says nothing, and the file reads the
+    // same without it — [mic.a] and [mic.b] imply it.
+    auto text = t::write (root);
+    if (const auto at = text.find ("[mic]\n\n[mic.a]"); at != std::string::npos)
+        text.erase (at, std::string ("[mic]\n\n").size());
+    return text;
 }
 
 std::optional<State> fromToml (std::string_view text)
