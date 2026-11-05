@@ -24,6 +24,9 @@
 //                                      none with one mic heard, whose search is one round (synth::MicSearch)
 //   cabir_with_b (toml, x, y, d, shift)   the state with B put where FIND found: its TOML (until the next call)
 //   cabir_with_found (toml, x, y, d, shift)   ...B with both mics heard, the one mic with one: what FIND found, put
+//   cabir_state_from_link (link)         the cabinet a link carries (panel/Link.h: what follows the page's `#`, a query, or
+//                                        a whole address) as its canonical TOML; null where it names no cabinet
+//   cabir_link_of (toml)                 ...and the part after `#` that carries a state (the page adds its address)
 //   cabir_b_on (toml)                    1 while the state hears B — B just taken up is when the app searches on its own
 //   cabir_find_best (judged, count)    the second round's pairs in (-1e30 for one not reached; none without thorough):
 //                                      the place at cabir_found()
@@ -32,6 +35,7 @@
 
 #include <felitronics/convolution/CabConvolver.h>
 #include <synth/CabSynth.h>
+#include <panel/Link.h>
 #include <synth/MicSearch.h>
 #include <synth/Response.h>
 #include <synth/State.h>
@@ -172,7 +176,12 @@ CABIR_EXPORT int cabir_render (const char* toml, int live)
     s.ir = s.renderer.render (s.table, state->box, synth::pairOf (*state), live != 0 ? (size_t) 1 << 13 : (size_t) 1 << 14);
     s.response = synth::responseOf (synth::as24Bit (s.ir.mix), 48000.0);
     s.comb = s.ir.a.empty() ? std::vector<float>() : synth::combOf (s.ir.a, s.ir.b);
-    s.wav = synth::wav24 (s.ir.mix, 48000);
+    synth::WavMeta meta;   // as the app's DOWNLOAD IR writes it: its line, the link that opens it, its TOML
+    meta.name = Panel::labelOf (*state).toStdString();
+    meta.software = std::string ("Cab IR Generator ") + CABIR_VERSION;
+    meta.comment = std::string (pageAddress) + "#" + linkOf (*state);
+    meta.preset = "name = \"" + meta.name + "\"\n\n" + toToml (*state);
+    s.wav = synth::wav24 (s.ir.mix, 48000, &meta);
     return (int) s.ir.mix.size();
 }
 
@@ -305,6 +314,28 @@ CABIR_EXPORT const char* cabir_with_found (const char* toml, double x, double y,
     if (pair)
         state->shiftMs = shiftMs;
     s.withB = toToml (*state);
+    return s.withB.c_str();
+}
+
+CABIR_EXPORT const char* cabir_state_from_link (const char* link)
+{
+    // The cabinet a link carries (panel/Link.h), as its canonical TOML — or null where it names no cabinet.
+    auto& s = session();
+    const auto state = fromLink (link != nullptr ? link : "");
+    if (! state)
+        return nullptr;
+    s.withB = toToml (*state);
+    return s.withB.c_str();
+}
+
+CABIR_EXPORT const char* cabir_link_of (const char* toml)
+{
+    // ...and the part after `#` that carries a state: the page and a WAV put the page's address before it.
+    auto& s = session();
+    const auto state = fromToml (toml != nullptr ? toml : "");
+    if (! state)
+        return nullptr;
+    s.withB = linkOf (*state);
     return s.withB.c_str();
 }
 

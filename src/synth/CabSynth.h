@@ -1323,21 +1323,62 @@ inline std::vector<std::string> cabinets (const Table& table)
     return out;
 }
 
-/** A 24-bit mono WAV of `x`, as the bytes a file of it would hold. */
-inline std::vector<unsigned char> wav24 (const std::vector<float>& x, int rate)
+/** WHAT A WAV SAYS OF ITSELF beside its sound — after the sound, so a loader that looks for the sound right after the
+    header finds it there, and one that knows no more skips the rest: a LIST/INFO chunk with its name (INAM), who made it
+    (IART, Darwin's Cat), with what (ISFT) and a comment (ICMT: the link that carries the cabinet), and the cabinet itself
+    as its preset's TOML in a chunk of our own, `cbir` — so the app, or OrbitBass's CUSTOM, opens the cabinet a file was
+    made of (the owner, 06.11). Empty strings are left out. */
+struct WavMeta
+{
+    std::string name, artist = "Darwin's Cat", software, comment, preset;
+};
+
+/** A 24-bit mono WAV of `x`, as the bytes a file of it would hold — and what `meta` says, when given. */
+inline std::vector<unsigned char> wav24 (const std::vector<float>& x, int rate, const WavMeta* meta = nullptr)
 {
     std::vector<unsigned char> b;
     const auto u32 = [&b] (uint32_t v) { for (int i = 0; i < 4; ++i) b.push_back ((unsigned char) (v >> (8 * i))); };
     const auto u16 = [&b] (uint16_t v) { b.push_back ((unsigned char) v); b.push_back ((unsigned char) (v >> 8)); };
     const auto tag = [&b] (const char* t) { b.insert (b.end(), t, t + 4); };
+    const auto put32 = [&b] (size_t at, uint32_t v) { for (int i = 0; i < 4; ++i) b[at + (size_t) i] = (unsigned char) (v >> (8 * i)); };
+    const auto pad = [&b] (size_t length) { if (length % 2 != 0) b.push_back (0); };   // a chunk ends on an even byte
+
     const uint32_t data = (uint32_t) x.size() * 3;
-    tag ("RIFF"); u32 (36 + data); tag ("WAVE"); tag ("fmt "); u32 (16); u16 (1); u16 (1); u32 ((uint32_t) rate);
+    tag ("RIFF"); u32 (0); tag ("WAVE"); tag ("fmt "); u32 (16); u16 (1); u16 (1); u32 ((uint32_t) rate);
     u32 ((uint32_t) rate * 3); u16 (3); u16 (24); tag ("data"); u32 (data);
     for (float v : x)
     {
         const auto s = (int32_t) std::lround (std::clamp ((double) v, -1.0, 1.0 - 1.0 / 8388608.0) * 8388608.0);
         b.push_back ((unsigned char) s); b.push_back ((unsigned char) (s >> 8)); b.push_back ((unsigned char) (s >> 16));
     }
+    pad (data);
+
+    if (meta != nullptr)
+    {
+        // A text chunk: its words and a nought after them, the chunk's length counting both.
+        const auto text = [&] (const char* id, const std::string& words)
+        {
+            if (words.empty())
+                return;
+            tag (id);
+            u32 ((uint32_t) words.size() + 1);
+            b.insert (b.end(), words.begin(), words.end());
+            b.push_back (0);
+            pad (words.size() + 1);
+        };
+        const size_t list = b.size();
+        tag ("LIST"); u32 (0); tag ("INFO");
+        text ("INAM", meta->name);
+        text ("IART", meta->artist);
+        text ("ISFT", meta->software);
+        text ("ICMT", meta->comment);
+        if (b.size() - list == 12)
+            b.resize (list);            // nothing said: no LIST at all
+        else
+            put32 (list + 4, (uint32_t) (b.size() - list - 8));
+        text ("cbir", meta->preset);
+    }
+    put32 (4, (uint32_t) (b.size() - 8));
     return b;
 }
 

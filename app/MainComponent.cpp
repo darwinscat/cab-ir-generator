@@ -11,6 +11,7 @@
 
 #include <cstring>
 #include <iterator>
+#include <panel/Link.h>
 #include <synth/CabSynth.h>
 #include <synth/MicSearch.h>
 #include <synth/Response.h>
@@ -181,14 +182,21 @@ void MainComponent::render (const State& s, bool live)
 {
     const int mine = ++latest;
     std::weak_ptr<int> stillHere = alive;
-    worker.addJob ([this, stillHere, mine, s, live]
+    // What the WAV says of itself (synth::WavMeta): the preset's name while it is the one that plays, else the cabinet as a
+    // line says it; the link that opens it on the page; and its TOML, named the same.
+    synth::WavMeta meta;
+    meta.name = (presetName.isNotEmpty() && toToml (s) == presetText ? presetName : CabPicker::labelOf (s)).toStdString();
+    meta.software = std::string ("Cab IR Generator ") + CABIR_VERSION;
+    meta.comment = std::string (pageAddress) + "#" + linkOf (s);
+    meta.preset = "name = \"" + meta.name + "\"\n\n" + toToml (s);
+    worker.addJob ([this, stillHere, mine, s, live, meta]
     {
         if (mine != latest.load())
             return;   // superseded before it began
         static const auto table = synth::parseTable (std::string (BinaryData::cabinets_txt, (size_t) BinaryData::cabinets_txtSize));
         // The mic that did not move kept, the one that did rendered at half the size while the hand is on it.
         auto ir = renderer.render (table, s.box, synth::pairOf (s), live ? (size_t) 1 << 13 : (size_t) 1 << 14);
-        auto wav = synth::wav24 (ir.mix, 48000);
+        auto wav = synth::wav24 (ir.mix, 48000, &meta);
 
         juce::MessageManager::callAsync ([this, stillHere, mine, s, live, ir, wav]() mutable
         {

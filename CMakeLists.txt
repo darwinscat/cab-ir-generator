@@ -37,6 +37,7 @@ add_library(cabir_synth INTERFACE)
 add_library(cabir::synth ALIAS cabir_synth)
 target_include_directories(cabir_synth INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_compile_features(cabir_synth INTERFACE cxx_std_20)
+target_compile_definitions(cabir_synth INTERFACE CABIR_VERSION="${PROJECT_VERSION}")   # what a WAV says made it (synth::WavMeta)
 target_sources(cabir_synth INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/src/synth/State.cpp")
 target_link_libraries(cabir_synth INTERFACE felitronics::toml)
 
@@ -175,7 +176,6 @@ if(CABIR_APP)
     juce_add_binary_data(CabIrRiffs HEADER_NAME RiffData.h NAMESPACE RiffData SOURCES ${cabirRiffs})
     target_compile_definitions(CabIrGenerator PRIVATE
         JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0
-        CABIR_VERSION="${PROJECT_VERSION}"
         CABIR_GIT_HASH="${cabirGitHash}"
         CABIR_CORE_VERSION="${cabirCoreVersion}"
         CABIR_TOML_VERSION="${cabirTomlVersion}"
