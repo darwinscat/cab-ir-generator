@@ -117,6 +117,7 @@ if(CABIR_APP)
         PRODUCT_NAME  "Cab IR Generator"
         COMPANY_NAME  "Darwin's Cat"
         BUNDLE_ID     com.darwinscat.cabirgenerator
+        ICON_BIG      "${CMAKE_CURRENT_SOURCE_DIR}/assets/logo/icon.png"   # the logo's mark, drawn from mark.svg
         VERSION       ${PROJECT_VERSION})
     target_sources(CabIrGenerator PRIVATE app/Main.cpp app/MainComponent.cpp app/Engine.cpp)
     file(GLOB cabirPresets CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/data/presets/*.toml")   # the factory's presets

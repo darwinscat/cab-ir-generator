@@ -22,7 +22,7 @@ One code base for three homes:
 - `data/cabinets.txt` — the cabinets, mics and positions the synthesis reads.
 - `src/panel/` — the panel and the miniature, JUCE views; colours and type come from the host (`Look`).
 - `tools/` — `cabgen` renders a table to files, `irlook` reads an IR's response back.
-- `assets/logo/` — the mark (the app's icon) and the lockup with the name.
+- `assets/logo/` — the mark, the app's icon drawn from it (`icon.png`, 1024 px), and the lockup with the name.
 
 ## Licence
 
