@@ -5,6 +5,7 @@
 
 #include "Look.h"
 #include "MicGlyphs.h"
+#include "../synth/State.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -193,6 +194,44 @@ public:
             s.a.horn = cabs()[(size_t) to].hornOn;
         if (s.a.mic.isEmpty())
             s.a.mic = cabs()[(size_t) to].mic;
+        return s;
+    }
+
+    /** THE STATE AND THE PANEL'S SETUP, one into the other (synth/State.h) — the horn and its step the panel keeps on
+        A's spot. A state's box not in cabs() comes back as -1. */
+    static std::pair<int, Setup> setupOf (const State& s)
+    {
+        const auto spot = [&s] (const Mic& m)
+        { return Spot { (float) m.x, (float) m.y, (float) m.distance, s.horn, juce::String (m.model), (float) m.angle, (float) s.hornDb }; };
+        return { indexOf (juce::String (s.box)), { spot (s.a), spot (s.b), (float) s.blend, s.align, s.invert, s.a.on, s.b.on, s.back } };
+    }
+
+    /** A STATE AS A LINE READS IT: its box's size, its back where turned from the box's own, and the mics heard —
+        "4x10 · MD421", "4x10 PORTED · MD421+U87", B's alone with A off. */
+    static juce::String labelOf (const State& s)
+    {
+        const int at = indexOf (juce::String (s.box));
+        const auto word = [at] (const Mic& m)
+        { return (m.model.empty() ? at >= 0 ? cabs()[(size_t) at].mic : juce::String() : juce::String (m.model)).toUpperCase(); };
+        const auto box = at < 0 ? juce::String (s.box)
+                       : wordOf (at) + (s.back >= 0 && s.back != ownBack (at) ? " " + juce::String (backWords[s.back]) : juce::String());
+        return box + juce::String::fromUTF8 (" \xc2\xb7 ")
+             + (s.a.on ? word (s.a) : juce::String()) + (s.a.on && s.b.on ? "+" : "") + (s.b.on ? word (s.b) : juce::String());
+    }
+
+    static State stateOf (int cab, const Setup& su)
+    {
+        const auto mic = [] (const Spot& sp, bool on) { return Mic { on, sp.mic.toStdString(), sp.x, sp.y, sp.distance, sp.angle }; };
+        State s;
+        s.box = cabs()[(size_t) cab].name.toStdString();
+        s.back = su.back;
+        s.horn = su.a.horn;
+        s.hornDb = su.a.hornDb;
+        s.a = mic (su.a, su.aOn);
+        s.b = mic (su.b, su.bOn);
+        s.blend = su.blend;
+        s.align = su.align;
+        s.invert = su.invert;
         return s;
     }
 

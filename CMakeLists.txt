@@ -2,7 +2,7 @@
 # Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of Cab IR Generator — see LICENSE.
 
 cmake_minimum_required(VERSION 3.22)
-project(cab_ir_generator VERSION 0.1.0 LANGUAGES CXX)
+project(cab_ir_generator VERSION 0.1.0 LANGUAGES C CXX)
 
 include(FetchContent)
 
@@ -62,4 +62,79 @@ if(CABIR_TESTS)
     add_executable(cabir_state_test tests/StateTests.cpp)
     target_link_libraries(cabir_state_test PRIVATE cabir_synth)
     add_test(NAME state COMMAND cabir_state_test)
+endif()
+
+# THE APP — Cab IR Generator itself: the panel, a player through the family's convolver, the family's version window.
+option(CABIR_APP "Build the standalone app" ${PROJECT_IS_TOP_LEVEL})
+if(CABIR_APP)
+    # JUCE, pinned as the family's plugins pin it; a local tree first.
+    set(CABIR_JUCE_TAG "8.0.16-security" CACHE STRING "JUCE git tag to build against")
+    set(CABIR_JUCE_DIR "$ENV{HOME}/IdeaProjects/orbit-capture/app/tests/build/_deps/juce-src"
+        CACHE PATH "Local JUCE source tree (used if present); else the pin is fetched")
+    if(CABIR_JUCE_DIR AND EXISTS "${CABIR_JUCE_DIR}/CMakeLists.txt")
+        message(STATUS "JUCE: local tree — ${CABIR_JUCE_DIR}")
+        FetchContent_Declare(juce SOURCE_DIR "${CABIR_JUCE_DIR}")
+    else()
+        FetchContent_Declare(juce GIT_REPOSITORY https://github.com/juce-framework/JUCE.git GIT_TAG ${CABIR_JUCE_TAG} GIT_SHALLOW TRUE)
+    endif()
+    FetchContent_MakeAvailable(juce)
+
+    # felitronics-core — the convolver the plugins play their cabinets through, on pffft.
+    set(FELITRONICS_WITH_PFFFT ON CACHE BOOL "the cabinet's convolver on the pffft SIMD FFT" FORCE)
+    set(CABIR_CORE_TAG "v0.61.2" CACHE STRING "felitronics-core release tag (fetched when no local checkout)")
+    set(CABIR_CORE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../felitronics-core" CACHE PATH "Local felitronics-core checkout (used if present)")
+    if(CABIR_CORE_DIR AND EXISTS "${CABIR_CORE_DIR}/CMakeLists.txt")
+        FetchContent_Declare(felitronics_core SOURCE_DIR "${CABIR_CORE_DIR}")
+        set(cabirCoreVersion "local")
+    else()
+        FetchContent_Declare(felitronics_core GIT_REPOSITORY https://github.com/darwinscat/felitronics-core.git GIT_TAG ${CABIR_CORE_TAG} GIT_SHALLOW TRUE)
+        set(cabirCoreVersion "${CABIR_CORE_TAG}")
+    endif()
+    FetchContent_MakeAvailable(felitronics_core)
+
+    # felitronics-appkit — the brand, the version window, the audio settings.
+    set(CABIR_APPKIT_TAG "v0.22.0" CACHE STRING "felitronics-appkit release tag (fetched when no local checkout)")
+    set(CABIR_APPKIT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../felitronics-appkit" CACHE PATH "Local felitronics-appkit checkout (used if present)")
+    if(CABIR_APPKIT_DIR AND EXISTS "${CABIR_APPKIT_DIR}/CMakeLists.txt")
+        FetchContent_Declare(felitronics_appkit SOURCE_DIR "${CABIR_APPKIT_DIR}")
+        set(cabirAppkitVersion "local")
+    else()
+        FetchContent_Declare(felitronics_appkit GIT_REPOSITORY https://github.com/darwinscat/felitronics-appkit.git GIT_TAG ${CABIR_APPKIT_TAG} GIT_SHALLOW TRUE)
+        set(cabirAppkitVersion "${CABIR_APPKIT_TAG}")
+    endif()
+    FetchContent_MakeAvailable(felitronics_appkit)
+
+    if(CABIR_TOML_DIR AND EXISTS "${CABIR_TOML_DIR}/CMakeLists.txt")
+        set(cabirTomlVersion "local")
+    else()
+        set(cabirTomlVersion "${CABIR_TOML_TAG}")
+    endif()
+    execute_process(COMMAND git rev-parse --short HEAD WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+                    OUTPUT_VARIABLE cabirGitHash OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+
+    juce_add_gui_app(CabIrGenerator
+        PRODUCT_NAME  "Cab IR Generator"
+        COMPANY_NAME  "Darwin's Cat"
+        BUNDLE_ID     com.darwinscat.cabirgenerator
+        VERSION       ${PROJECT_VERSION})
+    target_sources(CabIrGenerator PRIVATE app/Main.cpp app/MainComponent.cpp app/Engine.cpp)
+    juce_add_binary_data(CabIrData SOURCES data/cabinets.txt assets/logo/mark.svg)
+    target_compile_definitions(CabIrGenerator PRIVATE
+        JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0
+        CABIR_VERSION="${PROJECT_VERSION}"
+        CABIR_GIT_HASH="${cabirGitHash}"
+        CABIR_CORE_VERSION="${cabirCoreVersion}"
+        CABIR_TOML_VERSION="${cabirTomlVersion}"
+        CABIR_APPKIT_VERSION="${cabirAppkitVersion}")
+    target_link_libraries(CabIrGenerator PRIVATE
+        CabIrData
+        cabir::panel
+        felitronics::convolution
+        felitronics::appkit
+        juce::juce_gui_extra
+        juce::juce_audio_utils
+        juce::juce_audio_formats
+        juce::juce_recommended_config_flags
+        juce::juce_recommended_lto_flags
+        juce::juce_recommended_warning_flags)
 endif()
