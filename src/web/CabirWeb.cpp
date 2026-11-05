@@ -14,6 +14,14 @@
 //   cabir_find (toml, thorough)        B's quiet place against A: x, y, distance, shift (ms) at cabir_found()
 //     cabir_tried / cabir_tried_count  the places tried on the way, x, y, score each, for the search's map
 //
+// FIND SPREAD OVER WORKERS — the same search, its steps called apart (synth::BSearch); the page only hands places out:
+//   cabir_find_coarse (toml)           the first round's places: their count, x, y, distance each at cabir_find_places()
+//   cabir_find_score (toml, x, y, d)   one place judged, in any worker: its score, its shift (ms) at cabir_find_shift()
+//   cabir_find_fine (judged, count)    the first round's scores and shifts (double pairs, in its order) in; the second
+//                                      round's places out, as coarse gives them — best first; a page stops at 2 s
+//   cabir_find_best (judged, count)    the second round's pairs in (-1e30 for one not reached; none without thorough):
+//                                      the place at cabir_found()
+//
 // Floats are read from the module's heap (HEAPF32 at the pointer / 4), lengths from the calls that say them.
 
 #include <felitronics/convolution/CabConvolver.h>
@@ -45,6 +53,13 @@ namespace
         std::vector<unsigned char> wav;
         float found[4] {};
         std::vector<float> tried;
+
+        std::string findToml;                       // the state the search below is of
+        std::unique_ptr<synth::BSearch> search;
+        std::vector<synth::Place> first, second;
+        std::vector<synth::BSearch::Judged> firstJudged;
+        std::vector<float> places;
+        double shift = 0;
     };
 
     Session& session()
@@ -54,6 +69,37 @@ namespace
     }
 
     const float* dataOf (const std::vector<float>& v) { return v.empty() ? nullptr : v.data(); }
+
+    /** The search of this state, made once and kept while the state is the same. */
+    synth::BSearch* searchOf (const char* toml)
+    {
+        auto& s = session();
+        const std::string text = toml != nullptr ? toml : "";
+        if (s.search == nullptr || s.findToml != text)
+        {
+            const auto state = fromToml (text);
+            if (! state || s.table.empty())
+                return nullptr;
+            s.search = std::make_unique<synth::BSearch> (s.table, *state);
+            s.findToml = text;
+        }
+        return s.search.get();
+    }
+
+    std::vector<synth::BSearch::Judged> judgedOf (const double* pairs, int count)
+    {
+        std::vector<synth::BSearch::Judged> out ((size_t) std::max (0, count));
+        for (size_t i = 0; i < out.size() && pairs != nullptr; ++i)
+            out[i] = { pairs[2 * i], pairs[2 * i + 1] };
+        return out;
+    }
+
+    void put (std::vector<float>& to, const std::vector<synth::Place>& places)
+    {
+        to.clear();
+        for (const auto& p : places)
+            to.insert (to.end(), { (float) p.x, (float) p.y, (float) p.distance });
+    }
 }
 
 CABIR_EXPORT int cabir_table (const char* text)
@@ -129,3 +175,53 @@ CABIR_EXPORT int cabir_find (const char* toml, int thorough)
 CABIR_EXPORT const float* cabir_found()      { return session().found; }
 CABIR_EXPORT const float* cabir_tried()      { return dataOf (session().tried); }
 CABIR_EXPORT int cabir_tried_count()         { return (int) session().tried.size() / 3; }
+
+CABIR_EXPORT int cabir_find_coarse (const char* toml)
+{
+    auto& s = session();
+    auto* search = searchOf (toml);
+    if (search == nullptr)
+        return 0;
+    s.first = search->coarse();
+    s.second.clear();
+    put (s.places, s.first);
+    return (int) s.first.size();
+}
+
+CABIR_EXPORT const float* cabir_find_places() { return dataOf (session().places); }
+
+CABIR_EXPORT double cabir_find_score (const char* toml, double x, double y, double distance)
+{
+    auto* search = searchOf (toml);
+    if (search == nullptr)
+        return -1e30;
+    const auto judged = search->score ({ x, y, distance });
+    session().shift = judged.shiftMs;
+    return judged.score;
+}
+
+CABIR_EXPORT double cabir_find_shift() { return session().shift; }
+
+CABIR_EXPORT int cabir_find_fine (const double* judged, int count)
+{
+    auto& s = session();
+    if (s.search == nullptr || (size_t) count != s.first.size())
+        return 0;
+    s.firstJudged = judgedOf (judged, count);
+    s.second = s.search->fine (s.first, s.firstJudged);
+    put (s.places, s.second);
+    return (int) s.second.size();
+}
+
+CABIR_EXPORT int cabir_find_best (const double* judged, int count)
+{
+    auto& s = session();
+    if (s.search == nullptr || s.firstJudged.size() != s.first.size())
+        return 0;
+    const auto place = s.search->best (s.first, s.firstJudged, s.second, judgedOf (judged, count));
+    s.found[0] = (float) place.x;
+    s.found[1] = (float) place.y;
+    s.found[2] = (float) place.distance;
+    s.found[3] = (float) place.shiftMs;
+    return 1;
+}

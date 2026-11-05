@@ -120,7 +120,7 @@ if(CABIR_WEB)
         target_link_options(cabir_web PRIVATE
             -sMODULARIZE=1 -sEXPORT_ES6=1 -sEXPORT_NAME=createCabir -sENVIRONMENT=web,worker,node
             -sALLOW_MEMORY_GROWTH=1 -sFILESYSTEM=0
-            "-sEXPORTED_RUNTIME_METHODS=['ccall','cwrap','HEAPF32','HEAPU8','UTF8ToString','stringToNewUTF8']"
+            "-sEXPORTED_RUNTIME_METHODS=['ccall','cwrap','HEAPF32','HEAPF64','HEAPU8','UTF8ToString','stringToNewUTF8']"
             "-sEXPORTED_FUNCTIONS=['_malloc','_free']")
     endif()
 endif()
