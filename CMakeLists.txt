@@ -118,7 +118,8 @@ if(CABIR_APP)
         BUNDLE_ID     com.darwinscat.cabirgenerator
         VERSION       ${PROJECT_VERSION})
     target_sources(CabIrGenerator PRIVATE app/Main.cpp app/MainComponent.cpp app/Engine.cpp)
-    juce_add_binary_data(CabIrData SOURCES data/cabinets.txt assets/logo/mark.svg)
+    file(GLOB cabirPresets CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/data/presets/*.toml")   # the factory's presets
+    juce_add_binary_data(CabIrData SOURCES data/cabinets.txt assets/logo/mark.svg ${cabirPresets})
     target_compile_definitions(CabIrGenerator PRIVATE
         JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0
         CABIR_VERSION="${PROJECT_VERSION}"
