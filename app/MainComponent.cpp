@@ -642,6 +642,17 @@ bool MainComponent::keyPressed (const juce::KeyPress& key)
         return history.undo(), true;
     if (key == juce::KeyPress ('z', command | juce::ModifierKeys::shiftModifier, 0) || key == juce::KeyPress ('y', command, 0))
         return history.redo(), true;
+    // SPACE plays and stops the sample; the arrows step through the presets, as ◀ ▶ do (the owner, 05.11).
+    if (key == juce::KeyPress::spaceKey && engine.hasSample())
+    {
+        engine.play (! engine.isPlaying());
+        repaint (strip());
+        return true;
+    }
+    if (key == juce::KeyPress::leftKey)
+        return stepPreset (-1), true;
+    if (key == juce::KeyPress::rightKey)
+        return stepPreset (1), true;
     return false;
 }
 
