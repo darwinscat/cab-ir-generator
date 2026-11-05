@@ -17,6 +17,7 @@
 //   cabir_panel_event ()                       what it asks, one at a time: 0 nothing, 1 kept (a state set), 2 moving (heard,
 //                                              not kept), 3 FIND, 4 DOWNLOAD IR — the state at cabir_panel_event_state ()
 //   cabir_glyph_svg (mic)                      a mic's glyph as SVG, its black for the canvas to recolour
+//   cabir_label (toml)                         a state as a line reads it, the app's words: "4x10 PORTED · MD421+U47" (UTF-8)
 //
 // THE CALLS, 32-bit words — floats, unless said: an opcode, then its arguments.
 //    1 colour        argb (uint32)
@@ -246,3 +247,11 @@ CABIR_EXPORT int cabir_panel_event()
 CABIR_EXPORT const char* cabir_panel_event_state() { return session().last.state.c_str(); }
 
 CABIR_EXPORT const char* cabir_glyph_svg (const char* mic) { return micSvg (mic != nullptr ? mic : ""); }
+
+CABIR_EXPORT const char* cabir_label (const char* toml)
+{
+    static std::string label;
+    const auto state = fromToml (toml != nullptr ? toml : "");
+    label = state ? Panel::labelOf (*state).toStdString() : std::string();
+    return label.c_str();
+}

@@ -5,7 +5,8 @@
 // cabinet table, a state as TOML — numbers out, in buffers the module owns until the next call of the same kind:
 //
 //   cabir_table (text)                 the cabinets, from cabinets.txt's text; the number of boxes, 0 for none
-//   cabir_render (toml, live)          a state rendered: the IR's length, 0 for a state that does not read. live renders
+//   cabir_render (toml, live)          a state rendered: the IR's length, 0 for a state that does not read or names a
+//                                      box the table lacks. live renders
 //                                      at half the size, as the app does while a hand is on a control
 //     cabir_mix / cabir_a / cabir_b    the IR, 48 kHz mono float, and each mic's part of it (empty with one mic on)
 //     cabir_response / cabir_comb      the band's curves, cabir_points() of them (the comb empty with one mic on)
@@ -31,7 +32,9 @@
 #include <synth/Response.h>
 #include <synth/State.h>
 
+#include <algorithm>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -73,6 +76,18 @@ namespace
 
     const float* dataOf (const std::vector<float>& v) { return v.empty() ? nullptr : v.data(); }
 
+    /** A state that reads, of a box the table has — one naming a box it lacks is not a state to render. */
+    std::optional<State> stateOf (const char* toml)
+    {
+        auto state = fromToml (toml != nullptr ? toml : "");
+        if (! state)
+            return std::nullopt;
+        const auto boxes = synth::cabinets (session().table);
+        if (std::find (boxes.begin(), boxes.end(), state->box) == boxes.end())
+            return std::nullopt;
+        return state;
+    }
+
     /** The search of this state, made once and kept while the state is the same. */
     synth::BSearch* searchOf (const char* toml)
     {
@@ -80,8 +95,8 @@ namespace
         const std::string text = toml != nullptr ? toml : "";
         if (s.search == nullptr || s.findToml != text)
         {
-            const auto state = fromToml (text);
-            if (! state || s.table.empty())
+            const auto state = stateOf (toml);
+            if (! state)
                 return nullptr;
             s.search = std::make_unique<synth::BSearch> (s.table, *state);
             s.findToml = text;
@@ -116,8 +131,8 @@ CABIR_EXPORT int cabir_table (const char* text)
 CABIR_EXPORT int cabir_render (const char* toml, int live)
 {
     auto& s = session();
-    const auto state = fromToml (toml != nullptr ? toml : "");
-    if (! state || s.table.empty())
+    const auto state = stateOf (toml);
+    if (! state)
         return 0;
     // The sizes the app renders at: half while a hand moves a control, full once it lets go.
     s.ir = s.renderer.render (s.table, state->box, synth::pairOf (*state), live != 0 ? (size_t) 1 << 13 : (size_t) 1 << 14);
@@ -158,8 +173,8 @@ CABIR_EXPORT int cabir_wav_size()             { return (int) session().wav.size(
 CABIR_EXPORT int cabir_find (const char* toml, int thorough)
 {
     auto& s = session();
-    const auto state = fromToml (toml != nullptr ? toml : "");
-    if (! state || s.table.empty())
+    const auto state = stateOf (toml);
+    if (! state)
         return 0;
     s.tried.clear();
     const auto place = synth::quietPlaceForB (s.table, *state, (size_t) 1 << 13,
