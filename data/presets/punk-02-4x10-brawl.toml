@@ -20,7 +20,8 @@ angle = 0.0
 [mic.b]
 on = true
 model = "sm57"
-x = 0.350
-y = 0.150
+x = 0.825
+y = 0.075
 distance = 0.030
 angle = 0.0
+shift = 0.025

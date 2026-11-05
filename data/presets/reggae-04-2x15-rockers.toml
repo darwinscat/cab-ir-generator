@@ -20,7 +20,8 @@ angle = 0.0
 [mic.b]
 on = true
 model = "d112"
-x = 0.200
-y = 0.000
-distance = 0.150
+x = 0.675
+y = 0.350
+distance = 0.188
 angle = 0.0
+shift = 0.000

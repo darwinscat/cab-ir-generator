@@ -20,7 +20,8 @@ angle = 0.0
 [mic.b]
 on = true
 model = "u47"
-x = 0.000
+x = 0.825
 y = 0.000
-distance = 0.200
+distance = 0.135
 angle = 0.0
+shift = 0.000
