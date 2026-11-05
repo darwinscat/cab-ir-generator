@@ -1037,10 +1037,11 @@ inline Pair pairOf (const State& s)
     return pair;
 }
 
-/** WHERE B STANDS QUIETEST BESIDE A: a dozen places to A's right on the first speaker — three out across the cone, four
-    distances — each heard as the pair hears it (A's horn and back, the same clock unless aligned, the blend, B turned
-    over or not), and the one whose meeting with A cancels least from 40 Hz to 8 kHz, the top at half weight: at each
-    point the mix against the two powers apart, the dips summed. With `align`, A is rendered once; a tenth of a second or so a place. */
+/** WHERE B STANDS QUIETEST BESIDE A: 96 places over the whole first speaker — eight across, three up and down, four
+    distances, 2 to 12 cm — each heard as the pair hears it (A's horn and back, the same clock unless aligned, the blend,
+    B turned over or not), and the one whose meeting with A cancels least from 40 Hz to 12 kHz: at each point the mix
+    against the two powers apart, the dips summed, the top at nearly full weight. A place right on A is passed over: two
+    of one mic there are one mic. Searched on four threads; with `align`, A is rendered once. */
 struct Place { double x = 0, y = 0, distance = 0.05; };
 
 inline Place quietPlaceForB (const Table& table, const State& s, size_t n = 1 << 13)
@@ -1051,7 +1052,7 @@ inline Place quietPlaceForB (const Table& table, const State& s, size_t n = 1 <<
     auto ca = cabAt (table, s.box, pair.a);
     const double da = firstArrival (ca);
 
-    constexpr size_t spectrum = 1 << 16;   // padded far past the IR: a 24th of an octave at 40 Hz spans bins
+    constexpr size_t spectrum = 1 << 15;   // padded past the IR: a 24th of an octave at 40 Hz still spans bins
     const auto spectrumOf = [] (const std::vector<double>& ir, double gain)
     {
         std::vector<cd> x (spectrum, 0.0);
@@ -1077,48 +1078,68 @@ inline Place quietPlaceForB (const Table& table, const State& s, size_t n = 1 <<
         return e + 1e-30;
     };
 
-    std::vector<double> ia;
+    std::vector<double> iaAligned;
     if (both.align)
     {
         ca.refDelay = da;
-        ia = render (ca, n);
+        iaAligned = render (ca, n);
     }
+
+    struct Candidate { Place place; double score = -1e30; };
+    std::vector<Candidate> candidates;
+    for (const double x : { -0.9, -0.65, -0.4, -0.15, 0.15, 0.4, 0.65, 0.9 })
+        for (const double y : { -0.35, 0.0, 0.35 })
+            for (const double distance : { 0.02, 0.04, 0.07, 0.12 })
+                if (! (std::hypot (x - pair.a.x, y - pair.a.y) < 0.1 && std::abs (distance - pair.a.distance) < 0.01))
+                    candidates.push_back ({ { x, y, distance } });
+
+    const auto score = [&] (Candidate& c)
+    {
+        auto spot = pair.b;
+        spot.x = c.place.x;
+        spot.y = c.place.y;
+        spot.distance = c.place.distance;
+        auto cb = cabAt (table, s.box, spot);
+        auto aHere = ca;
+        const double db = firstArrival (cb), first = std::min (da, db);
+        cb.refDelay = both.align ? db : first;
+        aHere.refDelay = both.align ? da : first;
+        const auto ia = both.align ? iaAligned : render (aHere, n);
+        const auto ib = render (cb, n);
+        const auto a = spectrumOf (ia, (1 - both.blend) / middle (ia));
+        const auto b = spectrumOf (ib, both.blend / middle (ib) * (both.invert ? -1 : 1));
+        double sum = 0;
+        const double ratio = std::pow (2.0, 1.0 / 24.0);
+        for (int i = 0; i < 72; ++i)
+        {
+            const double hz = 40.0 * std::pow (12000.0 / 40.0, i / 71.0);
+            const double comb = 10 * std::log10 (power (a, hz, ratio, &b) / (power (a, hz, ratio, nullptr) + power (b, hz, ratio, nullptr)));
+            sum += std::min (comb, 0.0) * (hz <= 2000.0 ? 1.0 : 0.8);
+        }
+        c.score = sum;
+    };
+
+#if defined(__EMSCRIPTEN__) && ! defined(__EMSCRIPTEN_PTHREADS__)
+    for (auto& c : candidates)
+        score (c);
+#else
+    constexpr size_t lanes = 4;
+    std::vector<std::future<void>> others;
+    for (size_t lane = 1; lane < lanes; ++lane)
+        others.push_back (std::async (std::launch::async, [&, lane] { for (size_t i = lane; i < candidates.size(); i += lanes) score (candidates[i]); }));
+    for (size_t i = 0; i < candidates.size(); i += lanes)
+        score (candidates[i]);
+    for (auto& f : others)
+        f.get();
+#endif
 
     Place best { pair.b.x, pair.b.y, pair.b.distance };
     double bestScore = -1e30;
-    for (const double across : { 0.4, 0.7, 1.0 })
-        for (const double distance : { 0.03, 0.06, 0.12, 0.25 })
+    for (const auto& c : candidates)
+        if (c.score > bestScore + 1e-9)
         {
-            auto spot = pair.b;
-            spot.x = std::min (1.05, pair.a.x + across);
-            spot.y = 0;
-            spot.distance = distance;
-            auto cb = cabAt (table, s.box, spot);
-            const double db = firstArrival (cb), first = std::min (da, db);
-            cb.refDelay = both.align ? db : first;
-            if (! both.align)
-            {
-                ca.refDelay = first;
-                ia = render (ca, n);
-            }
-            const auto ib = render (cb, n);
-            const auto a = spectrumOf (ia, (1 - both.blend) / middle (ia));
-            const auto b = spectrumOf (ib, both.blend / middle (ib) * (both.invert ? -1 : 1));
-
-            // The dips summed, 40 Hz to 8 kHz — the top's at half weight: there two mics apart always comb a little.
-            double score = 0;
-            const double ratio = std::pow (2.0, 1.0 / 24.0);
-            for (int i = 0; i < 64; ++i)
-            {
-                const double hz = 40.0 * std::pow (8000.0 / 40.0, i / 63.0);
-                const double comb = 10 * std::log10 (power (a, hz, ratio, &b) / (power (a, hz, ratio, nullptr) + power (b, hz, ratio, nullptr)));
-                score += std::min (comb, 0.0) * (hz <= 2000.0 ? 1.0 : 0.5);
-            }
-            if (score > bestScore + 1e-9)
-            {
-                bestScore = score;
-                best = { spot.x, spot.y, spot.distance };
-            }
+            bestScore = c.score;
+            best = c.place;
         }
     return best;
 }

@@ -94,13 +94,13 @@ MainComponent::MainComponent()
     const auto workspace = juce::parseXML (properties.getUserSettings()->getValue ("workspace"));
     if (workspace == nullptr || ! history.fromTree (juce::ValueTree::fromXml (*workspace)))
     {
-        // A 4x10, ported as eight boxes of the ten are, an MD421 close and a U47 out at 25 cm where the two comb least:
-        // green to 2 kHz (synth::quietPlaceForB found the place; the owner, 05.11).
+        // A 4x10, ported as eight boxes of the ten are, an MD421 close and a U47 at 12 cm where the two comb least:
+        // green from 40 Hz to 12 kHz (synth::quietPlaceForB found the place; the owner, 05.11).
         State first;
         first.box = "SVT-410HE";
         first.back = 1;
         first.a = { true, "md421", -0.3, 0.0, 0.05, 0.0 };
-        first.b = { true, "u47", 0.10, 0.0, 0.25, 0.0 };
+        first.b = { true, "u47", -0.65, 0.0, 0.12, 0.0 };
         first.blend = 0.35;
         first.align = true;
         show (first);

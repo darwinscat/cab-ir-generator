@@ -76,7 +76,9 @@ int main()
         pair.box = "SVT-410HE";
         pair.b.on = true;
         const auto place = cabir::synth::quietPlaceForB (table, pair);
-        check (place.x > pair.a.x && place.x <= 1.05 && place.distance > 0.0, "B's quiet place lies right of A, on the cone");
+        check (std::hypot (place.x, place.y) <= 1.05 && place.distance > 0.0, "B's quiet place lies on the cone");
+        check (std::hypot (place.x - pair.a.x, place.y - pair.a.y) >= 0.1 || std::abs (place.distance - pair.a.distance) >= 0.01,
+               "B's quiet place is not on top of A");
     }
 
     // A pair rendered again with one mic moved, the other's IR kept, is the pair rendered afresh, sample for sample.
