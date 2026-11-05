@@ -30,13 +30,17 @@ namespace cabir
 
     THE SPEAKER: the chosen box's first speaker, flat, its neighbours at its edge, its horn big in the corner on the horn's
     side — the speaker moved away from it — and beside it HORN's attenuator, OFF -12 -6 0; the mics in perspective on
-    the speaker, dragged across it and just past its rim; their two columns either side, each its mic, its places (CAP,
+    the speaker, each taken by any part of it, its capsule or its body, and dragged from where the hand took it across
+    the speaker and just past its rim — a click on the bare cone moves none (the owner, 05.11); their two columns either side, each its mic, its places (CAP,
     EDGE, OFF and ROOM, one click each), distance and angle; BLEND, ALIGN and Ø under it, and two buttons: DEFAULT, the
     box's own mic back at its cap — SURE? at the first click, done at the second — and CLOSE. A mic's row clicked again
     while both are heard turns that mic off where it stands, its column dark, BLEND left where it is and not heard while
     one mic is (the owner, 04.11); a click in the dark column brings it back; the last one stays. While the hand moves,
     the cabinet is heard as it goes (onMove) — each position the worker reaches next, a tenth of a second for one mic,
     near a second for two on the 8x10 — and what is set is kept when the hand lets go (onSetup).
+
+    UNDER THE HAND whatever a click there works is lit (the owner, 05.11): a box and a back framed, a word brighter, a
+    button's line, a mic on the speaker ringed at its capsule — the same test the click goes by (hotAt).
 
     THE RESPONSE, across the panel under it all: what plays, 30 Hz to 12 kHz — the cabinet heard in orange, following
     a moving hand, and the one kept before it a faint grey ghost, so every click and every drag reads as before and
@@ -359,15 +363,15 @@ public:
 
     void mouseMove (const ui::MouseEvent& e)
     {
-        const int was = hover;
-        hover = cabAt (e.position);
-        if (hover != was)
+        const auto was = hot;
+        hot = hotAt (e.position);
+        if (hot != was)
             repaint();
     }
 
     void mouseExit (const ui::MouseEvent&)
     {
-        hover = -1;
+        hot = {};
         repaint();
     }
 
@@ -375,17 +379,7 @@ public:
     {
         if (defaultArmed && ! defaultArea().contains (e.getPosition()))
             disarmDefault();   // a click anywhere else: DEFAULT's question withdrawn
-
-        if (downloadArea().contains (e.getPosition()))
-        {
-            onDownload();
-            return;
-        }
-
-        if (e.position.x < (float) leftW)
-            pileDown (e);
-        else if (chosen >= 0)
-            speakerDown (e);
+        press (hotAt (e.position), e);
     }
 
     void mouseDrag (const ui::MouseEvent& e)
@@ -397,7 +391,8 @@ public:
         {
             const auto o = coneCentre();
             const float R = radius();
-            auto p = (e.position - o) / R;
+            auto p = (e.position + grabOffset - o) / R;   // the capsule where it was against the hand: no jump to it
+            micMoved = true;
             const float len = p.getDistanceFromOrigin();
             if (len > maxReach)
                 p *= maxReach / len;
@@ -432,14 +427,20 @@ public:
         }
     }
 
-    void mouseUp (const ui::MouseEvent&)
+    void mouseUp (const ui::MouseEvent& e)
     {
         if (drag != Drag::none)
         {
+            // A mic taken and let go where it stood changes nothing: nothing kept, the ghost of before left as it was.
+            const bool still = drag == Drag::spot && ! micMoved;
             drag = Drag::none;
             dragging = false;
-            send();
+            if (still)
+                repaint();
+            else
+                send();
         }
+        hot = hotAt (e.position);
     }
 
 private:
@@ -454,7 +455,24 @@ private:
 
     enum class Drag { none, spot, distance, angle, blend, shift };
 
-    int chosen = -1, hover = -1;
+    /** WHAT A CLICK AT A POINT WORKS — the one thing both the hand's light and its press go by (hotAt), so what is lit is
+        what a click does. */
+    enum class Part { none, download, back, cab, cabHorn, horn, distance, place, micRow, angle, shift, mic, close, reset, find,
+                      align, invert, blend };
+    struct Hot
+    {
+        Part part = Part::none;
+        int m = -1, i = -1;   // the mic's column; the box, the back, the step, the place or the row
+        bool operator== (const Hot& o) const { return part == o.part && m == o.m && i == o.i; }
+        bool operator!= (const Hot& o) const { return ! (*this == o); }
+    };
+
+    int chosen = -1;
+    Hot hot;                          // under the hand while it moves with no button down
+    ui::Point<float> grabOffset;      // a mic taken: its capsule against the hand, kept while it drags
+    bool micMoved = false;            // ...and moved since, or let go where it stood
+    bool isHot (Part p, int m = -1, int i = -1) const { return hot == Hot { p, m, i }; }
+    int hoverCab() const { return hot.part == Part::cab || hot.part == Part::cabHorn ? hot.i : -1; }
     struct SearchDot { float x, y, score; };
     std::vector<SearchDot> searchDots;  // the search's map (showSearch), fading once it is done
     bool searching = false;
@@ -736,37 +754,207 @@ private:
         return { box.getCentreX() + p.x * s, box.getCentreY() - p.y * s };
     }
 
-    void pileDown (const ui::MouseEvent& e)
+    /** What a click at `p` works, in the order a click looks for it. */
+    Hot hotAt (ui::Point<float> p) const
     {
+        const auto pos = p.roundToInt();
+        if (downloadArea().contains (pos))
+            return { Part::download };
 
-        // The chosen box's back, a cell each: kept as turned, its own one too, so every box after comes with it.
-        if (chosen >= 0)
-            for (int i = 0; i < backs; ++i)
-                if (backCell (i).expanded (backCellGap / 2, 2.0f).contains (e.position))
-                {
-                    setup_.back = i;
-                    send();
-                    return;
-                }
-
-        const int at = cabAt (e.position);
-        if (at < 0)
-            return;
-
-        if (at != chosen)
+        if (p.x < (float) leftW)
         {
-            setup_ = pickedWith (chosen, at, setup_);
-            chosen = at;
-            send();
-            return;
+            // The chosen box's back, a cell each.
+            if (chosen >= 0)
+                for (int i = 0; i < backs; ++i)
+                    if (backCell (i).expanded (backCellGap / 2, 2.0f).contains (p))
+                        return { Part::back, -1, i };
+
+            const int at = cabAt (p);
+            if (at < 0)
+                return {};
+            // The chosen box again: its horn, where it has one.
+            const auto& cab = cabs()[(size_t) at];
+            const auto box = boxOf (at);
+            const float s = box.getWidth() / cab.w;
+            if (at == chosen && cab.horn && p.getDistanceFrom (onBox (box, s, cab.hornAt)) < ui::jmax (7.0f, 0.06f * s))
+                return { Part::cabHorn, -1, at };
+            return { Part::cab, -1, at };
+        }
+        if (chosen < 0)
+            return {};
+
+        if (! hornCorner().isEmpty())
+            for (int i = 0; i < 4; ++i)
+                if (hornStepArea (i).expanded (hornGap / 2, 3.0f).contains (p))
+                    return { Part::horn, -1, i };
+
+        for (int m = 0; m < 2; ++m)
+            if (distArea (m).contains (pos))
+                return { Part::distance, m };
+
+        for (int m = 0; m < 2; ++m)
+        {
+            if (! column (m).contains (pos))
+                continue;
+            for (int i = 0; i < 4; ++i)
+                if (placeArea (m, i).contains (pos))
+                    return { Part::place, m, i };
+            for (int i = 0; i < mics().size(); ++i)
+                if (micRow (m, i).contains (pos))
+                    return { Part::micRow, m, i };
+            if (angleTrack (m).expanded (2.0f, 10.0f).contains (p))
+                return { Part::angle, m };
+            if (m == 1 && timeTrack().expanded (2.0f, 10.0f).contains (p))
+                return { Part::shift, 1 };
+            return {};
         }
 
-        // The chosen box again: its horn turned over where the hand found it.
-        const auto& cab = cabs()[(size_t) at];
-        const auto box = boxOf (at);
-        const float s = box.getWidth() / cab.w;
-        if (cab.horn && e.position.getDistanceFrom (onBox (box, s, cab.hornAt)) < ui::jmax (7.0f, 0.06f * s))
-            toggleHorn();
+        if (onClose != nullptr && closeArea().contains (pos)) return { Part::close };
+        if (defaultArea().contains (pos))                     return { Part::reset };
+        if (findArea().contains (pos))                        return { Part::find };
+        if (alignArea().expanded (4, 2).contains (pos))       return { Part::align };
+        if (invertArea().expanded (4, 2).contains (pos))      return { Part::invert };
+        if (bothHeard() && blendTrack().expanded (8.0f, 8.0f).contains (p)) return { Part::blend };
+        if (const int m = micAt (p); m >= 0)                  return { Part::mic, m };
+        return {};
+    }
+
+    /** A drag begun: the hand's until it lets go, heard as it goes. */
+    void grab (Drag d, int m, const ui::MouseEvent& e)
+    {
+        drag = d;
+        dragMic = m;
+        dragging = true;
+        mouseDrag (e);
+    }
+
+    void press (Hot h, const ui::MouseEvent& e)
+    {
+        switch (h.part)
+        {
+            case Part::none:
+                return;
+
+            case Part::download:
+                onDownload();
+                return;
+
+            // The back: kept as turned, its own one too, so every box after comes with it.
+            case Part::back:
+                setup_.back = h.i;
+                send();
+                return;
+
+            case Part::cab:
+                if (h.i != chosen)
+                {
+                    setup_ = pickedWith (chosen, h.i, setup_);
+                    chosen = h.i;
+                    send();
+                }
+                return;
+
+            case Part::cabHorn:
+                toggleHorn();
+                return;
+
+            case Part::horn:
+                setup_.a.horn = h.i > 0;
+                if (h.i > 0)
+                    setup_.a.hornDb = hornSteps[h.i];
+                send();
+                return;
+
+            case Part::distance:
+                takeUp (h.m);
+                dragTrack = distTrack (h.m);
+                grab (Drag::distance, h.m, e);
+                return;
+
+            case Part::place:
+                putAt (h.m, places[h.i]);
+                return;
+
+            case Part::micRow:
+            {
+                // The lit one clicked again, with both mics heard: that mic goes off where it stands, the other stays
+                // where it is, BLEND too. The last mic never goes.
+                const auto& own = mic (h.m).mic.isNotEmpty() ? mic (h.m).mic : cabs()[(size_t) chosen].mic;
+                if (bothHeard() && mics()[h.i] == own)
+                    (h.m == 0 ? setup_.aOn : setup_.bOn) = false;
+                else
+                {
+                    takeUp (h.m);
+                    mic (h.m).mic = mics()[h.i];
+                }
+                send();
+                return;
+            }
+
+            case Part::angle:
+                takeUp (h.m);
+                grab (Drag::angle, h.m, e);
+                return;
+
+            case Part::shift:
+                takeUp (1);
+                grab (Drag::shift, 1, e);
+                return;
+
+            // A mic taken by any part of it moves with the hand from there — its capsule does not jump under it.
+            case Part::mic:
+                grabOffset = spotOf (h.m) - e.position;
+                micMoved = false;
+                drag = Drag::spot;
+                dragMic = h.m;
+                dragging = true;
+                repaint();
+                return;
+
+            case Part::close:
+                onClose();
+                return;
+
+            // DEFAULT asks first: the first click turns it into SURE? for three seconds, the second resets.
+            case Part::reset:
+                if (! defaultArmed)
+                {
+                    defaultArmed = true;
+                    armedUntil = clock + 3.0;
+                    repaint();
+                    return;
+                }
+                disarmDefault();
+                setup_ = {};
+                setup_.a.mic = cabs()[(size_t) chosen].mic;
+                setup_.a.horn = cabs()[(size_t) chosen].hornOn;
+                send();
+                return;
+
+            case Part::find:
+                if (! heard (1))
+                {
+                    takeUp (1);   // B taken up: the host searches for it on its own
+                    send();
+                }
+                else
+                    onFind (chosen, setup_);
+                return;
+
+            case Part::align:
+                setup_.align = ! setup_.align;
+                send();
+                return;
+
+            case Part::invert:
+                setup_.invert = ! setup_.invert;
+                send();
+                return;
+
+            case Part::blend:
+                grab (Drag::blend, dragMic, e);
+                return;
+        }
     }
 
     /** A HF horn as it faces the player: its mouth a rounded rectangle, its walls narrowing to the throat, the driver a
@@ -804,11 +992,12 @@ private:
         g.fillRect (ui::Rectangle<float> (0.0f, (float) pileTop - 3.0f, (float) leftW + 0.5f * gutter, 1.0f));
 
         for (const auto& [index, box] : layOut())
-            paintCab (g, cabs()[(size_t) index], box, setup_, index == chosen, index == hover);
+            paintCab (g, cabs()[(size_t) index], box, setup_, index == chosen, index == hoverCab(), 1.0f, false,
+                      isHot (Part::cabHorn, -1, index));
 
         // In the pile at its top left, big: the box under the hand, else the chosen one — its letters' tops level with the
         // pile's top, the 2x12's (the owner, 05.11).
-        const int named = hover >= 0 ? hover : chosen;
+        const int named = hoverCab() >= 0 ? hoverCab() : chosen;
         if (named >= 0)
         {
             const auto big = ui::look().font (24.0f);
@@ -832,12 +1021,17 @@ private:
             ui::look().drawTracked (g, "BACK", backWordArea(), font, 0.08f, ui::Justification::centredLeft);
             for (int i = 0; i < backs; ++i)
             {
-                const bool on = i == backOf (chosen, setup_);
+                const bool on = i == backOf (chosen, setup_), over = ! on && isHot (Part::back, -1, i);
                 auto cell = backCell (i);
+                if (over)   // framed as a box under the hand is
+                {
+                    g.setColour (ui::look().violet.withAlpha (0.7f));
+                    g.drawRoundedRectangle (cell.expanded (6.0f, 2.0f), 3.0f, 1.0f);
+                }
                 const auto word = cell.removeFromBottom ((float) backWordH);
                 paintBack (g, i, cell.withHeight ((float) backIconH).withSizeKeepingCentre (56.0f, 34.0f),
-                           on ? ui::look().orange : ui::look().violet.withAlpha (0.6f));
-                g.setColour (on ? ui::look().orange : ui::look().txDim);
+                           on ? ui::look().orange : ui::look().violet.withAlpha (over ? 0.9f : 0.6f));
+                g.setColour (on ? ui::look().orange : over ? ui::look().tx : ui::look().txDim);
                 ui::look().drawTracked (g, backWords[i], word, font, 0.06f, ui::Justification::centred);
                 // The box's own back, a dot before its word: where DEFAULT goes back to.
                 if (i == ownBack (chosen))
@@ -855,7 +1049,7 @@ public:
         unless `plainFrame`; its tolex `body` opaque — the block's picture draws it over its IR (paintSketch) with the IR
         showing through, in a plain frame: alone there, it has nothing to be told from. */
     static void paintCab (ui::Graphics& g, const Cab& c, ui::Rectangle<float> box, const Setup& setup, bool isChosen, bool isHover,
-                          float body = 1.0f, bool plainFrame = false)
+                          float body = 1.0f, bool plainFrame = false, bool hornHover = false)
     {
         const float s = box.getWidth() / c.w;
 
@@ -889,8 +1083,11 @@ public:
 
         if (c.horn)
         {
-            paintHorn (g, onBox (box, s, c.hornAt), s,
-                       isChosen && ! setup.a.horn ? ui::look().txFaint.withAlpha (0.4f) : ui::look().lilac.withAlpha (isChosen ? 0.9f : 0.55f));
+            // Under the hand on the chosen box, where a click turns it over: brighter.
+            const bool off = isChosen && ! setup.a.horn;
+            const auto colour = off ? ui::look().txFaint.withAlpha (hornHover ? 0.8f : 0.4f)
+                                    : ui::look().lilac.withAlpha (isChosen ? 0.9f : 0.55f);
+            paintHorn (g, onBox (box, s, c.hornAt), s, hornHover && ! off ? colour.brighter (0.4f) : colour);
         }
 
         // The mics where they stand on the first speaker, A orange and B lilac.
@@ -931,31 +1128,47 @@ public:
     /** The mics on a speaker drawn at `o`, radius `R`, in perspective, the farther from the cone drawn last (nearest the
         eye): its shadow on the cone, then the glyph, its capsule over the spot, as tall as it is near the eye, leaning back
         toward the cap; each only while it is on. `k` the scene's size, the panel's 1. */
-    static void paintMicsOn (ui::Graphics& g, const Cab& cab, const Setup& setup, ui::Point<float> o, float R, float k)
+    static void paintMicsOn (ui::Graphics& g, const Cab& cab, const Setup& setup, ui::Point<float> o, float R, float k, int lit = -1)
     {
-        int order[2] { 0, 1 };
-        if (setup.b.distance < setup.a.distance) std::swap (order[0], order[1]);
-        for (int m : order)
+        for (int m : drawOrder (setup))
         {
             if (! (m == 0 ? setup.aOn : setup.bOn))
                 continue;
             const auto& sp = m == 0 ? setup.a : setup.b;
             const float near = nearness (sp.distance);
-            const auto at = o + ui::Point<float> (sp.x * R, -sp.y * R);
-            const auto colour = colourOf (m);
+            const auto gl = glyphOf (sp, o, R, k);
+            const auto colour = m == lit ? colourOf (m).brighter (0.3f) : colourOf (m);
 
             const float sh = (6.0f + 26.0f * near) * k;
             g.setColour (ui::Colours::black.withAlpha (0.55f - 0.35f * near));
-            g.fillEllipse (ui::Rectangle<float> (sh, sh * 0.6f).withCentre (at + ui::Point<float> (10.0f * near, 8.0f * near) * k));
+            g.fillEllipse (ui::Rectangle<float> (sh, sh * 0.6f).withCentre (gl.at + ui::Point<float> (10.0f * near, 8.0f * near) * k));
             g.setColour (colour.withAlpha (0.9f));
-            g.fillEllipse (ui::Rectangle<float> (5, 5).withCentre (at));
-
-            const float h = (30.0f + 70.0f * near) * k, w = h * 36.0f / 96.0f;
-            const float side = at.x >= o.x ? 1.0f : -1.0f;   // leaning back from the cap: its top away from the centre
-            const float lean = side * sp.angle * ui::MathConstants<float>::pi / 180.0f;
-            const auto box = ui::Rectangle<float> (w, h).withPosition (at.x - w * 0.5f, at.y - h * 0.94f);
-            paintMicGlyph (g, sp.mic.isNotEmpty() ? sp.mic : cab.mic, box, colour, lean, at);
+            g.fillEllipse (ui::Rectangle<float> (5, 5).withCentre (gl.at));
+            if (m == lit)   // under the hand, or in it: ringed at its capsule
+            {
+                g.setColour (colour.withAlpha (0.85f));
+                g.drawEllipse (ui::Rectangle<float> (16.0f, 16.0f).withCentre (gl.at), 1.2f);
+            }
+            paintMicGlyph (g, sp.mic.isNotEmpty() ? sp.mic : cab.mic, gl.box, colour, gl.lean, gl.at);
         }
+    }
+
+    /** The two mics in the order they are drawn: the farther from the cone last, nearest the eye, over the other. */
+    static std::array<int, 2> drawOrder (const Setup& setup)
+    {
+        return setup.b.distance < setup.a.distance ? std::array<int, 2> { 1, 0 } : std::array<int, 2> { 0, 1 };
+    }
+
+    /** Where a mic's glyph is drawn: its capsule over the spot, as tall as it is near the eye, leaning back from the cap
+        by its angle — its top away from the centre — about the spot. */
+    struct Glyph { ui::Point<float> at; ui::Rectangle<float> box; float lean; };
+    static Glyph glyphOf (const Spot& sp, ui::Point<float> o, float R, float k)
+    {
+        const auto at = o + ui::Point<float> (sp.x * R, -sp.y * R);
+        const float h = (30.0f + 70.0f * nearness (sp.distance)) * k, w = h * 36.0f / 96.0f;
+        const float side = at.x >= o.x ? 1.0f : -1.0f;
+        return { at, ui::Rectangle<float> (w, h).withPosition (at.x - w * 0.5f, at.y - h * 0.94f),
+                 side * sp.angle * ui::MathConstants<float>::pi / 180.0f };
     }
 
     /** THE CABINET THAT PLAYS, SMALL, in `area` (the band of the IR's picture between its words): its speaker at the
@@ -1225,135 +1438,26 @@ private:
         }
     }
 
-    void speakerDown (const ui::MouseEvent& e)
+    /** The heard mic under `p` — its glyph, leaning as it is drawn, or its capsule — the one drawn over the other taken
+        first; -1 for none. */
+    int micAt (ui::Point<float> p) const
     {
-        const auto pos = e.getPosition();
-        if (! hornCorner().isEmpty())
-            for (int i = 0; i < 4; ++i)
-                if (hornStepArea (i).expanded (hornGap / 2, 3.0f).contains (e.position))
-                {
-                    setup_.a.horn = i > 0;
-                    if (i > 0)
-                        setup_.a.hornDb = hornSteps[i];
-                    send();
-                    return;
-                }
-
-        // A distance: the column's slider.
-        for (int m = 0; m < 2; ++m)
-            if (distArea (m).contains (pos))
-            {
-                takeUp (m);
-                drag = Drag::distance;
-                dragTrack = distTrack (m);
-                dragMic = m;
-                dragging = true;
-                mouseDrag (e);
-                return;
-            }
-
-        for (int m = 0; m < 2; ++m)
+        const auto o = coneCentre();
+        const float R = radius();
+        const auto order = drawOrder (setup_);
+        for (int k = 1; k >= 0; --k)
         {
-            if (! column (m).contains (pos))
+            const int m = order[(size_t) k];
+            if (! heard (m))
                 continue;
-            for (int i = 0; i < 4; ++i)
-                if (placeArea (m, i).contains (pos))
-                {
-                    putAt (m, places[i]);
-                    return;
-                }
-            for (int i = 0; i < mics().size(); ++i)
-                if (micRow (m, i).contains (pos))
-                {
-                    // The lit one clicked again, with both mics heard: that mic goes off where it stands, the other
-                    // stays where it is, BLEND too. The last mic never goes.
-                    const auto& own = mic (m).mic.isNotEmpty() ? mic (m).mic : cabs()[(size_t) chosen].mic;
-                    if (bothHeard() && mics()[i] == own)
-                    {
-                        (m == 0 ? setup_.aOn : setup_.bOn) = false;
-                        send();
-                        return;
-                    }
-                    takeUp (m);
-                    mic (m).mic = mics()[i];
-                    send();
-                    return;
-                }
-            if (angleTrack (m).expanded (2.0f, 10.0f).contains (e.position))
-            {
-                takeUp (m);
-                drag = Drag::angle;
-                dragMic = m;
-                dragging = true;
-                mouseDrag (e);
-                return;
-            }
-            if (m == 1 && timeTrack().expanded (2.0f, 10.0f).contains (e.position))
-            {
-                takeUp (1);
-                drag = Drag::shift;
-                dragMic = 1;
-                dragging = true;
-                mouseDrag (e);
-                return;
-            }
-            return;
+            const auto gl = glyphOf (mic (m), o, R, 1.0f);
+            const auto d = p - gl.at;
+            const float c = std::cos (gl.lean), s = std::sin (gl.lean);
+            const ui::Point<float> upright (gl.at.x + d.x * c + d.y * s, gl.at.y - d.x * s + d.y * c);   // turned back
+            if (gl.box.expanded (4.0f).contains (upright) || p.getDistanceFrom (gl.at) < 9.0f)
+                return m;
         }
-
-        if (closeArea().contains (pos) && onClose != nullptr)
-        {
-            onClose();
-            return;
-        }
-        // DEFAULT asks first: the first click turns it into SURE? for three seconds, the second resets.
-        if (defaultArea().contains (pos))
-        {
-            if (! defaultArmed)
-            {
-                defaultArmed = true;
-                armedUntil = clock + 3.0;
-                repaint();
-                return;
-            }
-            disarmDefault();
-            setup_ = {};
-            setup_.a.mic = cabs()[(size_t) chosen].mic;
-            setup_.a.horn = cabs()[(size_t) chosen].hornOn;
-            send();
-            return;
-        }
-        if (findArea().contains (pos))
-        {
-            if (! heard (1))
-            {
-                takeUp (1);   // B taken up: the host searches for it on its own
-                send();
-            }
-            else
-                onFind (chosen, setup_);
-            return;
-        }
-        if (alignArea().expanded (4, 2).contains (pos)) { setup_.align = ! setup_.align; send(); return; }
-        if (invertArea().expanded (4, 2).contains (pos)) { setup_.invert = ! setup_.invert; send(); return; }
-        if (bothHeard() && blendTrack().expanded (8.0f, 8.0f).contains (e.position))
-        {
-            drag = Drag::blend;
-            dragging = true;
-            mouseDrag (e);
-            return;
-        }
-
-        if (scene().contains (e.position))
-        {
-            // The nearer mic of the two heard is the one taken; with one heard, that one.
-            int m = heard (0) ? 0 : 1;
-            if (bothHeard() && e.position.getDistanceFrom (spotOf (1)) < e.position.getDistanceFrom (spotOf (0)))
-                m = 1;
-            drag = Drag::spot;
-            dragMic = m;
-            dragging = true;
-            mouseDrag (e);
-        }
+        return -1;
     }
 
     static void paintMicGlyph (ui::Graphics& g, const ui::String& name, ui::Rectangle<float> box, ui::Colour colour, float lean,
@@ -1381,8 +1485,8 @@ private:
         for (int i = 0; i < mics().size(); ++i)
         {
             auto r = micRow (m, i).toFloat();
-            const bool lit = mics()[i] == heardBy;
-            const auto tint = (lit ? colour : ui::look().txFaint).withMultipliedAlpha (dim);
+            const bool lit = mics()[i] == heardBy, over = isHot (Part::micRow, m, i);
+            const auto tint = (lit ? (over ? colour.brighter (0.3f) : colour) : over ? ui::look().tx : ui::look().txFaint).withMultipliedAlpha (dim);
             const auto glyph = m == 0 ? r.removeFromLeft (12.0f) : r.removeFromRight (12.0f);
             paintMicGlyph (g, mics()[i], glyph.reduced (0, 1), tint, 0.0f, {});
             g.setColour (tint);
@@ -1392,7 +1496,9 @@ private:
         // Its places, in its colour where it stands.
         for (int i = 0; i < 4; ++i)
         {
-            g.setColour ((standsAt (sp, places[i]) ? colour : ui::look().txDim).withMultipliedAlpha (dim));
+            const bool over = isHot (Part::place, m, i);
+            g.setColour ((standsAt (sp, places[i]) ? (over ? colour.brighter (0.3f) : colour) : over ? ui::look().tx : ui::look().txDim)
+                             .withMultipliedAlpha (dim));
             auto cell = placeArea (m, i).toFloat();
             ui::look().drawTracked (g, places[i].word, m == 0 ? cell : cell.withTrimmedRight (4.0f), font, 0.06f, side);
         }
@@ -1485,7 +1591,8 @@ private:
                 ui::look().drawTracked (g, "HORN", hornWordArea(), font, 0.08f, side);
                 for (int i = 0; i < 4; ++i)
                 {
-                    g.setColour (i == hornStep() ? ui::look().orange : ui::look().txDim);
+                    const bool over = isHot (Part::horn, -1, i);
+                    g.setColour (i == hornStep() ? (over ? ui::look().orange.brighter (0.3f) : ui::look().orange) : over ? ui::look().tx : ui::look().txDim);
                     ui::look().drawTracked (g, hornWords[i], hornStepArea (i), font, 0.06f, ui::Justification::centred);
                 }
             }
@@ -1505,7 +1612,7 @@ private:
                     g.drawEllipse (dot, 1.0f);
                 }
 
-            paintMicsOn (g, cab, setup_, o, R, 1.0f);
+            paintMicsOn (g, cab, setup_, o, R, 1.0f, drag == Drag::spot ? dragMic : hot.part == Part::mic ? hot.m : -1);
 
             // Each heard mic's centimetres under it, the two kept apart.
             const auto labels = distLabels();
@@ -1532,27 +1639,32 @@ private:
             g.fillRoundedRectangle (t.withSizeKeepingCentre (t.getWidth(), 2.0f), 1.0f);
             g.setColour (ui::look().orange.interpolatedWith (ui::look().lilac, setup_.blend).withMultipliedAlpha (dim));
             g.fillRoundedRectangle (ui::Rectangle<float> (6.0f, 14.0f).withCentre ({ t.getX() + setup_.blend * t.getWidth(), t.getCentreY() }), 2.0f);
-            g.setColour (bothHeard() && setup_.align ? ui::look().orange : ui::look().txFaint);
+            const auto toggle = [this] (bool on, Part part)
+            {
+                const bool over = isHot (part);
+                return on ? (over ? ui::look().orange.brighter (0.3f) : ui::look().orange) : over ? ui::look().tx : ui::look().txFaint;
+            };
+            g.setColour (toggle (bothHeard() && setup_.align, Part::align));
             ui::look().drawTracked (g, "ALIGN", alignArea().toFloat(), font, 0.06f, ui::Justification::centredLeft);
-            g.setColour (bothHeard() && setup_.invert ? ui::look().orange : ui::look().txFaint);
+            g.setColour (toggle (bothHeard() && setup_.invert, Part::invert));
             ui::look().drawTracked (g, ui::String::fromUTF8 ("\xc3\x98"), invertArea().toFloat(), font, 0.0f, ui::Justification::centred);
-            paintButton (g, "FIND", findArea(), searching);
-            paintButton (g, defaultArmed ? "SURE?" : "DEFAULT", defaultArea(), defaultArmed);
-            paintButton (g, "CLOSE", closeArea(), false);
+            paintButton (g, "FIND", findArea(), searching, isHot (Part::find));
+            paintButton (g, defaultArmed ? "SURE?" : "DEFAULT", defaultArea(), defaultArmed, isHot (Part::reset));
+            paintButton (g, "CLOSE", closeArea(), false, isHot (Part::close));
         }
     }
 
     /** A button: a box round its word — DEFAULT, CLOSE, DOWNLOAD IR — orange while it asks. */
-    static void paintButton (ui::Graphics& g, const char* word, ui::Rectangle<int> r, bool asking)
+    static void paintButton (ui::Graphics& g, const char* word, ui::Rectangle<int> r, bool asking, bool over = false)
     {
         if (r.isEmpty())
             return;
         const auto b = r.toFloat().reduced (0.5f, 1.5f);
         g.setColour (ui::look().panel2);
         g.fillRoundedRectangle (b, 4.0f);
-        g.setColour (asking ? ui::look().orange : ui::look().txFaint);
+        g.setColour (asking ? ui::look().orange : over ? ui::look().txDim : ui::look().txFaint);   // under the hand: its line up
         g.drawRoundedRectangle (b, 4.0f, asking ? 1.2f : 1.0f);
-        g.setColour (asking ? ui::look().orange : ui::look().txDim);
+        g.setColour (asking ? ui::look().orange : over ? ui::look().tx : ui::look().txDim);
         ui::look().drawTracked (g, word, b, ui::look().font (13.0f), 0.06f, ui::Justification::centred);
     }
 
@@ -1641,7 +1753,8 @@ private:
         // DOWNLOAD IR over the corner, its line pulsing slowly — the one thing the response invites a hand to do.
         if (const auto d = downloadArea(); ! d.isEmpty())
         {
-            const float pulse = 0.5f + 0.5f * (float) std::sin (ui::MathConstants<double>::twoPi * 0.5 * clock);
+            const float pulse = isHot (Part::download) ? 1.0f   // under the hand: full, still
+                                                       : 0.5f + 0.5f * (float) std::sin (ui::MathConstants<double>::twoPi * 0.5 * clock);
             const auto b = d.toFloat().reduced (0.5f);
             g.reduceClipRegion (d.expanded (2));
             g.setColour (ui::look().panel2.withAlpha (0.92f));
