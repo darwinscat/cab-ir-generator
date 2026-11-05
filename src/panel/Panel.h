@@ -4,6 +4,8 @@
 #pragma once
 
 #include "ui/Ui.h"
+
+#include <array>
 #include "../synth/Response.h"
 #include "../synth/State.h"
 
@@ -1067,6 +1069,38 @@ private:
         return { at.x - 0.5f * w, at.y + 8.0f, w, 16.0f };
     }
 
+    /** Both heard mics' centimetres, each under its own — and where the two would run into each other, pushed apart,
+        half the overlap each, each to its mic's side (A to the left where the two stand level), kept inside the scene
+        (the owner, 05.11). */
+    std::array<ui::Rectangle<float>, 2> distLabels() const
+    {
+        std::array<ui::Rectangle<float>, 2> r { distLabel (0), distLabel (1) };
+        if (! bothHeard())
+            return r;
+        const bool aLeft = ! (spotOf (1).x < spotOf (0).x);
+        auto& left = r[aLeft ? 0 : 1];
+        auto& right = r[aLeft ? 1 : 0];
+        constexpr float gap = 6.0f;
+        const bool level = left.getY() < right.getBottom() && right.getY() < left.getBottom();
+        if (const float overlap = left.getRight() + gap - right.getX(); level && overlap > 0.0f)
+        {
+            left = left.translated (-0.5f * overlap, 0.0f);
+            right = right.translated (0.5f * overlap, 0.0f);
+            const auto sc = scene();
+            if (const float under = sc.getX() + 2.0f - left.getX(); under > 0.0f)
+            {
+                left = left.translated (under, 0.0f);
+                right = right.translated (ui::jmax (0.0f, left.getRight() + gap - right.getX()), 0.0f);
+            }
+            if (const float over = right.getRight() - (sc.getRight() - 2.0f); over > 0.0f)
+            {
+                right = right.translated (-over, 0.0f);
+                left = left.translated (-ui::jmax (0.0f, left.getRight() + gap - right.getX()), 0.0f);
+            }
+        }
+        return r;
+    }
+
     static constexpr int blendH = 26;   // BLEND's row, right under the speaker
 
     ui::Rectangle<float> scene() const
@@ -1473,12 +1507,13 @@ private:
 
             paintMicsOn (g, cab, setup_, o, R, 1.0f);
 
-            // Each heard mic's centimetres under it.
+            // Each heard mic's centimetres under it, the two kept apart.
+            const auto labels = distLabels();
             for (int m = 0; m < 2; ++m)
                 if (heard (m))
                 {
                     g.setColour (colourOf (m));
-                    ui::look().drawTracked (g, cmOf (mic (m).distance), distLabel (m), font, 0.0f, ui::Justification::centred);
+                    ui::look().drawTracked (g, cmOf (mic (m).distance), labels[(size_t) m], font, 0.0f, ui::Justification::centred);
                 }
         }
 
