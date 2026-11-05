@@ -105,6 +105,7 @@ MainComponent::MainComponent()
     picker.onMove     = [this] (int cab, CabPicker::Setup setup) { render (CabPicker::stateOf (cab, setup), true); };
     picker.onDownload = [this] { download(); };
     picker.onFind     = [this] (int cab, CabPicker::Setup setup) { placeB (CabPicker::stateOf (cab, setup), true); };   // FIND looks harder
+    picker.showDefault = false;   // DEFAULT is the preset menu's first item here
     addAndMakeVisible (picker);
 
     badge.setBrandTypeface (felitronics::appkit::brand::wordmarkTypeface());
@@ -115,16 +116,7 @@ MainComponent::MainComponent()
     const auto workspace = juce::parseXML (properties.getUserSettings()->getValue ("workspace"));
     if (workspace == nullptr || ! history.fromTree (juce::ValueTree::fromXml (*workspace)))
     {
-        // A 4x10, ported as eight boxes of the ten are, an MD421 close and a U47 at 12 cm where the two comb least:
-        // green from 40 Hz to 12 kHz (synth::quietPlaceForB found the place; the owner, 05.11).
-        State first;
-        first.box = "SVT-410HE";
-        first.back = 1;
-        first.a = { true, "md421", -0.3, 0.0, 0.05, 0.0 };
-        first.b = { true, "u47", -0.65, 0.0, 0.12, 0.0 };
-        first.blend = 0.35;
-        first.align = true;
-        show (first);
+        show (defaultState());
         history.reset();
     }
 
@@ -136,7 +128,7 @@ MainComponent::MainComponent()
     if (const auto last = juce::File (properties.getUserSettings()->getValue ("sample")); last.existsAsFile())
         loadSample (last);
 
-    setSize (CabPicker::panelW, headerH + CabPicker::panelH + stripH);
+    setSize (CabPicker::panelW, headerH + CabPicker::panelH - CabPicker::footRowH + stripH);
     setWantsKeyboardFocus (true);
     startTimerHz (30);
 }
@@ -186,6 +178,20 @@ void MainComponent::render (const State& s, bool live)
             picker.showResponse (std::move (now), std::move (before), std::move (comb));
         });
     });
+}
+
+State MainComponent::defaultState()
+{
+    // A 4x10, ported as eight boxes of the ten are, an MD421 close and a U47 at 12 cm where the two comb least: green
+    // from 40 Hz to 12 kHz (synth::quietPlaceForB found the place; the owner, 05.11).
+    State s;
+    s.box = "SVT-410HE";
+    s.back = 1;
+    s.a = { true, "md421", -0.3, 0.0, 0.05, 0.0 };
+    s.b = { true, "u47", -0.65, 0.0, 0.12, 0.0 };
+    s.blend = 0.35;
+    s.align = true;
+    return s;
 }
 
 void MainComponent::keep (const State& s)
@@ -326,6 +332,9 @@ void MainComponent::loadPreset (const juce::String& toml, const juce::String& na
 void MainComponent::showPresets()
 {
     juce::PopupMenu menu;
+    constexpr int defaultId = 100002;
+    menu.addItem (defaultId, "DEFAULT");
+    menu.addSeparator();
     const auto factory = factoryPresets();
     juce::String style;
     juce::PopupMenu group;
@@ -368,7 +377,13 @@ void MainComponent::showPresets()
     menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this).withTargetScreenArea (localAreaToGlobal (presetArea())),
                         [this, picks] (int id)
                         {
-                            if (id == saveId)
+                            if (id == defaultId)
+                            {
+                                show (defaultState());
+                                presetName.clear();
+                                presetText.clear();
+                            }
+                            else if (id == saveId)
                                 savePreset();
                             else if (id == folderId)
                             {
@@ -639,7 +654,7 @@ void MainComponent::paint (juce::Graphics& g)
 
 void MainComponent::resized()
 {
-    picker.setBounds (0, headerH, CabPicker::panelW, CabPicker::panelH);
+    picker.setBounds (0, headerH, CabPicker::panelW, CabPicker::panelH - CabPicker::footRowH);   // no foot: no DEFAULT, no CLOSE
     badge.setBounds (versionArea());
 }
 

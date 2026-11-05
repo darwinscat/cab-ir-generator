@@ -68,6 +68,7 @@ private:
     std::string presetText;                        // ...as its state's TOML, to tell
 
     void render (const State&, bool live);
+    static State defaultState();                   // the first run's, and the preset menu's DEFAULT
     void keep (const State&);                      // the panel's state, kept: what history and the next run see
     void placeB (const State&, bool thorough = false);   // B moved where it combs least with A — FIND looks harder
     void show (const State&);                      // ...and one put on the panel from elsewhere (undo, A/B/C/D, a preset)

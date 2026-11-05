@@ -48,7 +48,7 @@ class CabPicker final : public juce::Component,
                         private juce::Timer
 {
 public:
-    CabPicker() = default;
+    CabPicker() { startTimerHz (30); }   // DOWNLOAD IR's pulse, the search map's fade
 
     /** The size it is drawn for — small enough to open over a cabin's face too. */
     static constexpr int panelW = 906, panelH = 488;
@@ -265,8 +265,14 @@ public:
     /** CLOSE: whoever opened the panel takes it away. No button without it. */
     std::function<void()> onClose;
 
-    /** DOWNLOAD IR: whoever opened the panel saves the cabinet that plays as a file. No button without it. */
+    /** DOWNLOAD IR: whoever opened the panel saves the cabinet that plays as a file — a button over the response's top
+        right corner, its line pulsing gently. No button without it. */
     std::function<void()> onDownload;
+
+    /** DEFAULT as a button in the foot — or not, where the host offers it another way (the app's preset menu). With
+        neither DEFAULT nor CLOSE the foot's row goes, and the panel is footRowH shorter. */
+    bool showDefault = true;
+    static constexpr int footRowH = 26;
 
     /** FIND: where B combs least with A, asked of whoever opened the panel (synth::quietPlaceForB) — B taken up first
         if it was off, which asks the same on its own. No button without it. The search draws itself as it goes
@@ -281,7 +287,6 @@ public:
         {
             searchDots.clear();
             searching = true;
-            stopTimer();
         }
         searchFade = 1.0f;
         for (auto& d : searchDots)
@@ -300,7 +305,6 @@ public:
     {
         searching = false;
         searchHold = 45;    // ticks at 30 Hz: a second and a half, then a second's fade
-        startTimerHz (30);
     }
 
     /** THE RESPONSE of what plays, in dB at responseHz — `now` the cabinet heard, `before` what was kept before it
@@ -324,7 +328,7 @@ public:
         g.setColour (look().hair);
         const float x = (float) leftW + 0.5f * gutter;
         g.fillRect (juce::Rectangle<float> (x, 0.0f, 1.0f, (float) bodyH()));
-        g.fillRect (juce::Rectangle<float> (x, (float) (getHeight() - footH), 1.0f, (float) footH));
+        g.fillRect (juce::Rectangle<float> (x, (float) (getHeight() - footHeight()), 1.0f, (float) footHeight()));
         paintSpeaker (g);
         paintResponse (g);
     }
@@ -350,6 +354,12 @@ public:
     {
         if (defaultArmed && ! defaultArea().contains (e.getPosition()))
             disarmDefault();   // a click anywhere else: DEFAULT's question withdrawn
+
+        if (downloadArea().contains (e.getPosition()))
+        {
+            onDownload();
+            return;
+        }
 
         if (e.position.x < (float) leftW)
             pileDown (e);
@@ -402,10 +412,11 @@ private:
     static constexpr float maxReach = 1.1f;    // how far from the cap the mic may go, in radii: just past the rim, in sight
     static constexpr float minCm = 1.0f, maxCm = 30.0f, maxAngle = 60.0f;
     static constexpr int leftW = 460, gutter = 14;   // the pile's half; the hair between the halves
-    static constexpr int footH = 26, responseH = 208;  // the foot's row under it all; the response's band over it
+    static constexpr int footH = footRowH, responseH = 208;  // the foot's row under it all; the response's band over it
+    int footHeight() const { return onClose != nullptr || showDefault ? footH : 0; }
 
     /** Down to the response's band: the pile, the columns and the speaker over it, the feet under it. */
-    int bodyH() const { return getHeight() - footH - responseH; }
+    int bodyH() const { return getHeight() - footHeight() - responseH; }
 
     enum class Drag { none, spot, distance, angle, blend };
 
@@ -419,6 +430,10 @@ private:
 
     void timerCallback() override
     {
+        if (const auto d = downloadArea(); ! d.isEmpty())
+            repaint (d);
+        if (searchFade <= 0.0f || searching)
+            return;
         if (searchHold > 0)
         {
             --searchHold;
@@ -429,7 +444,6 @@ private:
         {
             searchFade = 0.0f;
             searchDots.clear();
-            stopTimer();
         }
         repaint();
     }
@@ -479,8 +493,9 @@ private:
     {
         if (onDownload == nullptr || chosen < 0)
             return {};
+        const auto plot = responsePlot().toNearestInt();
         const int w = wordW ("DOWNLOAD IR") + 14;
-        return nameRow().removeFromRight (w);
+        return { plot.getRight() - w - 6, plot.getY() + 6, w, 24 };
     }
 
     /** THE BACK over the pile, centred: BACK, then a cell each — the box cut through from the side (paintBack), its word
@@ -685,11 +700,6 @@ private:
 
     void pileDown (const juce::MouseEvent& e)
     {
-        if (downloadArea().contains (e.getPosition()))
-        {
-            onDownload();
-            return;
-        }
 
         // The chosen box's back, a cell each: kept as turned, its own one too, so every box after comes with it.
         if (chosen >= 0)
@@ -775,8 +785,6 @@ private:
             look().drawTracked (g, wordOf (named), { left, top - capGap, (float) leftW - left, big.getHeight() }, big, 0.06f,
                                 juce::Justification::topLeft);
         }
-
-        paintButton (g, "DOWNLOAD IR", downloadArea(), false);
 
         // Over the pile the chosen box's back: BACK, then each drawn with its word, the one it stands at in the block's
         // orange line.
@@ -1056,7 +1064,7 @@ private:
         return { rightX(), y, getWidth() - rightX(), bodyH() - y };
     }
 
-    juce::Rectangle<int> foot() const { return { rightX(), getHeight() - footH + 4, getWidth() - rightX(), footH - 4 }; }
+    juce::Rectangle<int> foot() const { return { rightX(), getHeight() - footHeight() + 4, getWidth() - rightX(), footHeight() - 4 }; }
 
     /** The foot: CLOSE and DEFAULT, buttons, at the right. */
     static int wordW (const char* word) { return juce::roundToInt (look().trackedWidth (word, look().font (13.0f), 0.06f)) + 4; }
@@ -1069,6 +1077,8 @@ private:
 
     juce::Rectangle<int> defaultArea() const
     {
+        if (! showDefault)
+            return {};
         const int w = wordW ("DEFAULT") + 14;
         return { closeArea().getX() - (onClose != nullptr ? 6 : 0) - w, foot().getY(), w, foot().getHeight() };
     }
@@ -1580,6 +1590,21 @@ private:
         g.reduceClipRegion (p.toNearestInt().expanded (0, 2));
         curve (responseBefore, look().txDim.withAlpha (0.3f), 1.2f);   // barely there: a second line reads as a second mic
         curve (responseNow, look().orange, 1.6f);
+
+        // DOWNLOAD IR over the corner, its line pulsing slowly — the one thing the response invites a hand to do.
+        if (const auto d = downloadArea(); ! d.isEmpty())
+        {
+            const auto now = juce::Time::getMillisecondCounterHiRes() * 0.001;
+            const float pulse = 0.5f + 0.5f * (float) std::sin (juce::MathConstants<double>::twoPi * 0.5 * now);
+            const auto b = d.toFloat().reduced (0.5f);
+            g.reduceClipRegion (d.expanded (2));
+            g.setColour (look().panel2.withAlpha (0.92f));
+            g.fillRoundedRectangle (b, 4.0f);
+            g.setColour (look().orange.withAlpha (0.35f + 0.55f * pulse));
+            g.drawRoundedRectangle (b, 4.0f, 1.3f);
+            g.setColour (look().orange.withAlpha (0.75f + 0.25f * pulse));
+            look().drawTracked (g, "DOWNLOAD IR", b, look().font (13.0f), 0.06f, juce::Justification::centred);
+        }
     }
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CabPicker)
