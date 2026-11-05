@@ -5,6 +5,14 @@ All notable changes to **Cab IR Generator** are documented here. The format foll
 [Keep a Changelog](https://keepachangelog.com/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.1.1] — 2026-11-06 — presets where the response stays green
+
+### Changed
+- **The factory presets, respread.** The response's line turns red from a 3 dB pit, and many presets showed it. Each
+  single-mic preset now stands, about where it stood, where its response has no pit: of 80, 69 are clear, and none falls
+  past 6 dB. For a pair, A first moves off a pit of its own the same way, then B to where the two meet without a deep
+  comb: 76 of 80 pairs are clear, the other four by a hair.
+
 ## [0.1.0] — 2026-11-05 — the first release
 
 Bass cabinet IRs, synthesized while you place the mics: a standalone app for macOS, Windows and Linux,
