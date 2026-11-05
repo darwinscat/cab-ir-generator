@@ -21,6 +21,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
+#include <functional>
 #include <future>
 #include <map>
 #include <random>
@@ -1041,10 +1042,13 @@ inline Pair pairOf (const State& s)
     distances, 2 to 12 cm — each heard as the pair hears it (A's horn and back, the same clock unless aligned, the blend,
     B turned over or not), and the one whose meeting with A cancels least from 40 Hz to 12 kHz: at each point the mix
     against the two powers apart, the dips summed, the top at nearly full weight. A place right on A is passed over: two
-    of one mic there are one mic. Searched on four threads; with `align`, A is rendered once. */
+    of one mic there are one mic. Searched on four threads; with `align`, A is rendered once. `tried`, when given, hears
+    of each place as it is judged — its score, 0 for no dip, the more negative the more it cancels — from whichever of
+    the threads judged it: a picture of the search, drawn as it goes. */
 struct Place { double x = 0, y = 0, distance = 0.05; };
 
-inline Place quietPlaceForB (const Table& table, const State& s, size_t n = 1 << 13)
+inline Place quietPlaceForB (const Table& table, const State& s, size_t n = 1 << 13,
+                             const std::function<void (const Place&, double score)>& tried = {})
 {
     State both = s;
     both.a.on = both.b.on = true;
@@ -1117,6 +1121,8 @@ inline Place quietPlaceForB (const Table& table, const State& s, size_t n = 1 <<
             sum += std::min (comb, 0.0) * (hz <= 2000.0 ? 1.0 : 0.8);
         }
         c.score = sum;
+        if (tried)
+            tried (c.place, sum);
     };
 
 #if defined(__EMSCRIPTEN__) && ! defined(__EMSCRIPTEN_PTHREADS__)

@@ -84,6 +84,7 @@ MainComponent::MainComponent()
     picker.onSetup    = [this] (int cab, CabPicker::Setup setup) { keep (CabPicker::stateOf (cab, setup)); };
     picker.onMove     = [this] (int cab, CabPicker::Setup setup) { render (CabPicker::stateOf (cab, setup), true); };
     picker.onDownload = [this] { download(); };
+    picker.onFind     = [this] (int cab, CabPicker::Setup setup) { placeB (CabPicker::stateOf (cab, setup)); };
     addAndMakeVisible (picker);
 
     badge.setBrandTypeface (felitronics::appkit::brand::wordmarkTypeface());
@@ -179,15 +180,26 @@ void MainComponent::keep (const State& s)
 
 void MainComponent::placeB (const State& s)
 {
-    // B just taken up: where it combs least with A, found on the worker; it moves there unless the hand moved it first.
+    // B just taken up, or FIND: where it combs least with A, found on the worker, each place it judges drawn on the
+    // speaker as it goes; B moves there unless the hand moved it first.
     std::weak_ptr<int> stillHere = alive;
     worker.addJob ([this, stillHere, s]
     {
         static const auto table = synth::parseTable (std::string (BinaryData::cabinets_txt, (size_t) BinaryData::cabinets_txtSize));
-        const auto place = synth::quietPlaceForB (table, s);
+        const auto place = synth::quietPlaceForB (table, s, (size_t) 1 << 13, [this, stillHere] (const synth::Place& p, double score)
+        {
+            juce::MessageManager::callAsync ([this, stillHere, p, score]
+            {
+                if (stillHere.lock() != nullptr)
+                    picker.showSearch ((float) p.x, (float) p.y, (float) score);
+            });
+        });
         juce::MessageManager::callAsync ([this, stillHere, s, place]
         {
-            if (stillHere.lock() == nullptr || ! (state.b == s.b) || state.box != s.box)
+            if (stillHere.lock() == nullptr)
+                return;
+            picker.endSearch();
+            if (! (state.b == s.b) || state.box != s.box)
                 return;
             auto next = state;
             next.b.x = place.x;

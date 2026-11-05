@@ -44,7 +44,8 @@ namespace cabir
 
     A dumb view: the cabinets in (cabs(), geometry from data/cabinets.txt — metres, the baffle's centre the
     origin, up positive), what plays in (show, showResponse), a pick out (onSetup). */
-class CabPicker final : public juce::Component
+class CabPicker final : public juce::Component,
+                        private juce::Timer
 {
 public:
     CabPicker() = default;
@@ -66,7 +67,7 @@ public:
         from the start: two mics at two distances, unaligned, comb — rarely what a second mic is put up for. */
     struct Setup
     {
-        Spot a { -0.3f, 0.0f, 0.05f }, b { 0.4f, 0.0f, 0.25f, true, "u87" };   // A a little left of the cap, B right of it
+        Spot a { -0.3f, 0.0f, 0.05f, true, {} }, b { 0.4f, 0.0f, 0.25f, true, "u87" };   // A a little left of the cap, B right of it
         float blend = 0.5f;
         bool align = true, invert = false;
         bool aOn = true, bOn = false;
@@ -267,6 +268,41 @@ public:
     /** DOWNLOAD IR: whoever opened the panel saves the cabinet that plays as a file. No button without it. */
     std::function<void()> onDownload;
 
+    /** FIND: where B combs least with A, asked of whoever opened the panel (synth::quietPlaceForB) — B taken up first
+        if it was off, which asks the same on its own. No button without it. The search draws itself as it goes
+        (showSearch) and lets go when it is done (endSearch). */
+    std::function<void (int cab, Setup setup)> onFind;
+
+    /** A place the search judged, across the first speaker in radii, and how much B there cancels against A — 0 none,
+        the more negative the more: a dot on the speaker, green to red, the best of its distances. Message thread. */
+    void showSearch (float x, float y, float score)
+    {
+        if (! searching)
+        {
+            searchDots.clear();
+            searching = true;
+            stopTimer();
+        }
+        searchFade = 1.0f;
+        for (auto& d : searchDots)
+            if (std::abs (d.x - x) < 1.0e-3f && std::abs (d.y - y) < 1.0e-3f)
+            {
+                d.score = juce::jmax (d.score, score);
+                repaint();
+                return;
+            }
+        searchDots.push_back ({ x, y, score });
+        repaint();
+    }
+
+    /** ...and the search done: the map stays a moment, then fades. */
+    void endSearch()
+    {
+        searching = false;
+        searchHold = 45;    // ticks at 30 Hz: a second and a half, then a second's fade
+        startTimerHz (30);
+    }
+
     /** THE RESPONSE of what plays, in dB at responseHz — `now` the cabinet heard, `before` what was kept before it
         (empty, none): each level to its own middle, so the two read as shapes; and with two mics heard `comb`, where
         they meet: dB above nought where they add in phase, below where they cancel (empty, one mic). */
@@ -375,6 +411,28 @@ private:
 
     int chosen = -1, hover = -1;
     int distHover = -1;                 // the mic whose distance the hand is over, on the speaker: its slider out
+    struct SearchDot { float x, y, score; };
+    std::vector<SearchDot> searchDots;  // the search's map (showSearch), fading once it is done
+    bool searching = false;
+    float searchFade = 0.0f;
+    int searchHold = 0;
+
+    void timerCallback() override
+    {
+        if (searchHold > 0)
+        {
+            --searchHold;
+            return;
+        }
+        searchFade -= 1.0f / 30.0f;
+        if (searchFade <= 0.0f)
+        {
+            searchFade = 0.0f;
+            searchDots.clear();
+            stopTimer();
+        }
+        repaint();
+    }
     juce::Rectangle<float> dragTrack;   // the distance track a drag began on: the column's, or the one out on the speaker
     Setup setup_;
     bool dragging = false;
@@ -1025,6 +1083,14 @@ private:
         return { sc.getX() + 18.0f, blendRow().toFloat().getCentreY() - 3.0f, sc.getWidth() - 36.0f, 6.0f };
     }
 
+    juce::Rectangle<int> findArea() const
+    {
+        if (onFind == nullptr)
+            return {};
+        const auto row = blendRow();
+        return { column (0).getX(), row.getY() + 2, wordW ("FIND") + 14, row.getHeight() - 4 };
+    }
+
     juce::Rectangle<float> blendWordArea() const
     {
         const float w = look().trackedWidth ("BLEND", look().font (13.0f), 0.06f) + 4.0f;
@@ -1198,6 +1264,17 @@ private:
             send();
             return;
         }
+        if (findArea().contains (pos))
+        {
+            if (! heard (1))
+            {
+                takeUp (1);   // B taken up: the host searches for it on its own
+                send();
+            }
+            else
+                onFind (chosen, setup_);
+            return;
+        }
         if (alignArea().expanded (4, 2).contains (pos)) { setup_.align = ! setup_.align; send(); return; }
         if (invertArea().expanded (4, 2).contains (pos)) { setup_.invert = ! setup_.invert; send(); return; }
         if (bothHeard() && blendTrack().expanded (8.0f, 8.0f).contains (e.position))
@@ -1345,6 +1422,20 @@ private:
             }
 
             paintCone (g, o, R);
+
+            // The search's map: each place it judged a dot, green where B and A add, red where they cancel.
+            if (searchFade > 0.0f)
+                for (const auto& d : searchDots)
+                {
+                    const float t = juce::jlimit (0.0f, 1.0f, -d.score / 60.0f);
+                    const auto at = o + juce::Point<float> (d.x * R, -d.y * R);
+                    const auto dot = juce::Rectangle<float> (12.0f, 12.0f).withCentre (at);
+                    g.setColour (juce::Colour (0xff3fae6a).interpolatedWith (juce::Colour (0xffd5455a), t).withMultipliedAlpha (0.85f * searchFade));
+                    g.fillEllipse (dot);
+                    g.setColour (juce::Colours::black.withAlpha (0.5f * searchFade));
+                    g.drawEllipse (dot, 1.0f);
+                }
+
             paintMicsOn (g, cab, setup_, o, R, 1.0f);
 
             // Each heard mic's centimetres under it; the one the hand is over with its slider out beside it.
@@ -1388,6 +1479,7 @@ private:
             look().drawTracked (g, "ALIGN", alignArea().toFloat(), font, 0.06f, juce::Justification::centredLeft);
             g.setColour (bothHeard() && setup_.invert ? look().orange : look().txFaint);
             look().drawTracked (g, juce::String::fromUTF8 ("\xc3\x98"), invertArea().toFloat(), font, 0.0f, juce::Justification::centred);
+            paintButton (g, "FIND", findArea(), searching);
             paintButton (g, defaultArmed ? "SURE?" : "DEFAULT", defaultArea(), defaultArmed);
             paintButton (g, "CLOSE", closeArea(), false);
         }
