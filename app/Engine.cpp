@@ -75,6 +75,7 @@ void Engine::audioDeviceAboutToStart (juce::AudioIODevice* device)
 {
     const double rate = device->getCurrentSampleRate();
     const int block = device->getCurrentBufferSizeSamples();
+    rateNow = rate;
     transport.prepareToPlay (block, rate);
     scratch.setSize (2, block);
     prepared = convolver.prepare (rate, block, 1, 1.0, true);   // reference-unity: the same loudness as a plugin's
@@ -108,9 +109,18 @@ void Engine::audioDeviceIOCallbackWithContext (const float* const*, int, float* 
     }
     if (prepared.load())
     {
+        // The sample as it came kept beside it, for BYPASS: the two crossfaded, the cabinet's share moving 20 ms end to end.
+        float* dry = scratch.getWritePointer (1);
+        juce::FloatVectorOperations::copy (dry, mono, numSamples);
         float* io[] { mono };
         if (! convolver.process (io, 1, numSamples))
             juce::FloatVectorOperations::clear (mono, numSamples);
+        const float target = bypass.load() ? 0.0f : 1.0f, step = (float) (1.0 / (0.02 * rateNow));
+        for (int i = 0; i < numSamples; ++i)
+        {
+            wet = target > wet ? std::min (target, wet + step) : std::max (target, wet - step);
+            mono[i] = wet * mono[i] + (1.0f - wet) * dry[i];
+        }
     }
     for (int ch = 0; ch < numOutputs; ++ch)
         if (outputs[ch] != nullptr)

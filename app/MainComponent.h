@@ -63,6 +63,16 @@ private:
     juce::MemoryBlock keptWav;                // ...rendered, for DOWNLOAD IR
     std::vector<float> keptCurve;             // ...its response: the ghost under the next one
 
+    /** HEAR, in the strip: what the sample is played through — the pair, one mic of it as it stands in the pair, or no
+        cabinet (BYPASS); A and B only while two mics are heard. The player's alone: nothing of the preset, nothing
+        DOWNLOAD IR writes (the owner, 05.11). */
+    enum class Hear { pair, a, b, bypass };
+    static constexpr const char* hearWords[] { "A+B", "A", "B", "BYPASS" };
+    Hear hear = Hear::pair;
+    std::vector<float> irMix, irA, irB;       // the last rendered: the pair and each mic's part of it (none with one mic)
+    Hear hearing() const;                     // HEAR as it plays: A or B with one mic heard plays the pair
+    void playHeard();
+
     juce::ThreadPool worker { 1 };
     synth::PairRenderer renderer;             // the worker's own: it keeps each mic's last IR
     std::atomic<int> latest { 0 };
@@ -109,6 +119,7 @@ private:
     juce::Rectangle<int> openArea() const;
     juce::Rectangle<int> playArea() const;
     juce::Rectangle<int> sampleArea() const;
+    juce::Rectangle<int> hearArea (int) const;
     juce::Rectangle<int> audioArea() const;
     juce::Rectangle<int> versionArea() const;
 };

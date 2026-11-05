@@ -40,6 +40,10 @@ public:
     /** A load the convolver turned away mid-fade, offered again. Message thread, often. */
     void flush();
 
+    /** BYPASS: the sample heard as it is, the cabinet out — faded either way over 20 ms, the convolver running on under
+        it so the cabinet comes back without a start. Any thread. */
+    void setBypass (bool on) { bypass = on; }
+
     void audioDeviceIOCallbackWithContext (const float* const* inputs, int numInputs, float* const* outputs, int numOutputs,
                                            int numSamples, const juce::AudioIODeviceCallbackContext&) override;
     void audioDeviceAboutToStart (juce::AudioIODevice*) override;
@@ -53,6 +57,9 @@ private:
 
     felitronics::convolution::CabConvolver convolver;
     std::atomic<bool> prepared { false };
+    std::atomic<bool> bypass { false };
+    float wet = 1.0f;          // the cabinet's share, audio thread: toward nought while bypassed
+    double rateNow = 48000.0;  // the device's
     std::vector<float> irNow;
     double irRate = 48000.0;
     juce::AudioBuffer<float> scratch;

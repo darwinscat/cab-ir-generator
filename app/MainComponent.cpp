@@ -203,7 +203,11 @@ void MainComponent::render (const State& s, bool live)
             auto comb = ir.a.empty() ? std::vector<float>() : synth::combOf (ir.a, ir.b);
             auto parts = synth::partsOf (held, ir.a, ir.b);
             auto before = keptCurve;
-            engine.setIr (std::move (ir.mix), 48000.0);
+            irMix = std::move (ir.mix);
+            irA = std::move (ir.a);
+            irB = std::move (ir.b);
+            playHeard();
+            repaint (strip());   // HEAR's A and B, lit with two mics heard
             if (! live)
             {
                 keptWav = std::move (bytes);
@@ -700,6 +704,29 @@ juce::Rectangle<int> MainComponent::openArea() const    { return strip().reduced
 juce::Rectangle<int> MainComponent::playArea() const    { return openArea().translated (78, 0).withWidth (70); }
 juce::Rectangle<int> MainComponent::sampleArea() const  { return playArea().translated (78, 0).withWidth (300); }
 juce::Rectangle<int> MainComponent::audioArea() const   { return versionArea().translated (-82, 0).withWidth (74); }
+
+juce::Rectangle<int> MainComponent::hearArea (int i) const   // after the sample, a button a word
+{
+    int x = sampleArea().getRight() + 16;
+    for (int k = 0; k < i; ++k)
+        x += juce::roundToInt (look().trackedWidth (hearWords[k], look().font (13.0f), 0.06f)) + 22 + 4;
+    return sampleArea().withX (x).withWidth (juce::roundToInt (look().trackedWidth (hearWords[i], look().font (13.0f), 0.06f)) + 22);
+}
+
+MainComponent::Hear MainComponent::hearing() const
+{
+    const bool parts = ! irA.empty() && ! irB.empty();
+    return (hear == Hear::a || hear == Hear::b) && ! parts ? Hear::pair : hear;
+}
+
+void MainComponent::playHeard()
+{
+    const auto now = hearing();
+    const auto& ir = now == Hear::a ? irA : now == Hear::b ? irB : irMix;
+    if (! ir.empty())
+        engine.setIr (ir, 48000.0);
+    engine.setBypass (now == Hear::bypass);
+}
 juce::Rectangle<int> MainComponent::versionArea() const { return strip().reduced (8, 5).removeFromRight (70); }
 
 void MainComponent::paint (juce::Graphics& g)
@@ -805,6 +832,8 @@ void MainComponent::paint (juce::Graphics& g)
     if (engine.hasSample())
         button (engine.isPlaying() ? "STOP" : "PLAY", playArea(), engine.isPlaying());
     button ("AUDIO", audioArea(), false);
+    for (int i = 0; i < 4; ++i)   // HEAR: the one playing lit; A and B dim with one mic heard
+        button (hearWords[i], hearArea (i), (int) hearing() == i, i == 0 || i == 3 || (! irA.empty() && ! irB.empty()));
 
     // The sample: a box like the preset's, its menu the riffs we carry and a file of the player's own.
     const auto sa = sampleArea().toFloat().reduced (0.5f);
@@ -869,6 +898,14 @@ void MainComponent::mouseDown (const juce::MouseEvent& e)
     }
     else if (audioArea().contains (p))
         showAudio();
+    else if (const int h = [&] { for (int i = 0; i < 4; ++i) if (hearArea (i).contains (p)) return i; return -1; }(); h >= 0)
+    {
+        if ((h == 1 || h == 2) && (irA.empty() || irB.empty()))
+            return;   // A or B with one mic heard: nothing to pick
+        hear = (Hear) h;
+        playHeard();
+        repaint (strip());
+    }
     else if (versionArea().contains (p))
         badge.showAbout();
 }
