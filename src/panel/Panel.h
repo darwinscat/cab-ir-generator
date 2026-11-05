@@ -473,8 +473,8 @@ private:
 
     /** WHAT A CLICK AT A POINT WORKS — the one thing both the hand's light and its press go by (hotAt), so what is lit is
         what a click does. */
-    enum class Part { none, download, back, cab, cabHorn, horn, distance, place, micRow, angle, shift, mic, close, reset, find,
-                      align, invert, blend };
+    enum class Part { none, download, legend, back, cab, cabHorn, horn, distance, place, micRow, angle, shift, mic, close, reset,
+                      find, align, invert, blend };
     struct Hot
     {
         Part part = Part::none;
@@ -776,6 +776,9 @@ private:
         const auto pos = p.roundToInt();
         if (downloadArea().contains (pos))
             return { Part::download };
+        for (int i : { 1, 2 })   // the legend's MIC A and MIC B
+            if (legendItems()[(size_t) i].expanded (4.0f, 2.0f).contains (p))
+                return { Part::legend, -1, i };
 
         if (p.x < (float) leftW)
         {
@@ -853,6 +856,12 @@ private:
 
             case Part::download:
                 onDownload();
+                return;
+
+            // A mic's curve in the response shown or not: the picture's, nothing of the state.
+            case Part::legend:
+                showPart[(size_t) h.i - 1] = ! showPart[(size_t) h.i - 1];
+                repaint (responseArea());
                 return;
 
             // The back: kept as turned, its own one too, so every box after comes with it.
@@ -1684,6 +1693,76 @@ private:
     // heard green to red, the one kept before it a faint grey ghost; dB at the left, the frequencies under.
     std::vector<float> responseNow, responseBefore, responseComb, responseA, responseB;
     std::vector<float> responseBad;   // dB, each point: how far it falls into a pit, or its two mics cancel there — the deeper
+    std::array<bool, 2> showPart { true, true };   // MIC A's and MIC B's curves, the legend's to turn off
+
+    /** THE LEGEND over the response's top right, left of DOWNLOAD IR: SUM, MIC A, MIC B and BEFORE, a short line of each
+        before its word — each only while its curve is there; MIC A and MIC B a click each, their curve off and on (the
+        owner, 05.11). Empty for an item not there. */
+    static constexpr const char* legendWords[] { "SUM", "MIC A", "MIC B", "BEFORE" };
+    static constexpr float legendSwatch = 18.0f, legendGap = 14.0f;
+
+    std::array<ui::Rectangle<float>, 4> legendItems() const
+    {
+        std::array<ui::Rectangle<float>, 4> out {};
+        const bool there[4] { (int) responseNow.size() == responsePoints, (int) responseA.size() == responsePoints,
+                              (int) responseB.size() == responsePoints, (int) responseBefore.size() == responsePoints };
+        const auto plot = responsePlot();
+        const auto d = downloadArea();
+        float right = d.isEmpty() ? plot.getRight() - 6.0f : (float) d.getX() - legendGap;
+        const float y = plot.getY() + 6.0f;
+        for (int i = 3; i >= 0; --i)
+        {
+            if (! there[i])
+                continue;
+            const float w = legendSwatch + 5.0f + ui::look().trackedWidth (legendWords[i], ui::look().font (13.0f), 0.06f) + 4.0f;
+            out[(size_t) i] = { right - w, y, w, 24.0f };
+            right -= w + legendGap;
+        }
+        return out;
+    }
+
+    void paintLegend (ui::Graphics& g) const
+    {
+        const auto items = legendItems();
+        const auto font = ui::look().font (13.0f);
+        float left = 1e9f, right = -1e9f, top = 0.0f;   // one row: from the first item's left to the last one's right
+        for (const auto& r : items)
+            if (! r.isEmpty())
+            {
+                left = ui::jmin (left, r.getX());
+                right = ui::jmax (right, r.getRight());
+                top = r.getY();
+            }
+        if (right < left)
+            return;
+        g.setColour (ui::look().panel2.withAlpha (0.85f));   // over the curves, so it reads
+        g.fillRoundedRectangle (ui::Rectangle<float> (left - 8.0f, top, right - left + 16.0f, 24.0f), 4.0f);
+
+        const ui::Colour green (0xff3fae6a), red (0xffd5455a);
+        for (int i = 0; i < 4; ++i)
+        {
+            const auto r = items[(size_t) i];
+            if (r.isEmpty())
+                continue;
+            const bool off = (i == 1 || i == 2) && ! showPart[(size_t) i - 1], over = isHot (Part::legend, -1, i);
+            const float y = r.getCentreY(), x = r.getX();
+            const auto dim = [off] (ui::Colour c) { return off ? c.withMultipliedAlpha (0.3f) : c; };
+            if (i == 0)   // the heard line's two colours, green and red
+            {
+                g.setColour (green);
+                g.fillRect (ui::Rectangle<float> (x, y - 0.8f, 0.5f * legendSwatch, 1.6f));
+                g.setColour (red);
+                g.fillRect (ui::Rectangle<float> (x + 0.5f * legendSwatch, y - 0.8f, 0.5f * legendSwatch, 1.6f));
+            }
+            else
+            {
+                g.setColour (dim (i == 1 ? ui::look().orange : i == 2 ? ui::look().lilac : ui::look().txDim.withAlpha (0.5f)));
+                g.fillRect (ui::Rectangle<float> (x, y - 0.5f, legendSwatch, 1.0f));
+            }
+            g.setColour (over ? ui::look().tx : off ? ui::look().txFaint.withMultipliedAlpha (0.6f) : ui::look().txDim);
+            ui::look().drawTracked (g, legendWords[i], r.withTrimmedLeft (legendSwatch + 5.0f), font, 0.06f, ui::Justification::centredLeft);
+        }
+    }
     // +15 over the middle, -30 under it: a cabinet's response rarely climbs past +10, its roll-offs and a comb's dips
     // go to -20 and -30, and under that nothing more is heard (the owner, 05.11).
     static constexpr float responseTop = 15.0f, responseBottom = -30.0f;
@@ -1761,8 +1840,8 @@ private:
         g.reduceClipRegion (p.toNearestInt().expanded (0, 2));
         curve (responseBefore, ui::look().txDim.withAlpha (0.3f), 1.2f);   // barely there: a second line reads as a second mic
         // With two mics heard, each as it stands in what plays, in its colour and thinner (the owner, 05.11).
-        curve (responseA, ui::look().orange.withAlpha (0.8f), 1.0f);
-        curve (responseB, ui::look().lilac.withAlpha (0.8f), 1.0f);
+        if (showPart[0]) curve (responseA, ui::look().orange.withAlpha (0.8f), 1.0f);
+        if (showPart[1]) curve (responseB, ui::look().lilac.withAlpha (0.8f), 1.0f);
         // What plays, green where it is fine and red where it falls into a pit or its two mics cancel — from 3 dB, full
         // red at 6, the bounds the presets are held to (the owner, 05.11): drawn in runs of one shade, each segment as
         // red as the worse of its two ends.
@@ -1784,6 +1863,8 @@ private:
                 from = to;
             }
         }
+
+        paintLegend (g);
 
         // DOWNLOAD IR over the corner, its line pulsing slowly — the one thing the response invites a hand to do.
         if (const auto d = downloadArea(); ! d.isEmpty())
