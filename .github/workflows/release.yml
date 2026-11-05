@@ -1,0 +1,214 @@
+name: release
+
+# A version tag (vX.Y.Z) builds the app everywhere and attaches it to a GitHub Release. A manual run
+# builds the same files and publishes nothing unless dry_run is turned off, so they can be downloaded
+# from the run's page and tried first.
+#
+#   • macOS   → a signed, notarized, stapled .dmg — one app for Apple silicon and Intel  [self-hosted]
+#   • Windows → a .zip with the .exe, x64 and arm64
+#   • Linux   → a .tar.gz with the binary, x86_64 and arm64
+#
+# Signing: the org's secrets MACOS_APP_IDENTITY and KCH_PWD and its variable NOTARY_PROFILE.
+
+on:
+  push:
+    tags: [ 'v*' ]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version, e.g. 0.1.0 (manual runs)"
+        required: true
+        default: "0.1.0"
+      dry_run:
+        description: "Build only — do NOT create a GitHub Release"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write   # create the GitHub Release and upload its files
+
+jobs:
+  version:
+    # The tag and the version the app shows (project() in CMakeLists.txt) are one number, or nothing is built.
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: v
+        run: |
+          RAW="${{ github.event.inputs.version || github.ref_name }}"
+          VER="${RAW#v}"
+          OWN=$(sed -n 's/^project(cab_ir_generator VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          if [ "$VER" != "$OWN" ]; then
+            echo "::error::the tag says $VER, CMakeLists.txt says $OWN"; exit 1
+          fi
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+
+  macos:
+    # Only the runner labelled `signing` holds the Developer ID certificate and the notary profile;
+    # on any other the job dies at `security unlock-keychain`, which reads like a bad KCH_PWD.
+    needs: version
+    runs-on: [self-hosted, macOS, signing]
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build
+        run: |
+          cmake -B build -DCMAKE_BUILD_TYPE=Release "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64" \
+            -DCABIR_JUCE_DIR= -DCABIR_CORE_DIR= -DCABIR_APPKIT_DIR= -DCABIR_TOML_DIR=
+          cmake --build build --config Release --parallel 8
+      - name: Test
+        run: |
+          ctest --test-dir build --output-on-failure
+          ./build/presetcheck data/cabinets.txt data/presets/*.toml
+      - name: Sign, notarize, staple
+        env:
+          APP_ID:  ${{ secrets.MACOS_APP_IDENTITY }}
+          NOTARY:  ${{ vars.NOTARY_PROFILE }}
+          KCH_PWD: ${{ secrets.KCH_PWD }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN="$HOME/Library/Keychains/login.keychain-db"
+          security unlock-keychain -p "$KCH_PWD" "$KEYCHAIN"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KCH_PWD" "$KEYCHAIN" >/dev/null
+
+          VER="${{ needs.version.outputs.version }}"
+          APP="build/CabIrGenerator_artefacts/Release/Cab IR Generator.app"
+          DMG="dist/CabIrGenerator-$VER-macOS.dmg"
+          lipo -info "$APP/Contents/MacOS/Cab IR Generator"
+          rm -rf dist stage && mkdir -p dist stage
+
+          # The ticket takes a moment to reach the replica stapler asks: notarytool's Accepted is not
+          # yet a ticket stapler can fetch (Error 65), so it is asked again, not given up on.
+          staple_retry() {
+            local item="$1" i
+            for i in 1 2 3 4 5; do
+              xcrun stapler staple "$item" && return 0
+              echo "staple: no ticket yet for $item (attempt $i of 5)"
+              sleep 20
+            done
+            return 1
+          }
+
+          # The app plays out and reads no input, so the hardened runtime needs no entitlements.
+          codesign --force --options runtime --timestamp --sign "$APP_ID" "$APP"
+          codesign --verify --strict --verbose=1 "$APP"
+
+          # The app notarized and stapled on its own, so a copy dragged out of the image carries its ticket.
+          ditto -c -k --keepParent "$APP" dist/_app.zip
+          xcrun notarytool submit dist/_app.zip --keychain-profile "$NOTARY" --wait
+          rm -f dist/_app.zip
+          staple_retry "$APP"
+          xcrun stapler validate "$APP"
+
+          # The image: the app and a link to Applications to drag it onto; signed, notarized, stapled.
+          cp -R "$APP" stage/
+          ln -s /Applications stage/Applications
+          hdiutil create -volname "Cab IR Generator" -srcfolder stage -ov -format UDZO "$DMG"
+          codesign --force --timestamp --sign "$APP_ID" "$DMG"
+          xcrun notarytool submit "$DMG" --keychain-profile "$NOTARY" --wait
+          staple_retry "$DMG"
+          xcrun stapler validate "$DMG"
+          spctl -a -vvv -t open --context context:primary-signature "$DMG" || true
+      - uses: actions/upload-artifact@v7
+        with:
+          name: macos
+          path: dist/*
+
+  windows:
+    needs: version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: windows-latest, arch: x64,   plat: x64   }
+          - { runner: windows-11-arm, arch: arm64, plat: ARM64 }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build
+        run: |
+          cmake -B build -A ${{ matrix.plat }} -DCMAKE_BUILD_TYPE=Release -DCABIR_JUCE_DIR= -DCABIR_CORE_DIR= -DCABIR_APPKIT_DIR= -DCABIR_TOML_DIR=
+          cmake --build build --config Release --parallel
+      - name: Test
+        shell: bash
+        run: |
+          ctest --test-dir build -C Release --output-on-failure
+          ./build/Release/presetcheck.exe data/cabinets.txt data/presets/*.toml
+      - name: Zip
+        shell: pwsh
+        run: |
+          $ver = "${{ needs.version.outputs.version }}"
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Compress-Archive -Force -DestinationPath "dist\CabIrGenerator-$ver-Windows-${{ matrix.arch }}.zip" `
+            -Path "build\CabIrGenerator_artefacts\Release\Cab IR Generator.exe", "LICENSE"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: windows-${{ matrix.arch }}
+          path: dist/*
+
+  linux:
+    needs: version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: ubuntu-latest,    arch: x86_64 }
+          - { runner: ubuntu-24.04-arm, arch: arm64  }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build \
+            libasound2-dev libfreetype-dev libfontconfig1-dev \
+            libx11-dev libxcomposite-dev libxcursor-dev libxext-dev \
+            libxinerama-dev libxrandr-dev libxrender-dev \
+            libglu1-mesa-dev mesa-common-dev
+      - name: Build
+        run: |
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCABIR_JUCE_DIR= -DCABIR_CORE_DIR= -DCABIR_APPKIT_DIR= -DCABIR_TOML_DIR=
+          cmake --build build
+      - name: Test
+        run: |
+          ctest --test-dir build --output-on-failure
+          ./build/presetcheck data/cabinets.txt data/presets/*.toml
+      - name: Package (.tar.gz)
+        run: |
+          VER="${{ needs.version.outputs.version }}"
+          mkdir -p "stage/CabIrGenerator-$VER" dist
+          cp "build/CabIrGenerator_artefacts/Release/Cab IR Generator" LICENSE "stage/CabIrGenerator-$VER/"
+          tar -C stage -czf "dist/CabIrGenerator-$VER-Linux-${{ matrix.arch }}.tar.gz" "CabIrGenerator-$VER"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: linux-${{ matrix.arch }}
+          path: dist/*
+
+  release:
+    needs: [ version, macos, windows, linux ]
+    # A tag push publishes; a manual run only with dry_run off.
+    if: ${{ github.event_name == 'push' || github.event.inputs.dry_run == 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VER="${{ needs.version.outputs.version }}"
+          mkdir -p out
+          find artifacts -type f -exec cp {} out/ \;
+          ( cd out && sha256sum CabIrGenerator-* > SHA256SUMS )
+          gh release create "v$VER" \
+            --repo "${{ github.repository }}" \
+            --title "Cab IR Generator v$VER" \
+            --generate-notes \
+            out/*
