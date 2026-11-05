@@ -94,3 +94,40 @@ jobs:
         run: ctest --test-dir build --output-on-failure
       - name: Factory presets
         run: ./build/presetcheck data/cabinets.txt data/presets/*.toml
+
+  web:
+    # The page's module against the native build: the presets rendered through the same C ABI by both, compared within
+    # a bound (tools/irdump.cpp) — the two do not agree to the bit, their libm differ.
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install emsdk 6.0.9
+        run: |
+          git clone --depth 1 --branch 6.0.9 https://github.com/emscripten-core/emsdk.git "$HOME/emsdk"
+          "$HOME/emsdk/emsdk" install 6.0.9
+          "$HOME/emsdk/emsdk" activate 6.0.9
+      - name: Native irdump
+        run: |
+          cmake -B build-native -DCMAKE_BUILD_TYPE=Release -DCABIR_APP=OFF -DCABIR_TOOLS=OFF -DCABIR_TESTS=OFF \
+            -DCABIR_CORE_DIR= -DCABIR_TOML_DIR=
+          cmake --build build-native --target irdump --parallel
+      - name: The page's module and its irdump
+        run: |
+          source "$HOME/emsdk/emsdk_env.sh"
+          tools/wasm/build.sh build-web
+          emcmake cmake -B build-wasm -DCMAKE_BUILD_TYPE=Release -DCABIR_CORE_DIR= -DCABIR_TOML_DIR= "-DCMAKE_CXX_FLAGS=-fno-exceptions -fno-rtti"
+          cmake --build build-wasm --target irdump --parallel
+      - name: The two compared
+        run: |
+          source "$HOME/emsdk/emsdk_env.sh"
+          ./build-native/irdump data/cabinets.txt native.bin data/presets/*.toml
+          node build-wasm/irdump.js data/cabinets.txt wasm.bin data/presets/*.toml
+          ./build-native/irdump --compare native.bin wasm.bin
+      - uses: actions/upload-artifact@v7
+        with:
+          name: CabIrGenerator-web
+          path: |
+            build-web/cabir.mjs
+            build-web/cabir.wasm
+            build-web/BUILD-INFO
