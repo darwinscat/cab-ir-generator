@@ -50,7 +50,7 @@ echo
 echo "=== no threads, proven from the artifact"
 node "$CORE_SRC/tools/wasm/check-no-threads.mjs" "$OUT/cabir.wasm" "$OUT/cabir.mjs"
 
-describe() { git -C "$1" describe --tags --always --dirty 2>/dev/null || echo "unknown"; }
+describe() { git -C "$1" describe --tags --match 'v[0-9]*' --always --dirty 2>/dev/null || echo "unknown"; }
 commit() { git -C "$1" rev-parse HEAD 2>/dev/null || echo "unknown"; }
 TOML_SRC="$(sed -n 's/^felitronics_toml_SOURCE_DIR:STATIC=//p' "$BUILD/CMakeCache.txt")"
 [ -n "$TOML_SRC" ] || TOML_SRC="$BUILD/_deps/felitronics_toml-src"
