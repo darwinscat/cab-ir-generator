@@ -150,7 +150,7 @@ int main()
         const auto last = (short) u16 (44 + 2 * 1023);
         check (std::abs ((int) last) <= 1, "its end faded to nothing");
         check (cabir::downloadName (full, { 44100, 16, 1024 }).find (" 44k 16bit 1024") != std::string::npos, "the format in its name");
-        check (cabir::formatNote ({ 44100, 16, 1024 }) == "44.1 kHz \xc2\xb7 16 bit \xc2\xb7 1024 samples", "the line under the button");
+        check (cabir::formatNote ({ 44100, 16, 1024 }) == "44.1 kHz, 16 bit, 1024 samples", "the line under the button");
     }
 
     std::printf ("%s\n%s", failures == 0 ? "state: all passed" : "state: FAILED", text.c_str());
