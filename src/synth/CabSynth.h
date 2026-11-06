@@ -1335,8 +1335,9 @@ struct WavMeta
     std::string name, artist = "Darwin's Cat", software, comment, preset;
 };
 
-/** A 24-bit mono WAV of `x`, as the bytes a file of it would hold — and what `meta` says, when given. */
-inline std::vector<unsigned char> wav24 (const std::vector<float>& x, int rate, const WavMeta* meta = nullptr)
+/** A mono WAV of `x` at `bits` (24, or 16 for a loader that takes no more — the owner, 06.11), as the bytes a file of it
+    would hold — and what `meta` says, when given. Rounded, not dithered: an IR's own floor is far under 16 bits'. */
+inline std::vector<unsigned char> wavPcm (const std::vector<float>& x, int rate, int bits, const WavMeta* meta = nullptr)
 {
     std::vector<unsigned char> b;
     const auto u32 = [&b] (uint32_t v) { for (int i = 0; i < 4; ++i) b.push_back ((unsigned char) (v >> (8 * i))); };
@@ -1345,13 +1346,16 @@ inline std::vector<unsigned char> wav24 (const std::vector<float>& x, int rate, 
     const auto put32 = [&b] (size_t at, uint32_t v) { for (int i = 0; i < 4; ++i) b[at + (size_t) i] = (unsigned char) (v >> (8 * i)); };
     const auto pad = [&b] (size_t length) { if (length % 2 != 0) b.push_back (0); };   // a chunk ends on an even byte
 
-    const uint32_t data = (uint32_t) x.size() * 3;
+    const uint32_t bytes = bits == 16 ? 2 : 3;
+    const double full = bits == 16 ? 32768.0 : 8388608.0;
+    const uint32_t data = (uint32_t) x.size() * bytes;
     tag ("RIFF"); u32 (0); tag ("WAVE"); tag ("fmt "); u32 (16); u16 (1); u16 (1); u32 ((uint32_t) rate);
-    u32 ((uint32_t) rate * 3); u16 (3); u16 (24); tag ("data"); u32 (data);
+    u32 ((uint32_t) rate * bytes); u16 ((uint16_t) bytes); u16 ((uint16_t) (8 * bytes)); tag ("data"); u32 (data);
     for (float v : x)
     {
-        const auto s = (int32_t) std::lround (std::clamp ((double) v, -1.0, 1.0 - 1.0 / 8388608.0) * 8388608.0);
-        b.push_back ((unsigned char) s); b.push_back ((unsigned char) (s >> 8)); b.push_back ((unsigned char) (s >> 16));
+        const auto s = (int32_t) std::lround (std::clamp ((double) v, -1.0, 1.0 - 1.0 / full) * full);
+        for (uint32_t k = 0; k < bytes; ++k)
+            b.push_back ((unsigned char) (s >> (8 * k)));
     }
     pad (data);
 
@@ -1382,6 +1386,25 @@ inline std::vector<unsigned char> wav24 (const std::vector<float>& x, int rate, 
     }
     put32 (4, (uint32_t) (b.size() - 8));
     return b;
+}
+
+/** ...24-bit, as the app's DOWNLOAD IR and the packs write it. */
+inline std::vector<unsigned char> wav24 (const std::vector<float>& x, int rate, const WavMeta* meta = nullptr)
+{
+    return wavPcm (x, rate, 24, meta);
+}
+
+/** An IR cut to `samples` (0: as it is) for a loader that takes no longer one (the owner, 06.11) — its last quarter faded
+    out along a raised cosine, so the cut is no click. */
+inline std::vector<float> shortened (std::vector<float> x, size_t samples)
+{
+    if (samples == 0 || samples >= x.size())
+        return x;
+    x.resize (samples);
+    const size_t fade = std::max<size_t> (1, samples / 4);
+    for (size_t i = 0; i < fade; ++i)
+        x[samples - fade + i] *= (float) (0.5 + 0.5 * std::cos (pi * (double) (i + 1) / (double) fade));
+    return x;
 }
 
 } // namespace cabir::synth

@@ -9,7 +9,7 @@ cmake_minimum_required(VERSION 3.22)
 set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "The oldest macOS the binaries run on")
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
-project(cab_ir_generator VERSION 0.1.4 LANGUAGES C CXX)
+project(cab_ir_generator VERSION 0.1.5 LANGUAGES C CXX)
 
 include(FetchContent)
 

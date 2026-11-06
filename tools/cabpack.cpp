@@ -320,8 +320,9 @@ namespace
              + "\">\n<rect width=\"100%\" height=\"100%\" fill=\"#111119\"/>\n";
     }
 
-    /** RESPONSES.SVG: every cabinet of a folder (chartSvg), four across, under its title — the style, or the size — and what
-        the line and the bands say, a click on one opening it on the page. Nothing read under 13 px. */
+    /** RESPONSES.SVG: every cabinet of a folder (chartSvg), four across, under its title — "ROCK · 20 BASS CABINETS from
+        Darwin's Cat" (the owner, 06.11), the style upper-cased or the size as it is written — what made it, and what the
+        line and the bands say, a click on one opening it on the page. Nothing read under 13 px. */
     std::string responsesSvg (const std::string& title, const std::vector<Item>& items, const std::vector<Curve>& curves)
     {
         constexpr int columns = 4;
@@ -330,9 +331,9 @@ namespace
         const auto f = svgNumber;
         std::string out = svgOpen (columns * cellW, head + (float) rows * cellH + 8.0f);
         out += "<text x=\"20\" y=\"32\" fill=\"#ece9f6\" font-size=\"20\" font-weight=\"600\" letter-spacing=\"1.5\" " + svgFont + ">"
-             + escaped (ui::String (title).toUpperCase().toStdString()) + " \xc2\xb7 "
-             + std::to_string (items.size()) + " CABINETS \xc2\xb7 CAB IR GENERATOR " + CABIR_VERSION + "</text>\n";
-        out += "<text x=\"20\" y=\"56\" fill=\"#a6a2bd\" font-size=\"13\" " + svgFont + ">A click on one opens it in the generator.</text>\n";
+             + escaped (title) + " \xc2\xb7 " + std::to_string (items.size()) + " BASS CABINETS from Darwin's Cat</text>\n";
+        out += "<text x=\"20\" y=\"56\" fill=\"#a6a2bd\" font-size=\"13\" " + svgFont + ">Made with Cab IR Generator " + CABIR_VERSION
+             + ". A click on one opens it in the generator.</text>\n";
         legendSvg (out, 20, 80, true, true);
         for (size_t i = 0; i < items.size() && i < curves.size(); ++i)
         {
@@ -566,7 +567,7 @@ int main (int argc, char** argv)
                 // What each WAV says of itself (synth::WavMeta): its name, the link that opens it on the page, its preset.
                 synth::WavMeta meta;
                 meta.name = it.name;
-                meta.software = std::string ("Cab IR Generator ") + CABIR_VERSION;
+                meta.software = "Cab IR Generator";   // no version (the owner, 06.11): a WAV's bytes change only with its sound — BUILD-INFO says the version
                 meta.comment = linkTo (it.state);
                 meta.preset = it.text;
                 const auto wav = synth::wav24 (ir, (int) r.hz, &meta);
@@ -575,7 +576,7 @@ int main (int argc, char** argv)
                 ++written;
             }
         }
-        finish (folder, items.empty() ? folder : items.front().style, items, curves, nullptr);
+        finish (folder, ui::String (items.empty() ? folder : items.front().style).toUpperCase().toStdString(), items, curves, nullptr);
         for (size_t i = 0; i < items.size() && i < curves.size(); ++i)
             made.push_back ({ &items[i], folder, curves[i] });
     }

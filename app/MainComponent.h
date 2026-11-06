@@ -9,6 +9,7 @@
 #include <felitronics/appkit/UpdateChecker.h>
 #include <felitronics/appkit/VersionBadge.h>
 #include <panel/CabPicker.h>
+#include <panel/Download.h>
 #include <synth/CabSynth.h>
 #include <synth/State.h>
 
@@ -105,6 +106,12 @@ private:
     void showSamples();
     void showAudio();
     void download();
+    /** DOWNLOAD IR's format (the owner, 06.11): rate, bits, and the length a loader takes — 0, the whole IR — kept between
+        runs; the panel's ▾ chooses, the line under the button says it. */
+    DownloadFormat format;                         // panel/Download.h
+    void showFormats();
+    void formatChosen();
+    synth::WavMeta metaOf (const State&) const;   // what a WAV of `s` says of itself
     void timerCallback() override;
 
     juce::Rectangle<int> header() const { return getLocalBounds().removeFromTop (headerH); }

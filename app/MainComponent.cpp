@@ -131,6 +131,7 @@ MainComponent::MainComponent()
     picker.onSetup    = [this] (int cab, CabPicker::Setup setup) { keep (CabPicker::stateOf (cab, setup)); };
     picker.onMove     = [this] (int cab, CabPicker::Setup setup) { render (CabPicker::stateOf (cab, setup), true); };
     picker.onDownload = [this] { download(); };
+    picker.onDownloadFormat = [this] { showFormats(); };
     picker.onFind     = [this] (int cab, CabPicker::Setup setup) { findPlace (CabPicker::stateOf (cab, setup), true); };   // FIND looks harder
     picker.showDefault = false;   // DEFAULT is the preset menu's first item here
     addAndMakeVisible (picker);
@@ -151,6 +152,18 @@ MainComponent::MainComponent()
     const auto audio = juce::parseXML (properties.getUserSettings()->getValue ("audio"));
     engine.devices.initialise (0, 2, audio.get(), true);
     engine.devices.addAudioCallback (&engine);
+
+    // DOWNLOAD IR's format the last run chose, else 48 kHz, 24 bit, the whole IR.
+    {
+        const auto words = juce::StringArray::fromTokens (properties.getUserSettings()->getValue ("downloadFormat"), " ", "");
+        if (words.size() == 3)
+        {
+            const int r = words[0].getIntValue(), b = words[1].getIntValue(), n = words[2].getIntValue();
+            if (DownloadFormat::offered (r, b, n))
+                format = { r, b, n };
+        }
+        picker.setDownloadNote (juce::String::fromUTF8 (formatNote (format).c_str()));
+    }
 
     // The sample the last run played — a riff of ours or a file — else the first riff.
     const auto last = properties.getUserSettings()->getValue ("sample");
@@ -182,13 +195,7 @@ void MainComponent::render (const State& s, bool live)
 {
     const int mine = ++latest;
     std::weak_ptr<int> stillHere = alive;
-    // What the WAV says of itself (synth::WavMeta): the preset's name while it is the one that plays, else the cabinet as a
-    // line says it; the link that opens it on the page; and its TOML, named the same.
-    synth::WavMeta meta;
-    meta.name = (presetName.isNotEmpty() && toToml (s) == presetText ? presetName : CabPicker::labelOf (s)).toStdString();
-    meta.software = std::string ("Cab IR Generator ") + CABIR_VERSION;
-    meta.comment = std::string (pageAddress) + "#" + linkOf (s);
-    meta.preset = "name = \"" + meta.name + "\"\n\n" + toToml (s);
+    const auto meta = metaOf (s);
     worker.addJob ([this, stillHere, mine, s, live, meta]
     {
         if (mine != latest.load())
@@ -671,22 +678,66 @@ void MainComponent::showAudio()
     juce::CallOutBox::launchAsynchronously (std::move (panel), audioArea().translated (0, 0), this);
 }
 
+synth::WavMeta MainComponent::metaOf (const State& s) const
+{
+    // What the WAV says of itself (synth::WavMeta): the preset's name while it is the one that plays, else the cabinet as a
+    // line says it; the link that opens it on the page; and its TOML, named the same.
+    synth::WavMeta meta;
+    meta.name = (presetName.isNotEmpty() && toToml (s) == presetText ? presetName : CabPicker::labelOf (s)).toStdString();
+    meta.software = std::string ("Cab IR Generator ") + CABIR_VERSION;
+    meta.comment = std::string (pageAddress) + "#" + linkOf (s);
+    meta.preset = "name = \"" + meta.name + "\"\n\n" + toToml (s);
+    return meta;
+}
+
 void MainComponent::download()
 {
     if (keptWav.isEmpty())
         return;
-    const auto name = juce::File::createLegalFileName (CabPicker::labelOf (state).replace (juce::String::fromUTF8 (" \xc2\xb7 "), " "));
+    // The cabinet that plays, synthesised again at the format's rate — no resampling — cut to its length and written at its
+    // bits; the format said in the file's name where it is not the usual one.
+    const auto f = format;
+    const auto name = juce::File::createLegalFileName (juce::String::fromUTF8 (downloadName (state, f).c_str()));
     auto folder = juce::File::getSpecialLocation (juce::File::userHomeDirectory).getChildFile ("Downloads");
     if (! folder.isDirectory())
         folder = juce::File::getSpecialLocation (juce::File::userDocumentsDirectory);
     chooser = std::make_unique<juce::FileChooser> ("Download IR", folder.getChildFile (name + ".wav"), "*.wav");
     chooser->launchAsync (juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles
                               | juce::FileBrowserComponent::warnAboutOverwriting,
-                          [bytes = keptWav] (const juce::FileChooser& c)
+                          [s = state, f, meta = metaOf (state)] (const juce::FileChooser& c)
                           {
-                              if (const auto file = c.getResult(); file != juce::File())
-                                  file.withFileExtension ("wav").replaceWithData (bytes.getData(), bytes.getSize());
+                              const auto file = c.getResult();
+                              if (file == juce::File())
+                                  return;
+                              static const auto table = synth::parseTable (std::string (BinaryData::cabinets_txt, (size_t) BinaryData::cabinets_txtSize));
+                              const auto wav = downloadWav (table, s, f, meta);
+                              file.withFileExtension ("wav").replaceWithData (wav.data(), wav.size());
                           });
+}
+
+void MainComponent::showFormats()
+{
+    // Rate, bits and length, each ticked where it stands; a length in samples, as a loader's maker writes it, and the ms it
+    // comes to at the rate.
+    juce::PopupMenu menu;
+    menu.addSectionHeader ("RATE");
+    for (const int r : { 44100, 48000, 96000 })
+        menu.addItem (r == 44100 ? "44.1 kHz" : r == 48000 ? "48 kHz" : "96 kHz", true, format.rate == r, [this, r] { format.rate = r; formatChosen(); });
+    menu.addSectionHeader ("BITS");
+    for (const int b : { 24, 16 })
+        menu.addItem (juce::String (b) + " bit", true, format.bits == b, [this, b] { format.bits = b; formatChosen(); });
+    menu.addSectionHeader ("LENGTH");
+    menu.addItem ("FULL \xc2\xb7 100 ms", true, format.samples == 0, [this] { format.samples = 0; formatChosen(); });
+    for (const int n : { 2048, 1024, 512 })
+        menu.addItem (juce::String (n) + " samples \xc2\xb7 " + juce::String (juce::roundToInt (1000.0 * n / format.rate)) + " ms", true,
+                      format.samples == n, [this, n] { format.samples = n; formatChosen(); });
+    menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition());
+}
+
+void MainComponent::formatChosen()
+{
+    properties.getUserSettings()->setValue ("downloadFormat", juce::String (format.rate) + " " + juce::String (format.bits) + " " + juce::String (format.samples));
+    picker.setDownloadNote (juce::String::fromUTF8 (formatNote (format).c_str()));
 }
 
 void MainComponent::timerCallback()

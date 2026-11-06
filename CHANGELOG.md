@@ -5,6 +5,19 @@ All notable changes to **Cab IR Generator** are documented here. The format foll
 [Keep a Changelog](https://keepachangelog.com/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.1.5] — 2026-11-06 — DOWNLOAD IR in the format a loader takes
+
+### Added
+- **DOWNLOAD IR in a format.** A ▾ beside the button: 44.1, 48 or 96 kHz; 24 or 16 bits; the whole IR or 2048, 1024
+  or 512 samples — for a floor unit that resamples nothing and takes no longer an IR. The cabinet is synthesised again at
+  that rate, cut with its last quarter faded, and the line under the button says what the next download will be; the
+  choice is kept. The usual one, 48 kHz and 24 bits whole, is the very file it always was. The page can offer the same.
+
+### Changed
+- **The IR packs' pictures** are titled «ROCK · 20 BASS CABINETS from Darwin's Cat», what made them on the line under.
+- **The packs' WAVs name their program without a version**, so a release that changes no sound leaves every one of them
+  the same file.
+
 ## [0.1.4] — 2026-11-06 — no crash on an older version's cabinet, the IR packs by size
 
 ### Fixed

@@ -4,6 +4,7 @@
 // THE STATE'S TEXT: what is written reads back the same, a later version's key is passed over, a broken one refused,
 // and pairOf renders the mics that are on.
 
+#include "panel/Download.h"
 #include "panel/Link.h"
 #include "synth/CabSynth.h"
 #include "synth/State.h"
@@ -131,6 +132,25 @@ int main()
         const auto parts = cabir::synth::renderPairParts (table, gone.box, cabir::synth::pairOf (gone));
         check (std::all_of (parts.mix.begin(), parts.mix.end(), [] (float v) { return std::abs (v) < 1.0e-12f; }),
                "a box the table has not renders silence");
+    }
+
+    // DOWNLOAD IR in a format (panel/Download.h): the usual one the very WAV it always was; 44.1 kHz, 16 bits, 1024 samples
+    // as a pedal takes it — its header saying so, its length exact, its end faded to nothing.
+    {
+        const auto table = cabir::synth::readTable (CABIR_TABLE);
+        const cabir::synth::WavMeta meta { "test", "Darwin's Cat", "Cab IR Generator", "", "" };
+        const auto usual = cabir::downloadWav (table, full, {}, meta);
+        const auto was = cabir::synth::wav24 (cabir::synth::PairRenderer {}.render (table, full.box, cabir::synth::pairOf (full)).mix, 48000, &meta);
+        check (usual == was, "the usual format is the WAV it always was");
+        const auto pedal = cabir::downloadWav (table, full, { 44100, 16, 1024 }, meta);
+        const auto u16 = [&pedal] (size_t at) { return (int) pedal[at] | ((int) pedal[at + 1] << 8); };
+        const auto u32 = [&pedal] (size_t at) { return (unsigned) pedal[at] | ((unsigned) pedal[at + 1] << 8) | ((unsigned) pedal[at + 2] << 16) | ((unsigned) pedal[at + 3] << 24); };
+        check (u32 (24) == 44100 && u16 (34) == 16 && u16 (32) == 2, "44.1 kHz, 16 bits in its header");
+        check (u32 (40) == 2048, "1024 samples, no more");
+        const auto last = (short) u16 (44 + 2 * 1023);
+        check (std::abs ((int) last) <= 1, "its end faded to nothing");
+        check (cabir::downloadName (full, { 44100, 16, 1024 }).find (" 44k 16bit 1024") != std::string::npos, "the format in its name");
+        check (cabir::formatNote ({ 44100, 16, 1024 }) == "44.1 kHz \xc2\xb7 16 bit \xc2\xb7 1024 samples", "the line under the button");
     }
 
     std::printf ("%s\n%s", failures == 0 ? "state: all passed" : "state: FAILED", text.c_str());

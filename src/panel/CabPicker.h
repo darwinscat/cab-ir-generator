@@ -43,6 +43,8 @@ public:
     std::function<void (int cab, Setup setup)>& onMove { panel.onMove };
     std::function<void()>& onClose { panel.onClose };
     std::function<void()>& onDownload { panel.onDownload };
+    std::function<void()>& onDownloadFormat { panel.onDownloadFormat };   // its ▾: the host's format menu
+    void setDownloadNote (const juce::String& note) { panel.downloadNote = ui::String (note.toStdString()); repaint(); }
     std::function<void (int cab, Setup setup)>& onFind { panel.onFind };
     bool& showDefault { panel.showDefault };
 
