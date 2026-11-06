@@ -10,8 +10,8 @@
 // mic, then B where the two meet without a deep comb and the sum without a pit — no deadline, so a run again finds the
 // same). In each, 44.1k/, 48k/ and 96k/, every cabinet synthesised at that rate: a 24-bit mono WAV as
 // the app's DOWNLOAD IR writes it, and beside it its state as the app's preset — and index.tsv, a line for each, its last
-// column the link that opens it on the page; and responses.svg, each one's response as the panel draws it, a click on one
-// opening it there too.
+// column the link that opens it on the page; and its response as the panel draws it, with what the line and the bands say
+// — each alone in responses/<file>.svg, all of them together in responses.svg — a click on one opening it there too.
 
 #include <panel/Link.h>
 #include <panel/Panel.h>
@@ -126,9 +126,9 @@ namespace
              + linkTo (s) + "\n";
     }
 
-    /** A response as the panel draws it (Panel::paintResponse): the curve, and how bad each point is — the deeper of the
-        pit it falls into and its two mics cancelling there. */
-    struct Curve { std::vector<float> db, bad; };
+    /** A response as the panel draws it (Panel::paintResponse): the curve, how bad each point is — the deeper of the pit
+        it falls into and its two mics cancelling there — and, with two mics heard, where they meet (synth::combOf). */
+    struct Curve { std::vector<float> db, bad, comb; };
 
     Curve curveOf (const synth::PairParts& parts, double rate)
     {
@@ -137,9 +137,9 @@ namespace
         c.bad = synth::pitsOf (c.db);
         if (! parts.a.empty())
         {
-            const auto comb = synth::combOf (parts.a, parts.b, rate);
-            for (size_t i = 0; i < c.bad.size() && i < comb.size(); ++i)
-                c.bad[i] = std::max (c.bad[i], -comb[i]);
+            c.comb = synth::combOf (parts.a, parts.b, rate);
+            for (size_t i = 0; i < c.bad.size() && i < c.comb.size(); ++i)
+                c.bad[i] = std::max (c.bad[i], -c.comb[i]);
         }
         return c;
     }
@@ -161,82 +161,191 @@ namespace
         return b;
     }
 
-    /** RESPONSES.SVG: every cabinet of a folder, its response as the panel draws it — 30 Hz to 12 kHz on a log scale,
-        +15 to -30 dB, green where it is fine, red from 3 dB into a pit or where the mics cancel, full at 6 — four across,
-        each under its name and its mics, a click on one opening it on the page. Nothing read under 13 px. */
+    /** What a cabinet is, in a line: its size, its back, its horn where the box has one, its mics — with two, how much of
+        each: "8x10 · CLOSED · HORN -6 dB · SM57 65% + U87 35%". */
+    std::string saidOf (const State& s)
+    {
+        const int at = Panel::indexOf (ui::String (s.box));
+        if (at < 0)
+            return s.box;
+        const auto& cab = Panel::cabs()[(size_t) at];
+        const std::string dot = " \xc2\xb7 ";
+        std::string out = Panel::wordOf (at).toStdString() + dot + Panel::backWords[s.back >= 0 ? s.back : Panel::ownBack (at)];
+        if (cab.horn)
+            out += dot + (s.horn ? "HORN " + number (std::round (s.hornDb), 0) + " dB" : std::string ("NO HORN"));
+        const auto mic = [&cab] (const Mic& m) { return (m.model.empty() ? cab.mic : ui::String (m.model)).toUpperCase().toStdString(); };
+        if (s.a.on && s.b.on)
+        {
+            const int b = (int) std::lround (s.blend * 100.0);
+            out += dot + mic (s.a) + " " + std::to_string (100 - b) + "% + " + mic (s.b) + " " + std::to_string (b) + "%";
+        }
+        else
+            out += dot + mic (s.a.on ? s.a : s.b);
+        return out;
+    }
+
+    const std::string svgFont = "font-family=\"Helvetica Neue, Helvetica, Arial, sans-serif\"";
+    std::string svgNumber (double v) { return number (v, 1); }
+
+    /** One cabinet's chart as the panel draws its response, `w` x `h` from its top left: its name, what it is (saidOf),
+        and on 30 Hz to 12 kHz, +15 to -30 dB, the two mics' comb as bands under the line — green where they add, red where
+        they cancel, the deeper the stronger, full at 6 dB — and the line, green where it is fine, red from 3 dB into a pit
+        or where the mics cancel, full at 6. `id` keeps its clip apart from the others' in one file. */
+    std::string chartSvg (const Item& it, const Curve& c, float w, float h, float nameSize, const std::string& id)
+    {
+        const float px = 52.0f, py = 44.0f + nameSize, pw = w - px - 22.0f, ph = h - py - 34.0f;
+        constexpr float top = 15.0f, bottom = -30.0f;
+        const auto f = svgNumber;
+        const auto xOf = [px, pw] (double hz) { return px + pw * std::log (hz / 30.0) / std::log (12000.0 / 30.0); };
+        const auto yOf = [py, ph] (double db) { return py + (top - db) / (top - bottom) * ph; };
+        const std::string faint = "fill=\"#6f6b86\" font-size=\"13\" " + svgFont;
+
+        std::string out = "<rect x=\"8\" y=\"6\" width=\"" + f (w - 16) + "\" height=\"" + f (h - 12)
+                        + "\" rx=\"6\" fill=\"#15151f\" stroke=\"#9778ff\" stroke-opacity=\"0.24\"/>\n";
+        out += "<text x=\"20\" y=\"" + f (14 + nameSize) + "\" fill=\"#ece9f6\" font-size=\"" + f (nameSize)
+             + "\" font-weight=\"600\" letter-spacing=\"0.6\" " + svgFont + ">" + escaped (it.name) + "</text>\n";
+        out += "<text x=\"20\" y=\"" + f (32 + nameSize) + "\" fill=\"#a6a2bd\" font-size=\"13\" " + svgFont + ">" + escaped (saidOf (it.state))
+             + "</text>\n";
+
+        // Under it all, where the two mics meet — in runs of one shade, a tenth of the full colour a step.
+        if ((int) c.comb.size() == synth::responsePoints)
+        {
+            const auto stepOf = [&c] (int i)
+            {
+                const float v = c.comb[(size_t) i];
+                const int step = (int) std::lround (std::min (1.0f, std::abs (v) / 6.0f) * 10.0f);
+                return v > 0.0f ? step : -step;
+            };
+            const auto edge = [&xOf, px, pw] (int i)
+            {
+                if (i <= 0) return (double) px;
+                if (i >= synth::responsePoints) return (double) (px + pw);
+                return 0.5 * (xOf (synth::responseHz (i - 1)) + xOf (synth::responseHz (i)));
+            };
+            for (int from = 0; from < synth::responsePoints;)
+            {
+                const int step = stepOf (from);
+                int to = from + 1;
+                while (to < synth::responsePoints && stepOf (to) == step)
+                    ++to;
+                if (step != 0)
+                    out += "<rect x=\"" + f (edge (from)) + "\" y=\"" + f (py) + "\" width=\"" + f (edge (to) - edge (from) + 0.5) + "\" height=\""
+                         + f (ph) + "\" fill=\"" + (step > 0 ? "#3fae6a" : "#d5455a") + "\" fill-opacity=\"" + number (0.045 * std::abs (step), 3) + "\"/>\n";
+                from = to;
+            }
+        }
+
+        static constexpr std::pair<double, const char*> marks[] { { 50, "50" }, { 100, "100" }, { 200, "200" }, { 500, "500" },
+                                                                   { 1000, "1k" }, { 2000, "2k" }, { 5000, "5k" }, { 10000, "10k" } };
+        for (const auto& [hz, word] : marks)
+            out += "<rect x=\"" + f (xOf (hz)) + "\" y=\"" + f (py) + "\" width=\"1\" height=\"" + f (ph)
+                 + "\" fill=\"#9778ff\" fill-opacity=\"0.12\"/><text x=\"" + f (xOf (hz)) + "\" y=\"" + f (py + ph + 17)
+                 + "\" text-anchor=\"middle\" " + faint + ">" + word + "</text>\n";
+        static constexpr std::pair<double, const char*> levels[] { { 10, "+10" }, { 0, "0" }, { -10, "-10" }, { -20, "-20" }, { -30, "-30" } };
+        for (const auto& [db, word] : levels)
+            out += "<rect x=\"" + f (px) + "\" y=\"" + f (yOf (db)) + "\" width=\"" + f (pw) + "\" height=\"1\" fill=\"#9778ff\" fill-opacity=\""
+                 + (std::abs (db) < 1.0 ? "0.24" : "0.12") + "\"/><text x=\"" + f (px - 6) + "\" y=\"" + f (yOf (db) + 4.5)
+                 + "\" text-anchor=\"end\" " + faint + ">" + word + "</text>\n";
+
+        // The line in runs of one shade, each segment as red as the worse of its two ends — the panel's own.
+        if ((int) c.db.size() == synth::responsePoints && c.bad.size() == c.db.size())
+        {
+            out += "<clipPath id=\"plot" + id + "\"><rect x=\"" + f (px) + "\" y=\"" + f (py - 2) + "\" width=\"" + f (pw)
+                 + "\" height=\"" + f (ph + 4) + "\"/></clipPath><g clip-path=\"url(#plot" + id + ")\" fill=\"none\" "
+                   "stroke-width=\"1.6\" stroke-linejoin=\"round\" stroke-linecap=\"round\">\n";
+            const auto at = [&c] (int k) { return std::clamp ((int) std::ceil ((c.bad[(size_t) k] - 3.0f) / 3.0f * 8.0f), 0, 8); };
+            const auto shade = [&at] (int k) { return std::max (at (k), at (k + 1)); };
+            for (int from = 0; from < synth::responsePoints - 1;)
+            {
+                const int level = shade (from);
+                int to = from + 1;
+                while (to < synth::responsePoints - 1 && shade (to) == level)
+                    ++to;
+                out += "<polyline stroke=\"" + shadeOf ((float) level / 8.0f) + "\" points=\"";
+                for (int k = from; k <= to; ++k)
+                    out += (k == from ? "" : " ") + f (xOf (synth::responseHz (k))) + ","
+                         + f (yOf (std::clamp ((double) c.db[(size_t) k], 3.0 * bottom, 3.0 * top)));
+                out += "\"/>\n";
+                from = to;
+            }
+            out += "</g>\n";
+        }
+        return out;
+    }
+
+    /** What the line and the bands say, from (x, y) down, a swatch before each — a sentence a line where the page is wide,
+        in two where it is not; the bands' only where there are any (`bands`). Its height. */
+    float legendSvg (std::string& out, float x, float y, bool wide, bool bands)
+    {
+        const auto f = svgNumber;
+        const std::string words = "fill=\"#a6a2bd\" font-size=\"13\" " + svgFont;
+        float at = y;
+        const auto said = [&] (const std::vector<const char*>& lines)
+        {
+            std::string all;
+            for (const auto* line : lines)
+                all += (all.empty() ? "" : " ") + std::string (line);
+            for (const auto& line : wide ? std::vector<std::string> { all } : std::vector<std::string> (lines.begin(), lines.end()))
+            {
+                out += "<text x=\"" + f (x + 32) + "\" y=\"" + f (at) + "\" " + words + ">" + line + "</text>\n";
+                at += 20.0f;
+            }
+        };
+        out += "<line x1=\"" + f (x) + "\" y1=\"" + f (at - 4) + "\" x2=\"" + f (x + 12) + "\" y2=\"" + f (at - 4)
+             + "\" stroke=\"#3fae6a\" stroke-width=\"2\"/><line x1=\"" + f (x + 12) + "\" y1=\"" + f (at - 4) + "\" x2=\"" + f (x + 24)
+             + "\" y2=\"" + f (at - 4) + "\" stroke=\"#d5455a\" stroke-width=\"2\"/>\n";
+        said ({ "The line: the cabinet's response at 48 kHz, levelled to its own 100 Hz to 5 kHz.",
+                bands ? "Green is fine; red falls 3 dB or more into a pit, or the two mics cancel there."
+                      : "Green is fine; red falls 3 dB or more into a pit." });
+        if (bands)
+        {
+            out += "<rect x=\"" + f (x) + "\" y=\"" + f (at - 10) + "\" width=\"12\" height=\"12\" fill=\"#3fae6a\" fill-opacity=\"0.45\"/><rect x=\""
+                 + f (x + 12) + "\" y=\"" + f (at - 10) + "\" width=\"12\" height=\"12\" fill=\"#d5455a\" fill-opacity=\"0.45\"/>\n";
+            said ({ "The bands, with two mics: where they meet. Green, they add up; red, they cancel.",
+                    "The stronger the colour, the deeper, full at 6 dB." });
+        }
+        return at - y;
+    }
+
+    std::string svgOpen (float w, float h)
+    {
+        const auto f = svgNumber;
+        return "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"" + f (w) + "\" height=\"" + f (h) + "\" viewBox=\"0 0 " + f (w) + " " + f (h)
+             + "\">\n<rect width=\"100%\" height=\"100%\" fill=\"#111119\"/>\n";
+    }
+
+    /** RESPONSES.SVG: every cabinet of a folder (chartSvg), four across, under what the line and the bands say, a click on
+        one opening it on the page. Nothing read under 13 px. */
     std::string responsesSvg (const std::vector<Item>& items, const std::vector<Curve>& curves)
     {
         constexpr int columns = 4;
-        constexpr float cellW = 360.0f, cellH = 216.0f, head = 72.0f;
-        constexpr float px = 52.0f, py = 62.0f, pw = cellW - px - 22.0f, ph = cellH - py - 34.0f;   // the plot, in a cell
-        constexpr float top = 15.0f, bottom = -30.0f;
+        constexpr float cellW = 360.0f, cellH = 216.0f, head = 112.0f;
         const int rows = ((int) items.size() + columns - 1) / columns;
-        const auto f = [] (double v) { return number (v, 1); };
-        const auto xOf = [] (double hz) { return px + pw * std::log (hz / 30.0) / std::log (12000.0 / 30.0); };
-        const auto yOf = [] (double db) { return py + (top - db) / (top - bottom) * ph; };
-        const std::string font = "font-family=\"Helvetica Neue, Helvetica, Arial, sans-serif\"";
-        const std::string faint = "fill=\"#6f6b86\" font-size=\"13\" " + font;
-
-        std::string out = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"" + f (columns * cellW) + "\" height=\""
-                        + f (head + rows * cellH + 8.0f) + "\" viewBox=\"0 0 " + f (columns * cellW) + " " + f (head + rows * cellH + 8.0f) + "\">\n"
-                        + "<rect width=\"100%\" height=\"100%\" fill=\"#111119\"/>\n";
-        out += "<text x=\"20\" y=\"32\" fill=\"#ece9f6\" font-size=\"20\" font-weight=\"600\" letter-spacing=\"1.5\" " + font + ">"
+        const auto f = svgNumber;
+        std::string out = svgOpen (columns * cellW, head + (float) rows * cellH + 8.0f);
+        out += "<text x=\"20\" y=\"32\" fill=\"#ece9f6\" font-size=\"20\" font-weight=\"600\" letter-spacing=\"1.5\" " + svgFont + ">"
              + escaped (ui::String (items.empty() ? std::string() : items.front().style).toUpperCase().toStdString()) + " \xc2\xb7 "
-             + std::to_string (items.size()) + " CABINETS</text>\n";
-        out += "<text x=\"20\" y=\"56\" fill=\"#a6a2bd\" font-size=\"13\" " + font + ">Cab IR Generator " + CABIR_VERSION
-             + ": each one's response at 48 kHz, levelled to its own 100 Hz to 5 kHz. Green is fine; red falls 3 dB or more into "
-               "a pit, or its two mics cancel there. A click opens one in the generator.</text>\n";
-
+             + std::to_string (items.size()) + " CABINETS \xc2\xb7 CAB IR GENERATOR " + CABIR_VERSION + "</text>\n";
+        out += "<text x=\"20\" y=\"56\" fill=\"#a6a2bd\" font-size=\"13\" " + svgFont + ">A click on one opens it in the generator.</text>\n";
+        legendSvg (out, 20, 80, true, true);
         for (size_t i = 0; i < items.size() && i < curves.size(); ++i)
         {
-            const auto& it = items[i];
-            const auto& c = curves[i];
             const float x0 = (float) (i % columns) * cellW, y0 = head + (float) (i / columns) * cellH;
-            out += "<a href=\"" + escaped (linkTo (it.state)) + "\" target=\"_blank\"><g transform=\"translate(" + f (x0) + " " + f (y0) + ")\">\n";
-            out += "<rect x=\"8\" y=\"6\" width=\"" + f (cellW - 16) + "\" height=\"" + f (cellH - 12)
-                 + "\" rx=\"6\" fill=\"#15151f\" stroke=\"#9778ff\" stroke-opacity=\"0.24\"/>\n";
-            out += "<text x=\"20\" y=\"28\" fill=\"#ece9f6\" font-size=\"15\" font-weight=\"600\" letter-spacing=\"0.6\" " + font + ">"
-                 + escaped (it.name) + "</text>\n";
-            out += "<text x=\"20\" y=\"46\" " + faint + ">" + escaped (Panel::labelOf (it.state).toStdString()) + "</text>\n";
-
-            static constexpr std::pair<double, const char*> marks[] { { 50, "50" }, { 100, "100" }, { 200, "200" }, { 500, "500" },
-                                                                       { 1000, "1k" }, { 2000, "2k" }, { 5000, "5k" }, { 10000, "10k" } };
-            for (const auto& [hz, word] : marks)
-                out += "<rect x=\"" + f (xOf (hz)) + "\" y=\"" + f (py) + "\" width=\"1\" height=\"" + f (ph)
-                     + "\" fill=\"#9778ff\" fill-opacity=\"0.12\"/><text x=\"" + f (xOf (hz)) + "\" y=\"" + f (py + ph + 17)
-                     + "\" text-anchor=\"middle\" " + faint + ">" + word + "</text>\n";
-            static constexpr std::pair<double, const char*> levels[] { { 10, "+10" }, { 0, "0" }, { -10, "-10" }, { -20, "-20" }, { -30, "-30" } };
-            for (const auto& [db, word] : levels)
-                out += "<rect x=\"" + f (px) + "\" y=\"" + f (yOf (db)) + "\" width=\"" + f (pw) + "\" height=\"1\" fill=\"#9778ff\" fill-opacity=\""
-                     + (std::abs (db) < 1.0 ? "0.24" : "0.12") + "\"/><text x=\"" + f (px - 6) + "\" y=\"" + f (yOf (db) + 4.5)
-                     + "\" text-anchor=\"end\" " + faint + ">" + word + "</text>\n";
-
-            // The line in runs of one shade, each segment as red as the worse of its two ends — the panel's own.
-            if ((int) c.db.size() == synth::responsePoints && c.bad.size() == c.db.size())
-            {
-                out += "<clipPath id=\"plot" + std::to_string (i) + "\"><rect x=\"" + f (px) + "\" y=\"" + f (py - 2) + "\" width=\"" + f (pw)
-                     + "\" height=\"" + f (ph + 4) + "\"/></clipPath><g clip-path=\"url(#plot" + std::to_string (i) + ")\" fill=\"none\" "
-                       "stroke-width=\"1.6\" stroke-linejoin=\"round\" stroke-linecap=\"round\">\n";
-                const auto at = [&c] (int k) { return std::clamp ((int) std::ceil ((c.bad[(size_t) k] - 3.0f) / 3.0f * 8.0f), 0, 8); };
-                const auto shade = [&at] (int k) { return std::max (at (k), at (k + 1)); };
-                for (int from = 0; from < synth::responsePoints - 1;)
-                {
-                    const int level = shade (from);
-                    int to = from + 1;
-                    while (to < synth::responsePoints - 1 && shade (to) == level)
-                        ++to;
-                    out += "<polyline stroke=\"" + shadeOf ((float) level / 8.0f) + "\" points=\"";
-                    for (int k = from; k <= to; ++k)
-                        out += (k == from ? "" : " ") + f (xOf (synth::responseHz (k))) + ","
-                             + f (yOf (std::clamp ((double) c.db[(size_t) k], 3.0 * bottom, 3.0 * top)));
-                    out += "\"/>\n";
-                    from = to;
-                }
-                out += "</g>\n";
-            }
-            out += "</g></a>\n";
+            out += "<a href=\"" + escaped (linkTo (items[i].state)) + "\" target=\"_blank\"><g transform=\"translate(" + f (x0) + " " + f (y0) + ")\">\n"
+                 + chartSvg (items[i], curves[i], cellW, cellH, 15.0f, std::to_string (i)) + "</g></a>\n";
         }
         return out + "</svg>\n";
+    }
+
+    /** RESPONSES/<file>.SVG: one cabinet alone, large — what it is, its chart, and what the line and the bands say — the
+        whole of it a link to it on the page. */
+    std::string responseSvg (const Item& it, const Curve& c)
+    {
+        constexpr float w = 760.0f, chartH = 380.0f;
+        std::string legend;
+        const float tall = legendSvg (legend, 20, chartH + 18, false, ! c.comb.empty());
+        return svgOpen (w, chartH + tall + 14) + "<a href=\"" + escaped (linkTo (it.state)) + "\" target=\"_blank\">\n"
+             + chartSvg (it, c, w, chartH, 18.0f, "0") + legend + "</a>\n</svg>\n";
     }
 }
 
@@ -385,6 +494,9 @@ int main (int argc, char** argv)
             }
         }
         std::ofstream (out / folder / "responses.svg", std::ios::binary) << responsesSvg (items, curves);
+        fsys::create_directories (out / folder / "responses");
+        for (size_t i = 0; i < items.size() && i < curves.size(); ++i)
+            std::ofstream (out / folder / "responses" / (items[i].file + ".svg"), std::ios::binary) << responseSvg (items[i], curves[i]);
         // ...and how many of them the panel's line stays green on — under 3 dB everywhere — each one it reddens on named.
         int clear = 0;
         std::string red;

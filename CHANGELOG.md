@@ -8,9 +8,12 @@ All notable changes to **Cab IR Generator** are documented here. The format foll
 ## [Unreleased]
 
 ### Added
-- **Every IR pack shows its cabinets and links them.** `responses.svg` in each pack: every cabinet's response as the
-  panel draws it — green where it is fine, red into a pit — under its name and its mics, a click on one opening it in the
-  generator. And `index.tsv` ends in a `link` column: the same link, for each cabinet, to open it and change it.
+- **Every IR pack shows its cabinets and links them.** Each cabinet's response as the panel draws it — the line green
+  where it is fine and red into a pit, and with two mics the bands where they meet, green where they add up and red where
+  they cancel — under its name and what it is: its size, its back, its horn, its mics and how much of each, with a few
+  words saying what the line and the bands are. One picture a cabinet in `responses/`, and all of a pack's together in
+  `responses.svg`; a click on one opens it in the generator. And `index.tsv` ends in a `link` column: the same link, for
+  each cabinet, to open it and change it.
 
 ### Changed
 - **The typical pack's mics, spread as the presets' are.** Its A stood where DEFAULT puts it, and only B was moved — so
