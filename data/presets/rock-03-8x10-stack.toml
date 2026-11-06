@@ -1,7 +1,7 @@
 name = "ROCK · 8x10 STACK"
 style = "Rock"
 cabir = 1
-box = "SVT-810"
+box = "8x10-classic"
 back = "closed"
 horn = false
 horn_db = -6

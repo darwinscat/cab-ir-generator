@@ -1,7 +1,7 @@
 name = "PUNK · 2x10 GUTTER"
 style = "Punk"
 cabir = 1
-box = "VB-210"
+box = "2x10-round"
 back = "closed"
 horn = false
 horn_db = -12

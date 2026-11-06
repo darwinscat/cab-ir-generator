@@ -1,7 +1,7 @@
 name = "REGGAE · 8x10 DREAD"
 style = "Reggae"
 cabir = 1
-box = "SVT-810"
+box = "8x10-classic"
 back = "ported"
 horn = false
 horn_db = -12

@@ -1,7 +1,7 @@
 name = "REGGAE · 2x15 ROCKERS"
 style = "Reggae"
 cabir = 1
-box = "SUBWAY-215"
+box = "2x15-light"
 back = "ported"
 horn = false
 horn_db = -12

@@ -1,7 +1,7 @@
 name = "PUNK · 4x10 SPIT"
 style = "Punk"
 cabir = 1
-box = "SVT-410HE"
+box = "4x10-classic"
 back = "closed"
 horn = false
 horn_db = -12

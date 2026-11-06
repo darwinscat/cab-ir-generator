@@ -1,7 +1,7 @@
 name = "JAZZ · 4x10 WALKING"
 style = "Jazz"
 cabir = 1
-box = "SVT-410HE"
+box = "4x10-classic"
 back = "closed"
 horn = false
 horn_db = -12

@@ -1,7 +1,7 @@
 name = "MOTOWN · 4x10 DOWNBEAT"
 style = "Motown"
 cabir = 1
-box = "SVT-410HE"
+box = "4x10-classic"
 back = "closed"
 horn = false
 horn_db = -12

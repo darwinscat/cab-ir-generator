@@ -5,6 +5,28 @@ All notable changes to **Cab IR Generator** are documented here. The format foll
 [Keep a Changelog](https://keepachangelog.com/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.1.3] — 2026-11-06 — packs that show their cabinets, boxes named by their size
+
+### Added
+- **Every IR pack shows its cabinets and links them.** Each cabinet's response as the panel draws it — the line green
+  where it is fine and red into a pit, and with two mics the bands where they meet, green where they add up and red where
+  they cancel — under its name and what it is: its size, its back, its horn, its mics and how much of each, with a few
+  words saying what the line and the bands are. One picture a cabinet in `responses/`, and all of a pack's together in
+  `responses.svg`; a click on one opens it in the generator. And `index.tsv` ends in a `link` column: the same link, for
+  each cabinet, to open it and change it.
+
+### Changed
+- **The typical pack's mics, spread as the presets' are.** Its A stood where DEFAULT puts it, and only B was moved — so
+  a horn box's 4–5 kHz dip and a ported box's low one stayed. Now A first moves off its pit, then B goes where the two
+  meet without a deep comb and the sum without a pit: 28 of its 30 cabinets stay green, against 17.
+- **Every box is named by its size and its family** — `4x10-classic`, `8x8-round`, `2x15-light` — and by no maker's
+  model, in a preset, in a WAV's preset or in a link. The sound is the same, sample for sample. A preset written by 0.1.2
+  or earlier keeps the old name and does not open in this one.
+
+### Fixed
+- **A link with a value that is no number** — `shift=nan`, `blend=inf`, a mic's place as `nan` — opens no cabinet, as
+  any broken link does; it used to give the page an empty answer.
+
 ## [0.1.2] — 2026-11-06 — a WAV that says what made it, and a cabinet as a link
 
 ### Added

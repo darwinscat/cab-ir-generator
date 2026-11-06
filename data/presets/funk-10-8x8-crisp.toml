@@ -1,7 +1,7 @@
 name = "FUNK · 8x8 CRISP"
 style = "Funk"
 cabir = 1
-box = "VB-88"
+box = "8x8-round"
 back = "ported"
 horn = true
 horn_db = 0

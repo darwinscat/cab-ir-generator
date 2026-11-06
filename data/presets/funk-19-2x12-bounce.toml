@@ -1,7 +1,7 @@
 name = "FUNK · 2x12 BOUNCE"
 style = "Funk"
 cabir = 1
-box = "VB-212"
+box = "2x12-round"
 back = "ported"
 horn = true
 horn_db = 0

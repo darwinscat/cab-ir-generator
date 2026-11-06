@@ -1,7 +1,7 @@
 name = "ROCK · 2x10 TIGHT"
 style = "Rock"
 cabir = 1
-box = "VB-210"
+box = "2x10-round"
 back = "closed"
 horn = true
 horn_db = -12

@@ -1,7 +1,7 @@
 name = "JAZZ · 1x12 WOOD"
 style = "Jazz"
 cabir = 1
-box = "VB-112"
+box = "1x12-round"
 back = "ported"
 horn = false
 horn_db = -12

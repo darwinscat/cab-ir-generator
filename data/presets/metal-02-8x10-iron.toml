@@ -1,7 +1,7 @@
 name = "METAL · 8x10 IRON"
 style = "Metal"
 cabir = 1
-box = "SVT-810"
+box = "8x10-classic"
 back = "closed"
 horn = true
 horn_db = 0

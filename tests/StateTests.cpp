@@ -30,12 +30,12 @@ int main()
 
     // A default state, and a full one, written and read back the same.
     State plain;
-    plain.box = "SVT-410HE";
+    plain.box = "4x10-classic";
     const auto plainBack = cabir::fromToml (cabir::toToml (plain));
     check (plainBack.has_value() && *plainBack == plain, "a default state reads back the same");
 
     State full;
-    full.box = "VB-212";
+    full.box = "2x12-round";
     full.back = 2;
     full.horn = true;
     full.hornDb = -6;
@@ -50,15 +50,15 @@ int main()
     check (cabir::toToml (*fullBack) == text, "written again, the same bytes");
 
     // A key a later version adds is passed over; a missing one keeps its default.
-    const auto later = cabir::fromToml ("cabir = 1\nbox = \"SVT-810\"\nfuture = 3\n[mic.a]\nmodel = \"sm57\"\nwidth = 2\n");
-    check (later.has_value() && later->box == "SVT-810" && later->a.model == "sm57" && later->back == -1 && ! later->b.on,
+    const auto later = cabir::fromToml ("cabir = 1\nbox = \"8x10-classic\"\nfuture = 3\n[mic.a]\nmodel = \"sm57\"\nwidth = 2\n");
+    check (later.has_value() && later->box == "8x10-classic" && later->a.model == "sm57" && later->back == -1 && ! later->b.on,
            "a later version's keys passed over, the rest defaulted");
 
     // Refused: not the format, no box, out of range.
-    check (! cabir::fromToml ("box = \"SVT-810\"\n").has_value(), "no cabir mark: refused");
+    check (! cabir::fromToml ("box = \"8x10-classic\"\n").has_value(), "no cabir mark: refused");
     check (! cabir::fromToml ("cabir = 1\n").has_value(), "no box: refused");
-    check (! cabir::fromToml ("cabir = 1\nbox = \"SVT-810\"\nblend = 1.5\n").has_value(), "blend out of range: refused");
-    check (! cabir::fromToml ("synth:SVT-810|0|0|0.05|1|md421").has_value(), "the old line: refused");
+    check (! cabir::fromToml ("cabir = 1\nbox = \"8x10-classic\"\nblend = 1.5\n").has_value(), "blend out of range: refused");
+    check (! cabir::fromToml ("synth:8x10-classic|0|0|0.05|1|md421").has_value(), "the old line: refused");
 
     // pairOf: B alone is rendered as one mic, at B's spot; A alone with the blend kept but not heard.
     State onlyB = full;
@@ -74,7 +74,7 @@ int main()
     {
         const auto table = cabir::synth::readTable (CABIR_TABLE);
         State pair;
-        pair.box = "SVT-410HE";
+        pair.box = "4x10-classic";
         pair.b.on = true;
         const auto place = cabir::synth::quietPlaceForB (table, pair);
         check (std::hypot (place.x, place.y) <= 1.05 && place.distance > 0.0, "B's quiet place lies on the cone");
@@ -86,7 +86,7 @@ int main()
     {
         const auto table = cabir::synth::readTable (CABIR_TABLE);
         State pair;
-        pair.box = "SVT-410HE";
+        pair.box = "4x10-classic";
         pair.b.on = true;
         cabir::synth::PairRenderer renderer;
         (void) renderer.render (table, pair.box, cabir::synth::pairOf (pair));
@@ -104,9 +104,9 @@ int main()
         heard.hornDb = -12;
         const auto back = cabir::fromLink (cabir::linkOf (heard));
         check (back.has_value() && *back == heard, "a link reads back the same heard cabinet");
-        check (cabir::linkOf (heard).find ("VB-212") == std::string::npos, "a link names the box by its size, no maker's");
+        check (cabir::linkOf (heard).find ("2x12-round") == std::string::npos, "a link names the box by its size, no maker's");
         check (cabir::fromLink (std::string (cabir::pageAddress) + "#" + cabir::linkOf (heard)) == back, "a whole address reads");
-        check (cabir::fromLink ("?cab=1&box=SVT-810&a=sm57,0.2,0,3,10&later=7").has_value(), "a query, a table key, a later key read");
+        check (cabir::fromLink ("?cab=1&box=8x10-classic&a=sm57,0.2,0,3,10&later=7").has_value(), "a query, a table key, a later key read");
         check (! cabir::fromLink ("cab=1&box=9x9").has_value(), "a box the panel has not: none");
         for (const char* bad : { "cab=1&box=8x10&shift=nan", "cab=1&box=8x10&blend=inf", "cab=1&box=8x10&a=md421,nan,0,5,0",
                                  "cab=1&box=8x10&a=md421,0,0,-nan,0", "cab=1&box=8x10&b=u87,0,0,5,NAN(1)", "cab=1&box=8x10&horn=x",

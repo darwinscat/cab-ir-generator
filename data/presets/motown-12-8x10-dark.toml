@@ -1,7 +1,7 @@
 name = "MOTOWN · 8x10 DARK"
 style = "Motown"
 cabir = 1
-box = "SVT-810"
+box = "8x10-classic"
 back = "closed"
 horn = false
 horn_db = -12

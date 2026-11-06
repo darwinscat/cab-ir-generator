@@ -1,7 +1,7 @@
 name = "METAL · 1x15 SLUDGE"
 style = "Metal"
 cabir = 1
-box = "SVT-15E"
+box = "1x15-classic"
 back = "closed"
 horn = true
 horn_db = -6

@@ -1,7 +1,7 @@
 name = "REGGAE · 4x10 DUBPLATE"
 style = "Reggae"
 cabir = 1
-box = "SVT-410HE"
+box = "4x10-classic"
 back = "ported"
 horn = false
 horn_db = -12

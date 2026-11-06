@@ -1,7 +1,7 @@
 name = "MOTOWN · 4x6 RADIO"
 style = "Motown"
 cabir = 1
-box = "NY-604"
+box = "4x6-neo"
 back = "ported"
 horn = false
 horn_db = -12

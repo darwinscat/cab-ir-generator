@@ -1,7 +1,7 @@
 name = "METAL · 2x10 BITE"
 style = "Metal"
 cabir = 1
-box = "VB-210"
+box = "2x10-round"
 back = "closed"
 horn = true
 horn_db = 0

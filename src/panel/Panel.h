@@ -25,7 +25,7 @@ namespace cabir
     ported gets a port at its foot. Every bass of the family offers the same ten (the owner, 05.11): none knows a
     cabinet of its own.
     A click on a box picks it, the mics staying where they stand, and the horn too — but a box whose horn comes off
-    (Cab::hornOn, the SVT-15E's and the 8x10's) takes it off, and the next box puts it back; a click on the chosen box's
+    (Cab::hornOn, the 1x15-classic's and the 8x10's) takes it off, and the next box puts it back; a click on the chosen box's
     horn turns the horn off and on, its step kept.
 
     THE SPEAKER: the chosen box's first speaker, flat, its neighbours at its edge, its horn big in the corner on the horn's
@@ -107,7 +107,7 @@ public:
 
     struct Cab
     {
-        ui::String name;                       // as the table names it: "SVT-410HE"
+        ui::String name;                       // as the table names it: "4x10-classic"
         int family = 0;                          // whose box it is, for its corners: 1 the rounded ones
         float w = 0.6f, h = 0.6f;                // the baffle
         std::vector<ui::Point<float>> drivers; // the first is the one the mic stands at
@@ -117,56 +117,56 @@ public:
         bool port = false;
         ui::Point<float> portAt;
         ui::String mic = "md421";              // the one its table's cap section stands
-        bool hornOn = true;                      // how its horn comes when the box is picked: the SVT-15E's and the 8x10's off
+        bool hornOn = true;                      // how its horn comes when the box is picked: the 1x15-classic's and the 8x10's off
     };
 
     static const std::vector<Cab>& cabs()
     {
         using P = ui::Point<float>;
         static const std::vector<Cab> all {
-            { "SVT-15E",    0, 0.61f, 0.56f, { P (0, 0.02f) }, 0.165f, true, P (0.22f, 0.20f), true, P (0, -0.22f), "re20", false },
-            { "SVT-210AV",  0, 0.33f, 0.61f, { P (0, 0.14f), P (0, -0.14f) }, 0.105f, false, {}, false, {} },
-            { "SVT-210HE",  0, 0.61f, 0.46f, { P (-0.14f, 0), P (0.14f, 0) }, 0.105f, true, P (0, 0.16f), false, {} },
-            { "SVT-410HE",  0, 0.61f, 0.66f, { P (-0.145f, 0.145f), P (0.145f, 0.145f), P (-0.145f, -0.145f), P (0.145f, -0.145f) },
+            { "1x15-classic",    0, 0.61f, 0.56f, { P (0, 0.02f) }, 0.165f, true, P (0.22f, 0.20f), true, P (0, -0.22f), "re20", false },
+            { "2x10-classic-tall",  0, 0.33f, 0.61f, { P (0, 0.14f), P (0, -0.14f) }, 0.105f, false, {}, false, {} },
+            { "2x10-classic",  0, 0.61f, 0.46f, { P (-0.14f, 0), P (0.14f, 0) }, 0.105f, true, P (0, 0.16f), false, {} },
+            { "4x10-classic",  0, 0.61f, 0.66f, { P (-0.145f, 0.145f), P (0.145f, 0.145f), P (-0.145f, -0.145f), P (0.145f, -0.145f) },
               0.105f, true, P (0, 0), false, {} },
-            { "SVT-410HLF", 0, 0.61f, 0.76f, { P (-0.145f, 0.19f), P (0.145f, 0.19f), P (-0.145f, -0.10f), P (0.145f, -0.10f) },
+            { "4x10-classic-tall", 0, 0.61f, 0.76f, { P (-0.145f, 0.19f), P (0.145f, 0.19f), P (-0.145f, -0.10f), P (0.145f, -0.10f) },
               0.105f, true, P (0, 0.045f), true, P (0, -0.31f) },
-            { "SVT-610HLF", 0, 0.61f, 1.02f, { P (-0.145f, 0.32f), P (0.145f, 0.32f), P (-0.145f, 0.03f), P (0.145f, 0.03f),
+            { "6x10-classic", 0, 0.61f, 1.02f, { P (-0.145f, 0.32f), P (0.145f, 0.32f), P (-0.145f, 0.03f), P (0.145f, 0.03f),
                                                 P (-0.145f, -0.26f), P (0.145f, -0.26f) },
               0.105f, true, P (0, 0.175f), true, P (0, -0.45f) },
-            { "SVT-810",    0, 0.66f, 1.22f, { P (-0.15f, 0.42f), P (0.15f, 0.42f), P (-0.15f, 0.14f), P (0.15f, 0.14f),
+            { "8x10-classic",    0, 0.66f, 1.22f, { P (-0.15f, 0.42f), P (0.15f, 0.42f), P (-0.15f, 0.14f), P (0.15f, 0.14f),
                                                 P (-0.15f, -0.14f), P (0.15f, -0.14f), P (-0.15f, -0.42f), P (0.15f, -0.42f) },
               0.105f, true, P (0, 0.565f), false, {}, "re20", false },
-            { "VB-112",     1, 0.52f, 0.40f, { P (-0.09f, 0) }, 0.13f, true, P (0.17f, 0.08f), true, P (0.17f, -0.12f) },
-            { "VB-115",     1, 0.56f, 0.58f, { P (0, -0.04f) }, 0.165f, true, P (0.18f, 0.19f), true, P (0, -0.25f), "d112" },
-            { "VB-210",     1, 0.56f, 0.42f, { P (-0.135f, -0.02f), P (0.135f, -0.02f) }, 0.105f, true, P (0, 0.13f), true, P (0, -0.17f) },
-            { "VB-212",     1, 0.63f, 0.48f, { P (-0.155f, -0.02f), P (0.155f, -0.02f) }, 0.13f, true, P (0, 0.16f), true, P (0, -0.19f) },
-            { "VB-410",     1, 0.58f, 0.66f, { P (-0.14f, 0.145f), P (0.14f, 0.145f), P (-0.14f, -0.145f), P (0.14f, -0.145f) },
+            { "1x12-round",     1, 0.52f, 0.40f, { P (-0.09f, 0) }, 0.13f, true, P (0.17f, 0.08f), true, P (0.17f, -0.12f) },
+            { "1x15-round",     1, 0.56f, 0.58f, { P (0, -0.04f) }, 0.165f, true, P (0.18f, 0.19f), true, P (0, -0.25f), "d112" },
+            { "2x10-round",     1, 0.56f, 0.42f, { P (-0.135f, -0.02f), P (0.135f, -0.02f) }, 0.105f, true, P (0, 0.13f), true, P (0, -0.17f) },
+            { "2x12-round",     1, 0.63f, 0.48f, { P (-0.155f, -0.02f), P (0.155f, -0.02f) }, 0.13f, true, P (0, 0.16f), true, P (0, -0.19f) },
+            { "4x10-round",     1, 0.58f, 0.66f, { P (-0.14f, 0.145f), P (0.14f, 0.145f), P (-0.14f, -0.145f), P (0.14f, -0.145f) },
               0.105f, true, P (0, 0), true, P (0, -0.30f) },
-            { "VB-88",      1, 0.56f, 0.98f, { P (-0.13f, 0.33f), P (0.13f, 0.33f), P (-0.13f, 0.11f), P (0.13f, 0.11f),
+            { "8x8-round",      1, 0.56f, 0.98f, { P (-0.13f, 0.33f), P (0.13f, 0.33f), P (-0.13f, 0.11f), P (0.13f, 0.11f),
                                                 P (-0.13f, -0.11f), P (0.13f, -0.11f), P (-0.13f, -0.33f), P (0.13f, -0.33f) },
               0.085f, true, P (0, 0), true, P (0, -0.45f) },
-            { "OBC115",     2, 0.60f, 0.66f, { P (0, 0.03f) }, 0.165f, false, {}, false, {}, "d112" },
-            { "OBC210",     2, 0.60f, 0.40f, { P (-0.14f, 0), P (0.14f, 0) }, 0.105f, false, {}, false, {} },
-            { "OBC410",     2, 0.64f, 0.64f, { P (-0.15f, 0.15f), P (0.15f, 0.15f), P (-0.15f, -0.15f), P (0.15f, -0.15f) },
+            { "1x15-plain",     2, 0.60f, 0.66f, { P (0, 0.03f) }, 0.165f, false, {}, false, {}, "d112" },
+            { "2x10-plain",     2, 0.60f, 0.40f, { P (-0.14f, 0), P (0.14f, 0) }, 0.105f, false, {}, false, {} },
+            { "4x10-plain",     2, 0.64f, 0.64f, { P (-0.15f, 0.15f), P (0.15f, 0.15f), P (-0.15f, -0.15f), P (0.15f, -0.15f) },
               0.105f, false, {}, false, {} },
-            { "OBC810",     2, 0.64f, 1.24f, { P (-0.15f, 0.43f), P (0.15f, 0.43f), P (-0.15f, 0.145f), P (0.15f, 0.145f),
+            { "8x10-plain",     2, 0.64f, 1.24f, { P (-0.15f, 0.43f), P (0.15f, 0.43f), P (-0.15f, 0.145f), P (0.15f, 0.145f),
                                                 P (-0.15f, -0.145f), P (0.15f, -0.145f), P (-0.15f, -0.43f), P (0.15f, -0.43f) },
               0.105f, false, {}, false, {}, "re20" },
-            { "STD-104HF",  3, 0.59f, 0.60f, { P (-0.14f, 0.16f), P (0.14f, 0.16f), P (-0.14f, -0.10f), P (0.14f, -0.10f) },
+            { "4x10-neo",  3, 0.59f, 0.60f, { P (-0.14f, 0.16f), P (0.14f, 0.16f), P (-0.14f, -0.10f), P (0.14f, -0.10f) },
               0.105f, true, P (0, 0.03f), true, P (0, -0.265f) },
-            { "STD-102HF",  3, 0.59f, 0.475f, { P (-0.14f, -0.03f), P (0.14f, -0.03f) }, 0.105f, true, P (0, 0.16f), true, P (0, -0.20f) },
-            { "STD-151HR",  3, 0.59f, 0.65f, { P (0, -0.04f) }, 0.165f, true, P (0, 0.23f), false, {}, "d112" },
-            { "NY-604",     3, 0.40f, 0.40f, { P (-0.09f, 0.07f), P (0.09f, 0.07f), P (-0.09f, -0.11f), P (0.09f, -0.11f) },
+            { "2x10-neo",  3, 0.59f, 0.475f, { P (-0.14f, -0.03f), P (0.14f, -0.03f) }, 0.105f, true, P (0, 0.16f), true, P (0, -0.20f) },
+            { "1x15-neo",  3, 0.59f, 0.65f, { P (0, -0.04f) }, 0.165f, true, P (0, 0.23f), false, {}, "d112" },
+            { "4x6-neo",     3, 0.40f, 0.40f, { P (-0.09f, 0.07f), P (0.09f, 0.07f), P (-0.09f, -0.11f), P (0.09f, -0.11f) },
               0.06f, true, P (0, 0.165f), false, {} },
-            { "NY-122",     3, 0.72f, 0.39f, { P (-0.17f, -0.01f), P (0.17f, -0.01f) }, 0.13f, true, P (0, 0.14f), false, {} },
-            { "SUBWAY-112", 4, 0.49f, 0.39f, { P (-0.06f, -0.01f) }, 0.13f, true, P (0.17f, 0.10f), true, P (0.17f, -0.13f) },
-            { "SUBWAY-115", 4, 0.49f, 0.49f, { P (0, -0.03f) }, 0.165f, true, P (0.17f, 0.19f), true, P (-0.17f, -0.21f), "d112" },
-            { "SUBWAY-210", 4, 0.49f, 0.53f, { P (-0.11f, 0.12f), P (0.11f, -0.11f) }, 0.105f, true, P (0.13f, 0.17f), true, P (-0.13f, -0.20f) },
-            { "SUBWAY-212", 4, 0.50f, 0.72f, { P (0, 0.13f), P (0, -0.19f) }, 0.13f, true, P (0, 0.31f), true, P (0.17f, -0.30f) },
-            { "SUBWAY-410", 4, 0.56f, 0.58f, { P (-0.13f, 0.15f), P (0.13f, 0.15f), P (-0.13f, -0.11f), P (0.13f, -0.11f) },
+            { "2x12-neo",     3, 0.72f, 0.39f, { P (-0.17f, -0.01f), P (0.17f, -0.01f) }, 0.13f, true, P (0, 0.14f), false, {} },
+            { "1x12-light", 4, 0.49f, 0.39f, { P (-0.06f, -0.01f) }, 0.13f, true, P (0.17f, 0.10f), true, P (0.17f, -0.13f) },
+            { "1x15-light", 4, 0.49f, 0.49f, { P (0, -0.03f) }, 0.165f, true, P (0.17f, 0.19f), true, P (-0.17f, -0.21f), "d112" },
+            { "2x10-light", 4, 0.49f, 0.53f, { P (-0.11f, 0.12f), P (0.11f, -0.11f) }, 0.105f, true, P (0.13f, 0.17f), true, P (-0.13f, -0.20f) },
+            { "2x12-light", 4, 0.50f, 0.72f, { P (0, 0.13f), P (0, -0.19f) }, 0.13f, true, P (0, 0.31f), true, P (0.17f, -0.30f) },
+            { "4x10-light", 4, 0.56f, 0.58f, { P (-0.13f, 0.15f), P (0.13f, 0.15f), P (-0.13f, -0.11f), P (0.13f, -0.11f) },
               0.105f, true, P (0, 0.02f), true, P (0, -0.26f) },
-            { "SUBWAY-215", 4, 0.49f, 0.87f, { P (0, 0.20f), P (0, -0.16f) }, 0.165f, true, P (0, 0.40f), true, P (0, -0.38f), "d112" },
+            { "2x15-light", 4, 0.49f, 0.87f, { P (0, 0.20f), P (0, -0.16f) }, 0.165f, true, P (0, 0.40f), true, P (0, -0.38f), "d112" },
         };
         return all;
     }
@@ -179,8 +179,8 @@ public:
     static const std::vector<ui::StringArray>& pile()
     {
         static const std::vector<ui::StringArray> every {
-            { "SVT-15E", "VB-112" }, { "SVT-810" }, { "SVT-410HE", "VB-210" }, { "SVT-610HLF", "VB-212" },
-            { "SUBWAY-215", "NY-604" }, { "VB-88" } };
+            { "1x15-classic", "1x12-round" }, { "8x10-classic" }, { "4x10-classic", "2x10-round" }, { "6x10-classic", "2x12-round" },
+            { "2x15-light", "4x6-neo" }, { "8x8-round" } };
         return every;
     }
 
@@ -196,7 +196,7 @@ public:
     /** The boxes the table calls sealed (data/cabinets.txt, `alignment`); every other one is ported. */
     static bool sealed (const ui::String& name)
     {
-        static const ui::StringArray closed { "SVT-210AV", "SVT-410HE", "SVT-810", "OBC115", "OBC210", "OBC410", "OBC810" };
+        static const ui::StringArray closed { "2x10-classic-tall", "4x10-classic", "8x10-classic", "1x15-plain", "2x10-plain", "4x10-plain", "8x10-plain" };
         return closed.contains (name);
     }
 
@@ -214,7 +214,7 @@ public:
 
     /** THE MICS A BOX IS PICKED WITH, `from` the one that was playing: where they stood — the same cap, the same
         centimetres, the way a cabinet is compared — only a mic never chosen following the box's own; the horn as it
-        stood, unless the two boxes come with theirs otherwise (Cab::hornOn): the SVT-15E's and the 8x10's go off, the
+        stood, unless the two boxes come with theirs otherwise (Cab::hornOn): the 1x15-classic's and the 8x10's go off, the
         next one's on — and the back as it stood: a box changed never changes it (the owner, 05.11), a back still the
         box's own becoming that one, said. A click in the pile picks by it. */
     static Setup pickedWith (int from, int to, Setup s)

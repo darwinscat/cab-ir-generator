@@ -1,7 +1,7 @@
 name = "REGGAE · 1x12 ROCKSTEADY"
 style = "Reggae"
 cabir = 1
-box = "VB-112"
+box = "1x12-round"
 back = "ported"
 horn = false
 horn_db = -12

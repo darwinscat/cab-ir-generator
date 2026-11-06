@@ -1,7 +1,7 @@
 name = "PUNK · 8x8 RATTLE"
 style = "Punk"
 cabir = 1
-box = "VB-88"
+box = "8x8-round"
 back = "ported"
 horn = true
 horn_db = -12

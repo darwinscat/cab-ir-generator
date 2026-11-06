@@ -1,7 +1,7 @@
 name = "FUNK · 2x10 SPARK"
 style = "Funk"
 cabir = 1
-box = "VB-210"
+box = "2x10-round"
 back = "ported"
 horn = true
 horn_db = 0

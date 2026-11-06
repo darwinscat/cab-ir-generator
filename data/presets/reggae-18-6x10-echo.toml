@@ -1,7 +1,7 @@
 name = "REGGAE · 6x10 ECHO"
 style = "Reggae"
 cabir = 1
-box = "SVT-610HLF"
+box = "6x10-classic"
 back = "ported"
 horn = false
 horn_db = -12
