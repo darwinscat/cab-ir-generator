@@ -299,6 +299,10 @@ public:
     /** DOWNLOAD IR: whoever opened the panel saves the cabinet that plays as a file — a button over the response's top
         right corner, its line pulsing gently. No button without it. */
     std::function<void()> onDownload;
+    /** A host's format menu beside DOWNLOAD IR — rate, bits, length (the owner, 06.11) — its ▾ there only where this is
+        set; and what the next download will be, said in a line under them. */
+    std::function<void()> onDownloadFormat;
+    ui::String downloadNote;
 
     /** DEFAULT as a button in the foot — or not, where the host offers it another way (the app's preset menu). With
         neither DEFAULT nor CLOSE the foot's row goes, and the panel is footRowH shorter. */
@@ -470,7 +474,7 @@ private:
 
     /** WHAT A CLICK AT A POINT WORKS — the one thing both the hand's light and its press go by (hotAt), so what is lit is
         what a click does. */
-    enum class Part { none, download, back, cab, cabHorn, horn, distance, place, micRow, angle, shift, mic, close, reset, find,
+    enum class Part { none, download, downloadFormat, back, cab, cabHorn, horn, distance, place, micRow, angle, shift, mic, close, reset, find,
                       align, invert, blend };
     struct Hot
     {
@@ -563,8 +567,17 @@ private:
         if (onDownload == nullptr || chosen < 0)
             return {};
         const auto plot = responsePlot().toNearestInt();
-        const int w = wordW ("DOWNLOAD IR") + 14;
-        return { plot.getRight() - w - 6, plot.getY() + 6, w, 24 };
+        const int w = wordW ("DOWNLOAD IR") + 14, menu = onDownloadFormat != nullptr ? 24 + 4 : 0;
+        return { plot.getRight() - w - menu - 6, plot.getY() + 6, w, 24 };
+    }
+
+    /** ...and its format's ▾ at its right, where a host offers one. */
+    ui::Rectangle<int> downloadFormatArea() const
+    {
+        const auto d = downloadArea();
+        if (onDownloadFormat == nullptr || d.isEmpty())
+            return {};
+        return { d.getRight() + 4, d.getY(), 24, d.getHeight() };
     }
 
     /** THE BACK over the pile, centred: BACK, then a cell each — the box cut through from the side (paintBack), its word
@@ -773,6 +786,8 @@ private:
         const auto pos = p.roundToInt();
         if (downloadArea().contains (pos))
             return { Part::download };
+        if (downloadFormatArea().contains (pos))
+            return { Part::downloadFormat };
 
         if (p.x < (float) leftW)
         {
@@ -850,6 +865,10 @@ private:
 
             case Part::download:
                 onDownload();
+                return;
+
+            case Part::downloadFormat:
+                onDownloadFormat();
                 return;
 
             // The back: kept as turned, its own one too, so every box after comes with it.
@@ -1785,13 +1804,40 @@ private:
             const float pulse = isHot (Part::download) ? 1.0f   // under the hand: full, still
                                                        : 0.5f + 0.5f * (float) std::sin (ui::MathConstants<double>::twoPi * 0.5 * clock);
             const auto b = d.toFloat().reduced (0.5f);
-            g.reduceClipRegion (d.expanded (2));
-            g.setColour (ui::look().panel2.withAlpha (0.92f));
-            g.fillRoundedRectangle (b, 4.0f);
-            g.setColour (ui::look().orange.withAlpha (0.35f + 0.55f * pulse));
-            g.drawRoundedRectangle (b, 4.0f, 1.3f);
-            g.setColour (ui::look().orange.withAlpha (0.75f + 0.25f * pulse));
-            ui::look().drawTracked (g, "DOWNLOAD IR", b, ui::look().font (13.0f), 0.06f, ui::Justification::centred);
+            {
+                ui::Graphics::ScopedSaveState clip (g);
+                g.reduceClipRegion (d.expanded (2));
+                g.setColour (ui::look().panel2.withAlpha (0.92f));
+                g.fillRoundedRectangle (b, 4.0f);
+                g.setColour (ui::look().orange.withAlpha (0.35f + 0.55f * pulse));
+                g.drawRoundedRectangle (b, 4.0f, 1.3f);
+                g.setColour (ui::look().orange.withAlpha (0.75f + 0.25f * pulse));
+                ui::look().drawTracked (g, "DOWNLOAD IR", b, ui::look().font (13.0f), 0.06f, ui::Justification::centred);
+            }
+            // Its format's ▾, still — it answers the hand only.
+            if (const auto f = downloadFormatArea(); ! f.isEmpty())
+            {
+                const auto m = f.toFloat().reduced (0.5f);
+                const bool over = isHot (Part::downloadFormat);
+                g.setColour (ui::look().panel2.withAlpha (0.92f));
+                g.fillRoundedRectangle (m, 4.0f);
+                g.setColour (ui::look().orange.withAlpha (over ? 0.9f : 0.45f));
+                g.drawRoundedRectangle (m, 4.0f, 1.3f);
+                ui::Path down;
+                down.startNewSubPath (m.getCentreX() - 4.5f, m.getCentreY() - 2.0f);
+                down.lineTo (m.getCentreX(), m.getCentreY() + 2.5f);
+                down.lineTo (m.getCentreX() + 4.5f, m.getCentreY() - 2.0f);
+                g.setColour (ui::look().orange.withAlpha (over ? 1.0f : 0.8f));
+                g.strokePath (down, ui::PathStrokeType (1.6f, ui::PathStrokeType::curved, ui::PathStrokeType::rounded));
+            }
+            // ...and what the next download will be, under them.
+            if (downloadNote.isNotEmpty())
+            {
+                const float right = (float) (downloadFormatArea().isEmpty() ? d : downloadFormatArea()).getRight();
+                g.setColour (ui::look().txDim);
+                ui::look().drawTracked (g, downloadNote, { right - 320.0f, (float) d.getBottom() + 4.0f, 320.0f, 16.0f },
+                                        ui::look().font (13.0f), 0.0f, ui::Justification::centredRight);
+            }
         }
     }
 
