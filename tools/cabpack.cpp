@@ -319,7 +319,7 @@ namespace
     std::string responsesSvg (const std::vector<Item>& items, const std::vector<Curve>& curves)
     {
         constexpr int columns = 4;
-        constexpr float cellW = 360.0f, cellH = 216.0f, head = 112.0f;
+        constexpr float cellW = 384.0f, cellH = 216.0f, head = 112.0f;
         const int rows = ((int) items.size() + columns - 1) / columns;
         const auto f = svgNumber;
         std::string out = svgOpen (columns * cellW, head + (float) rows * cellH + 8.0f);
