@@ -567,7 +567,7 @@ int main (int argc, char** argv)
                 // What each WAV says of itself (synth::WavMeta): its name, the link that opens it on the page, its preset.
                 synth::WavMeta meta;
                 meta.name = it.name;
-                meta.software = std::string ("Cab IR Generator ") + CABIR_VERSION;
+                meta.software = "Cab IR Generator";   // no version (the owner, 06.11): a WAV's bytes change only with its sound — BUILD-INFO says the version
                 meta.comment = linkTo (it.state);
                 meta.preset = it.text;
                 const auto wav = synth::wav24 (ir, (int) r.hz, &meta);
