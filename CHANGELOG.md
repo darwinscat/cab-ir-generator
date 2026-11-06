@@ -12,6 +12,10 @@ All notable changes to **Cab IR Generator** are documented here. The format foll
   panel draws it — green where it is fine, red into a pit — under its name and its mics, a click on one opening it in the
   generator. And `index.tsv` ends in a `link` column: the same link, for each cabinet, to open it and change it.
 
+### Fixed
+- **A link with a value that is no number** — `shift=nan`, `blend=inf`, a mic's place as `nan` — opens no cabinet, as
+  any broken link does; it used to give the page an empty answer.
+
 ## [0.1.2] — 2026-11-06 — a WAV that says what made it, and a cabinet as a link
 
 ### Added
