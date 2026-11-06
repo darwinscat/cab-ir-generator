@@ -4,6 +4,7 @@
 // THE STATE'S TEXT: what is written reads back the same, a later version's key is passed over, a broken one refused,
 // and pairOf renders the mics that are on.
 
+#include "panel/Link.h"
 #include "synth/CabSynth.h"
 #include "synth/State.h"
 
@@ -93,6 +94,24 @@ int main()
         const auto kept = renderer.render (table, pair.box, cabir::synth::pairOf (pair));
         const auto fresh = cabir::synth::renderPairParts (table, pair.box, cabir::synth::pairOf (pair));
         check (kept.mix == fresh.mix && kept.a == fresh.a && kept.b == fresh.b, "a kept mic's IR renders the pair as afresh");
+    }
+
+    // A link (panel/Link.h) carries what is heard: read back, the same cabinet — a mic not heard and a horn turned off
+    // waiting where a fresh state keeps them; a query, a whole address, a table key and a later key read too.
+    {
+        State heard = full;
+        heard.horn = true;
+        heard.hornDb = -12;
+        const auto back = cabir::fromLink (cabir::linkOf (heard));
+        check (back.has_value() && *back == heard, "a link reads back the same heard cabinet");
+        check (cabir::linkOf (heard).find ("VB-212") == std::string::npos, "a link names the box by its size, no maker's");
+        check (cabir::fromLink (std::string (cabir::pageAddress) + "#" + cabir::linkOf (heard)) == back, "a whole address reads");
+        check (cabir::fromLink ("?cab=1&box=SVT-810&a=sm57,0.2,0,3,10&later=7").has_value(), "a query, a table key, a later key read");
+        check (! cabir::fromLink ("cab=1&box=9x9").has_value(), "a box the panel has not: none");
+        State alone = full;
+        alone.b.on = false;
+        const auto one = cabir::fromLink (cabir::linkOf (alone));
+        check (one.has_value() && one->a == alone.a && ! one->b.on && one->box == alone.box, "a mic not heard is left out");
     }
 
     std::printf ("%s\n%s", failures == 0 ? "state: all passed" : "state: FAILED", text.c_str());

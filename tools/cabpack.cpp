@@ -10,6 +10,7 @@
 // again finds the same). In each, 44.1k/, 48k/ and 96k/, every cabinet synthesised at that rate: a 24-bit mono WAV as
 // the app's DOWNLOAD IR writes it, and beside it its state as the app's preset — and index.tsv, a line for each.
 
+#include <panel/Link.h>
 #include <panel/Panel.h>
 #include <synth/CabSynth.h>
 #include <synth/State.h>
@@ -235,7 +236,13 @@ int main (int argc, char** argv)
             for (const auto& it : items)   // one at a time: each render spreads its bins and its two mics over threads itself
             {
                 const auto ir = synth::PairRenderer {}.render (table, it.state.box, synth::pairOf (it.state), r.n, r.hz).mix;
-                const auto wav = synth::wav24 (ir, (int) r.hz);
+                // What each WAV says of itself (synth::WavMeta): its name, the link that opens it on the page, its preset.
+                synth::WavMeta meta;
+                meta.name = it.name;
+                meta.software = std::string ("Cab IR Generator ") + CABIR_VERSION;
+                meta.comment = std::string (pageAddress) + "#" + linkOf (it.state);
+                meta.preset = it.text;
+                const auto wav = synth::wav24 (ir, (int) r.hz, &meta);
                 std::ofstream (dir / (it.file + ".wav"), std::ios::binary).write ((const char*) wav.data(), (std::streamsize) wav.size());
                 std::ofstream (dir / (it.file + ".toml"), std::ios::binary) << it.text;
                 ++written;
