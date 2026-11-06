@@ -2,7 +2,7 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- THE GENERATOR ON A PAGE, wired the plainest way — a reference for a page that does it its own way: the module's
      panel on a canvas (cabir-panel.mjs), the hand's moves into it, what it asks out — a state kept rendered full size, a
-     moving one at half and only the last asked, FIND over workers (find-worker.mjs), DOWNLOAD IR as the app writes it —
+     moving one at half and only the last asked, FIND over workers (find-worker.mjs), DOWNLOAD IR as the app writes it, in a format its ▾ chooses —
      and the clock ticked only while something on it moves. Serve the folder (cabir.mjs, cabir.wasm, cabir-panel.mjs,
      find-worker.mjs, cabinets.txt, Michroma-web.woff2) and open demo.html. -->
 <html><head><meta charset="utf-8"><title>Cab IR Generator</title>
@@ -10,8 +10,15 @@
 @font-face { font-family: Michroma; src: url(Michroma-web.woff2) format('woff2'); }
 html, body { margin: 0; background: #111119; }
 canvas { display: block; width: 906px; height: 492px; touch-action: none; }
+#format { position: absolute; display: none; background: #15151f; border: 1px solid #ff8a3d; border-radius: 4px; padding: 6px;
+          font: 13px sans-serif; color: #ece9f6; }
 </style></head>
 <body><canvas id="panel"></canvas>
+<div id="format">
+  <select id="rate"><option value="44100">44.1 kHz</option><option value="48000" selected>48 kHz</option><option value="96000">96 kHz</option></select>
+  <select id="bits"><option value="24" selected>24 bit</option><option value="16">16 bit</option></select>
+  <select id="len"><option value="0" selected>full · 100 ms</option><option value="2048">2048 samples</option><option value="1024">1024 samples</option><option value="512">512 samples</option></select>
+</div>
 <script type="module">
 import createCabir from './cabir.mjs';
 import { PanelCanvas } from './cabir-panel.mjs';
@@ -161,11 +168,23 @@ function pump ()
         else if (kind === 3) find (state, true);
         else if (kind === 4)
         {
+            // In the format chosen, named as the app names it.
+            const args = [kept, fmt.rate, fmt.bits, fmt.samples], types = ['string', 'number', 'number', 'number'];
+            if (! call ('cabir_render_wav', 'number', types, args)) continue;
             const at = call ('cabir_wav', 'number', [], []), size = call ('cabir_wav_size', 'number', [], []);
             const a = document.createElement ('a');
             a.href = URL.createObjectURL (new Blob ([m.HEAPU8.slice (at, at + size)], { type: 'audio/wav' }));
-            a.download = 'cabinet.wav';
+            a.download = m.UTF8ToString (call ('cabir_download_name', 'number', types, args)) + '.wav';
             a.click ();
+        }
+        else if (kind === 5)
+        {
+            // The ▾: the page's own menu, under it.
+            const r = call ('cabir_panel_format_rect', 'number', [], []) >> 2;
+            const [x, y, w, h] = m.HEAPU32.slice (r, r + 4), b = canvas.getBoundingClientRect ();
+            menu.style.display = 'block';
+            menu.style.left = (b.left + (x + w) * b.width / W - menu.offsetWidth) + 'px';
+            menu.style.top = (b.top + (y + h) * b.height / H + 4) + 'px';
         }
     }
     if (moving) { const s = moving; moving = null; render (s, true); }
@@ -201,6 +220,24 @@ function frame ()
         if (call ('cabir_panel_wants_frames', 'number', [], [])) frame ();
     });
 }
+
+// DOWNLOAD IR's format: its ▾ asks for the page's menu (event 5), the line under the button says what the next will be.
+const fmt = { rate: 48000, bits: 24, samples: 0 };
+const menu = document.getElementById ('format');
+const said = () => call ('cabir_panel_download_note', null, ['string'],
+                         [m.UTF8ToString (call ('cabir_download_note', 'number', ['number', 'number', 'number'], [fmt.rate, fmt.bits, fmt.samples]))]);
+for (const id of ['rate', 'bits', 'len'])
+    document.getElementById (id).addEventListener ('change', () =>
+    {
+        fmt.rate = +document.getElementById ('rate').value;
+        fmt.bits = +document.getElementById ('bits').value;
+        fmt.samples = +document.getElementById ('len').value;
+        said ();
+        menu.style.display = 'none';
+        frame ();
+    });
+call ('cabir_panel_download_format', null, ['number'], [1]);
+said ();
 
 call ('cabir_panel_show', 'number', ['string'], [kept]);
 render (kept, false);

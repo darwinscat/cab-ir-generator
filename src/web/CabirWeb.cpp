@@ -12,6 +12,10 @@
 //     cabir_response / cabir_comb      the band's curves, cabir_points() of them (the comb empty with one mic on)
 //     cabir_gain (rate)                the level the app plays it at: felitronics-core's CabConvolver, reference-unity
 //     cabir_wav / cabir_wav_size       the IR as the app downloads it: a 24-bit WAV
+//   cabir_render_wav (toml, rate, bits, samples)   DOWNLOAD IR in a format (panel/Download.h): the WAV at cabir_wav() —
+//                                      44100|48000|96000, 16|24, 0 the whole IR|512|1024|2048 — its size, 0 for none
+//   cabir_download_name (toml, rate, bits, samples)   ...its file's name, no .wav: "8x10 MD421+RE20 44k 16bit 1024"
+//   cabir_download_note (rate, bits, samples)         ...the line under the button: "44.1 kHz · 16 bit · 1024 samples"
 //   cabir_find (toml, thorough)        B's quiet place against A: x, y, distance, shift (ms) at cabir_found() — or, with
 //                                      one mic heard, that one's place without a pit about where it is (shift 0)
 //     cabir_tried / cabir_tried_count  the places tried on the way, x, y, score each, for the search's map
@@ -35,6 +39,7 @@
 
 #include <felitronics/convolution/CabConvolver.h>
 #include <synth/CabSynth.h>
+#include <panel/Download.h>
 #include <panel/Link.h>
 #include <synth/MicSearch.h>
 #include <synth/Response.h>
@@ -75,6 +80,7 @@ namespace
         std::vector<float> places;
         double shift = 0;
         std::string withB;
+        std::string text;   // a download's name or its format's line, until the next call
     };
 
     Session& session()
@@ -84,6 +90,17 @@ namespace
     }
 
     const float* dataOf (const std::vector<float>& v) { return v.empty() ? nullptr : v.data(); }
+
+    /** What a WAV of `s` says of itself, as the app's DOWNLOAD IR writes it: its line, the link that opens it, its TOML. */
+    synth::WavMeta metaOf (const State& s)
+    {
+        synth::WavMeta meta;
+        meta.name = Panel::labelOf (s).toStdString();
+        meta.software = std::string ("Cab IR Generator ") + CABIR_VERSION;
+        meta.comment = std::string (pageAddress) + "#" + linkOf (s);
+        meta.preset = "name = \"" + meta.name + "\"\n\n" + toToml (s);
+        return meta;
+    }
 
     /** A state that reads, of a box the table has — one naming a box it lacks is not a state to render. */
     std::optional<State> stateOf (const char* toml)
@@ -176,13 +193,38 @@ CABIR_EXPORT int cabir_render (const char* toml, int live)
     s.ir = s.renderer.render (s.table, state->box, synth::pairOf (*state), live != 0 ? (size_t) 1 << 13 : (size_t) 1 << 14);
     s.response = synth::responseOf (synth::as24Bit (s.ir.mix), 48000.0);
     s.comb = s.ir.a.empty() ? std::vector<float>() : synth::combOf (s.ir.a, s.ir.b);
-    synth::WavMeta meta;   // as the app's DOWNLOAD IR writes it: its line, the link that opens it, its TOML
-    meta.name = Panel::labelOf (*state).toStdString();
-    meta.software = std::string ("Cab IR Generator ") + CABIR_VERSION;
-    meta.comment = std::string (pageAddress) + "#" + linkOf (*state);
-    meta.preset = "name = \"" + meta.name + "\"\n\n" + toToml (*state);
+    const auto meta = metaOf (*state);
     s.wav = synth::wav24 (s.ir.mix, 48000, &meta);
     return (int) s.ir.mix.size();
+}
+
+CABIR_EXPORT int cabir_render_wav (const char* toml, int rate, int bits, int samples)
+{
+    auto& s = session();
+    const auto state = stateOf (toml);
+    if (! state || ! DownloadFormat::offered (rate, bits, samples))
+        return 0;
+    s.wav = downloadWav (s.table, *state, { rate, bits, samples }, metaOf (*state));
+    return (int) s.wav.size();
+}
+
+CABIR_EXPORT const char* cabir_download_name (const char* toml, int rate, int bits, int samples)
+{
+    auto& s = session();
+    const auto state = stateOf (toml);
+    if (! state || ! DownloadFormat::offered (rate, bits, samples))
+        return nullptr;
+    s.text = downloadName (*state, { rate, bits, samples });
+    return s.text.c_str();
+}
+
+CABIR_EXPORT const char* cabir_download_note (int rate, int bits, int samples)
+{
+    auto& s = session();
+    if (! DownloadFormat::offered (rate, bits, samples))
+        return nullptr;
+    s.text = formatNote ({ rate, bits, samples });
+    return s.text.c_str();
 }
 
 CABIR_EXPORT const float* cabir_mix()    { return dataOf (session().ir.mix); }

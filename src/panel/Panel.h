@@ -303,6 +303,8 @@ public:
         set; and what the next download will be, said in a line under them. */
     std::function<void()> onDownloadFormat;
     ui::String downloadNote;
+    /** Where the ▾ is, so a host anchors its menu there; empty where there is none. */
+    ui::Rectangle<int> formatButton() const { return downloadFormatArea(); }
 
     /** DEFAULT as a button in the foot — or not, where the host offers it another way (the app's preset menu). With
         neither DEFAULT nor CLOSE the foot's row goes, and the panel is footRowH shorter. */

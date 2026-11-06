@@ -16,6 +16,10 @@
 //   cabir_panel_dirty ()                       1 when it asked to be drawn again since the last paint
 //   cabir_panel_event ()                       what it asks, one at a time: 0 nothing, 1 kept (a state set), 2 moving (heard,
 //                                              not kept), 3 FIND, 4 DOWNLOAD IR — the state at cabir_panel_event_state ()
+//                                              — and 5, DOWNLOAD IR's ▾ (cabir_panel_download_format): the page's format menu,
+//                                              anchored at cabir_panel_format_rect () (x, y, w, h, ints)
+//   cabir_panel_download_format (show)         DOWNLOAD IR's ▾ beside it, or none (the default)
+//   cabir_panel_download_note (text)           the line under the button: what the next download will be (UTF-8; "" none)
 //   cabir_glyph_svg (mic)                      a mic's glyph as SVG, its black for the canvas to recolour
 //   cabir_label (toml)                         a state as a line reads it, the app's words: "4x10 PORTED · MD421+U47" (UTF-8)
 //
@@ -138,6 +142,7 @@ namespace
         std::deque<Event> events;
         Event last;
         std::vector<float> now, before, comb;
+        int formatRect[4] {};
 
         PanelSession()
         {
@@ -245,6 +250,31 @@ CABIR_EXPORT int cabir_panel_event()
 }
 
 CABIR_EXPORT const char* cabir_panel_event_state() { return session().last.state.c_str(); }
+
+CABIR_EXPORT void cabir_panel_download_format (int show)
+{
+    auto& s = session();
+    s.panel.onDownloadFormat = show != 0 ? std::function<void()> ([&s] { s.events.push_back ({ 5, {} }); }) : nullptr;
+    s.dirty = true;
+}
+
+CABIR_EXPORT const int* cabir_panel_format_rect()
+{
+    auto& s = session();
+    const auto r = s.panel.formatButton();
+    s.formatRect[0] = r.getX();
+    s.formatRect[1] = r.getY();
+    s.formatRect[2] = r.getWidth();
+    s.formatRect[3] = r.getHeight();
+    return s.formatRect;
+}
+
+CABIR_EXPORT void cabir_panel_download_note (const char* text)
+{
+    auto& s = session();
+    s.panel.downloadNote = ui::String (text != nullptr ? text : "");
+    s.dirty = true;
+}
 
 CABIR_EXPORT const char* cabir_glyph_svg (const char* mic) { return micSvg (mic != nullptr ? mic : ""); }
 
