@@ -108,6 +108,10 @@ int main()
         check (cabir::fromLink (std::string (cabir::pageAddress) + "#" + cabir::linkOf (heard)) == back, "a whole address reads");
         check (cabir::fromLink ("?cab=1&box=SVT-810&a=sm57,0.2,0,3,10&later=7").has_value(), "a query, a table key, a later key read");
         check (! cabir::fromLink ("cab=1&box=9x9").has_value(), "a box the panel has not: none");
+        for (const char* bad : { "cab=1&box=8x10&shift=nan", "cab=1&box=8x10&blend=inf", "cab=1&box=8x10&a=md421,nan,0,5,0",
+                                 "cab=1&box=8x10&a=md421,0,0,-nan,0", "cab=1&box=8x10&b=u87,0,0,5,NAN(1)", "cab=1&box=8x10&horn=x",
+                                 "cab=1&box=8x10&a=md421,0,0" })
+            check (! cabir::fromLink (bad).has_value(), "a link with a value that is no number: none");
         State alone = full;
         alone.b.on = false;
         const auto one = cabir::fromLink (cabir::linkOf (alone));

@@ -325,7 +325,7 @@ CABIR_EXPORT const char* cabir_state_from_link (const char* link)
     if (! state)
         return nullptr;
     s.withB = toToml (*state);
-    return s.withB.c_str();
+    return s.withB.empty() ? nullptr : s.withB.c_str();   // never an empty text as a cabinet
 }
 
 CABIR_EXPORT const char* cabir_link_of (const char* toml)

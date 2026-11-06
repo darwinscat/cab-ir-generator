@@ -18,6 +18,7 @@
 
 #include "Panel.h"
 
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <optional>
@@ -69,13 +70,14 @@ namespace link
         return out;
     }
 
+    /** A number, finite — "nan", "inf" and the like are none (strtod reads them, and a clamp lets NaN through). */
     inline bool numberOf (const std::string& s, double& v)
     {
         if (s.empty())
             return false;
         char* end = nullptr;
         v = std::strtod (s.c_str(), &end);
-        return end != nullptr && *end == 0;
+        return end != nullptr && *end == 0 && std::isfinite (v);
     }
 }
 
@@ -112,7 +114,7 @@ inline std::optional<State> fromLink (std::string_view text)
     State s;
     s.a.on = false;
     s.b.on = false;
-    bool boxed = false;
+    bool boxed = false, broken = false;   // broken: a value that is no number where one is due — then no cabinet at all
     const auto mic = [] (const std::string& v, Mic& m)
     {
         std::vector<std::string> f;
@@ -164,16 +166,18 @@ inline std::optional<State> fromLink (std::string_view text)
             s.horn = value != "off";
             if (s.horn && link::numberOf (value, v))
                 s.hornDb = std::clamp (v, -12.0, 0.0);
+            else if (s.horn)
+                broken = true;
         }
-        else if (key == "a") mic (value, s.a);
-        else if (key == "b") mic (value, s.b);
-        else if (key == "blend" && link::numberOf (value, v)) s.blend = std::clamp (v, 0.0, 1.0);
+        else if (key == "a") broken |= ! mic (value, s.a);
+        else if (key == "b") broken |= ! mic (value, s.b);
+        else if (key == "blend") { if (link::numberOf (value, v)) s.blend = std::clamp (v, 0.0, 1.0); else broken = true; }
         else if (key == "align") s.align = value == "1";
         else if (key == "invert") s.invert = value == "1";
-        else if (key == "shift" && link::numberOf (value, v)) s.shiftMs = std::clamp (v, -1.0, 1.0);
+        else if (key == "shift") { if (link::numberOf (value, v)) s.shiftMs = std::clamp (v, -1.0, 1.0); else broken = true; }
         // cab, and every key it does not know, passed over
     }
-    if (! boxed)
+    if (! boxed || broken)
         return std::nullopt;
     if (! s.a.on && ! s.b.on)
         s.a.on = true;     // no mic said: the box's own at its cap
