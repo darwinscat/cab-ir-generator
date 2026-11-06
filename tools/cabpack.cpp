@@ -6,8 +6,9 @@
 //   cabpack <cabinets.txt> <presets folder> <typical.toml> <out folder>
 //
 // A folder for each preset style (rock, metal, ...) and one for the typical cabinets (typical.toml: a box, its back, its
-// horn; A as DEFAULT's, B a U47 where FIND finds it quietest, every place of both rounds judged — no deadline, so a run
-// again finds the same). In each, 44.1k/, 48k/ and 96k/, every cabinet synthesised at that rate: a 24-bit mono WAV as
+// horn; A DEFAULT's MD421 and B a U47, spread as the presets' are, synth/PairSpread.h: A off its pit as FIND moves one
+// mic, then B where the two meet without a deep comb and the sum without a pit — no deadline, so a run again finds the
+// same). In each, 44.1k/, 48k/ and 96k/, every cabinet synthesised at that rate: a 24-bit mono WAV as
 // the app's DOWNLOAD IR writes it, and beside it its state as the app's preset — and index.tsv, a line for each, its last
 // column the link that opens it on the page; and responses.svg, each one's response as the panel draws it, a click on one
 // opening it there too.
@@ -15,6 +16,7 @@
 #include <panel/Link.h>
 #include <panel/Panel.h>
 #include <synth/CabSynth.h>
+#include <synth/PairSpread.h>
 #include <synth/Response.h>
 #include <synth/State.h>
 
@@ -74,24 +76,20 @@ namespace
         return known ? word : std::string();
     }
 
-    /** B where it combs least with A: both rounds, every place judged, on all the machine's threads. */
-    synth::Place quietest (const synth::Table& table, const State& s)
+    /** A typical cabinet's mics as the presets' were spread (synth/PairSpread.h, tools/respread): A first, heard alone,
+        off its pit about where it stands if it has one — as FIND moves one mic — then B across the speaker where the two
+        meet without a deep comb and the sum without a pit, at its best TIME; at the preset's precision, so the WAV is
+        what its preset says. */
+    State placed (const synth::Table& table, State s)
     {
-        const synth::BSearch search (table, s);
-        const auto judgeAll = [&search] (const std::vector<synth::Place>& all)
-        {
-            std::vector<synth::BSearch::Judged> judged (all.size());
-            const size_t lanes = std::clamp<size_t> (std::thread::hardware_concurrency(), 1, 32);
-            std::vector<std::future<void>> work;
-            for (size_t lane = 0; lane < lanes; ++lane)
-                work.push_back (std::async (std::launch::async, [&, lane] { for (size_t i = lane; i < all.size(); i += lanes) judged[i] = search.score (all[i]); }));
-            for (auto& w : work) w.get();
-            return judged;
-        };
-        const auto first = search.coarse();
-        const auto firstJudged = judgeAll (first);
-        const auto second = search.fine (first, firstJudged);
-        return search.best (first, firstJudged, second, judgeAll (second));
+        auto alone = s;
+        alone.b.on = false;
+        if (synth::green::judgeOf (table, alone).second > synth::green::pitDb)
+            s.a = synth::green::smoothed (table, alone).a;
+        s = synth::green::withB (s, synth::green::spreadB (table, s).found);
+        if (const auto kept = fromToml (toToml (s)))
+            s = *kept;
+        return s;
     }
 
     const char* backWord (int b) { return b == 0 ? "closed" : b == 1 ? "ported" : "open"; }
@@ -290,6 +288,8 @@ int main (int argc, char** argv)
             std::fprintf (stderr, "BAD  %s: no [[cab]]\n", argv[3]);
             return 1;
         }
+        struct Typical { std::string id, name; State state; };
+        std::vector<Typical> typicals;
         for (const auto& c : *cabs)
         {
             const auto id = field (c, "id"), back = field (c, "back"), horn = field (c, "horn");
@@ -311,12 +311,23 @@ int main (int argc, char** argv)
             s.b = { true, "u47", -0.65, 0.0, 0.12, 0.0 };
             s.blend = 0.35;
             s.align = true;
-            const auto place = quietest (table, s);
-            s.b.x = place.x;
-            s.b.y = place.y;
-            s.b.distance = place.distance;
-            s.shiftMs = place.shiftMs;
-
+            typicals.push_back ({ id, field (c, "name"), s });
+        }
+        // A cabinet a lane, on a quarter of the machine's threads — each render spreads its bins and its two mics over
+        // threads itself (as tools/respread does).
+        {
+            std::vector<std::future<void>> work;
+            const size_t lanes = std::max<size_t> (1, std::thread::hardware_concurrency() / 4);
+            for (size_t lane = 0; lane < lanes; ++lane)
+                work.push_back (std::async (std::launch::async, [&, lane]
+                {
+                    for (size_t i = lane; i < typicals.size(); i += lanes)
+                        typicals[i].state = placed (table, typicals[i].state);
+                }));
+            for (auto& w : work) w.get();
+        }
+        for (const auto& [id, ownName, s] : typicals)
+        {
             Item it;
             it.state = s;
             it.file = id;
@@ -325,12 +336,13 @@ int main (int argc, char** argv)
             // horn, and two of the list would read alike in a preset menu.
             std::string said = Panel::wordOf (Panel::indexOf (ui::String (s.box))).toStdString() + " " + ui::String (backWord (s.back >= 0 ? s.back : Panel::ownBack (Panel::indexOf (ui::String (s.box))))).toUpperCase().toStdString()
                              + (s.horn ? " HORN " + hornWord (s) : std::string (" NO HORN")) + " \xc2\xb7 MD421+U47";
-            it.name = field (c, "name").empty() ? said : field (c, "name");
+            it.name = ownName.empty() ? said : ownName;
             t::Table head;
             (void) head.insert ("name", t::Value (it.name));
             (void) head.insert ("style", t::Value (it.style));
             it.text = t::write (head) + toToml (s);
-            std::printf ("typical %-20s B at %+.2f %+.2f %4.1f cm, shift %+.2f ms\n", id.c_str(), place.x, place.y, place.distance * 100, place.shiftMs);
+            std::printf ("typical %-20s A at %+.2f %+.2f %4.1f cm, B at %+.2f %+.2f %4.1f cm, shift %+.2f ms, blend %.2f\n", id.c_str(),
+                         s.a.x, s.a.y, s.a.distance * 100, s.b.x, s.b.y, s.b.distance * 100, s.shiftMs, s.blend);
             folders["typical"].push_back (std::move (it));
         }
     }
@@ -373,7 +385,18 @@ int main (int argc, char** argv)
             }
         }
         std::ofstream (out / folder / "responses.svg", std::ios::binary) << responsesSvg (items, curves);
-        std::printf ("%-8s %3zu cabinets x 3 rates\n", folder.c_str(), items.size());
+        // ...and how many of them the panel's line stays green on — under 3 dB everywhere — each one it reddens on named.
+        int clear = 0;
+        std::string red;
+        for (size_t i = 0; i < items.size() && i < curves.size(); ++i)
+        {
+            const float worst = curves[i].bad.empty() ? 0.0f : *std::max_element (curves[i].bad.begin(), curves[i].bad.end());
+            if (worst <= 3.0f)
+                ++clear;
+            else
+                red += "         red " + items[i].file + "  " + number (worst, 1) + " dB\n";
+        }
+        std::printf ("%-8s %3zu cabinets x 3 rates, %d clear\n%s", folder.c_str(), items.size(), clear, red.c_str());
     }
     std::printf ("%d IRs written, %d bad\n", written, bad);
     return bad == 0 ? 0 : 1;
