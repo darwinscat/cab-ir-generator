@@ -5,6 +5,13 @@ All notable changes to **Cab IR Generator** are documented here. The format foll
 [Keep a Changelog](https://keepachangelog.com/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.1.4] — 2026-11-06 — the IR packs by size
+
+### Added
+- **The IR packs by size too.** Beside a pack for each style, one for each box size — `size/8x10/`, `size/4x10/` and so
+  on — holding every cabinet of that size: of every style and the typical ones, the very same files, with the same
+  `index.tsv`, its `link` column, and the same pictures. A player with one 8x10 takes all the 8x10s at once.
+
 ## [0.1.3] — 2026-11-06 — packs that show their cabinets, boxes named by their size
 
 ### Added
