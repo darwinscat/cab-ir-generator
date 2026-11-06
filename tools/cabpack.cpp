@@ -4,14 +4,19 @@
 // THE IR PACKS a page offers for download, made again whenever the presets change — the same inputs, the same bytes.
 //
 //   cabpack <cabinets.txt> <presets folder> <typical.toml> <out folder>
+//   cabpack --typical <cabinets.txt> <typical.toml>
 //
-// A folder for each preset style (rock, metal, ...) and one for the typical cabinets (typical.toml: a box, its back, its
-// horn; A DEFAULT's MD421 and B a U47, spread as the presets' are, synth/PairSpread.h: A off its pit as FIND moves one
-// mic, then B where the two meet without a deep comb and the sum without a pit — no deadline, so a run again finds the
-// same). In each, 44.1k/, 48k/ and 96k/, every cabinet synthesised at that rate: a 24-bit mono WAV as
+// A folder for each preset style (rock, metal, ...) and one for the typical cabinets, in typical.toml's order, each the
+// preset --typical made of it in typical/ beside the list (a box, its back, its horn from the list; A DEFAULT's MD421
+// and B a U47, spread as the presets' are, synth/PairSpread.h: A off its pit as FIND moves one mic, then B where the two
+// meet without a deep comb and the sum without a pit — no deadline, so a run again finds the same; kept as presets so a
+// plugin carries them as it carries any). In each, 44.1k/, 48k/ and 96k/, every cabinet synthesised at that rate: a
+// 24-bit mono WAV as
 // the app's DOWNLOAD IR writes it, and beside it its state as the app's preset — and index.tsv, a line for each, its last
 // column the link that opens it on the page; and its response as the panel draws it, with what the line and the bands say
 // — each alone in responses/<file>.svg, all of them together in responses.svg — a click on one opening it there too.
+// And the same by size, size/8x10/ and so on: every cabinet of that size, of every style and the typical ones — a list,
+// index.tsv saying in its last column, `folder`, where each one's files are, and the size's own responses.svg.
 
 #include <panel/Link.h>
 #include <panel/Panel.h>
@@ -28,6 +33,7 @@
 #include <fstream>
 #include <future>
 #include <map>
+#include <optional>
 #include <sstream>
 #include <thread>
 
@@ -314,9 +320,9 @@ namespace
              + "\">\n<rect width=\"100%\" height=\"100%\" fill=\"#111119\"/>\n";
     }
 
-    /** RESPONSES.SVG: every cabinet of a folder (chartSvg), four across, under what the line and the bands say, a click on
-        one opening it on the page. Nothing read under 13 px. */
-    std::string responsesSvg (const std::vector<Item>& items, const std::vector<Curve>& curves)
+    /** RESPONSES.SVG: every cabinet of a folder (chartSvg), four across, under its title — the style, or the size — and what
+        the line and the bands say, a click on one opening it on the page. Nothing read under 13 px. */
+    std::string responsesSvg (const std::string& title, const std::vector<Item>& items, const std::vector<Curve>& curves)
     {
         constexpr int columns = 4;
         constexpr float cellW = 384.0f, cellH = 216.0f, head = 112.0f;
@@ -324,7 +330,7 @@ namespace
         const auto f = svgNumber;
         std::string out = svgOpen (columns * cellW, head + (float) rows * cellH + 8.0f);
         out += "<text x=\"20\" y=\"32\" fill=\"#ece9f6\" font-size=\"20\" font-weight=\"600\" letter-spacing=\"1.5\" " + svgFont + ">"
-             + escaped (ui::String (items.empty() ? std::string() : items.front().style).toUpperCase().toStdString()) + " \xc2\xb7 "
+             + escaped (ui::String (title).toUpperCase().toStdString()) + " \xc2\xb7 "
              + std::to_string (items.size()) + " CABINETS \xc2\xb7 CAB IR GENERATOR " + CABIR_VERSION + "</text>\n";
         out += "<text x=\"20\" y=\"56\" fill=\"#a6a2bd\" font-size=\"13\" " + svgFont + ">A click on one opens it in the generator.</text>\n";
         legendSvg (out, 20, 80, true, true);
@@ -349,24 +355,10 @@ namespace
     }
 }
 
-int main (int argc, char** argv)
+namespace
 {
-    if (argc != 5)
-    {
-        std::fprintf (stderr, "cabpack <cabinets.txt> <presets folder> <typical.toml> <out folder>\n");
-        return 2;
-    }
-    const auto table = synth::readTable (argv[1]);
-    std::map<std::string, std::vector<Item>> folders;   // by folder name, each in file order
-
-    // The factory presets, a folder for each style.
-    std::vector<fsys::path> presets;
-    for (const auto& e : fsys::directory_iterator (argv[2]))
-        if (e.path().extension() == ".toml")
-            presets.push_back (e.path());
-    std::sort (presets.begin(), presets.end());
-    int bad = 0;
-    for (const auto& p : presets)
+    /** A preset file as an Item — the style's name for its folder, the file's stem for its files — or none. */
+    std::optional<Item> presetAt (const fsys::path& p)
     {
         Item it;
         it.text = slurp (p);
@@ -374,29 +366,36 @@ int main (int argc, char** argv)
         const auto state = fromToml (it.text);
         const auto* root = std::get_if<t::Table> (&parsed);
         if (! state || root == nullptr || Panel::indexOf (ui::String (state->box)) < 0)
-        {
-            std::fprintf (stderr, "BAD  %s\n", p.string().c_str());
-            ++bad;
-            continue;
-        }
+            return std::nullopt;
         it.state = *state;
         it.file = p.stem().string();
         it.name = field (*root, "name");
         it.style = field (*root, "style");
-        folders[lower (it.style)].push_back (std::move (it));
+        return it;
     }
 
-    // The typical cabinets: A as DEFAULT's, B where FIND finds it quietest.
+    /** The typical list (typical.toml), each cabinet's id and, where it has one, its own name. */
+    template <typename Parsed>
+    const t::Tables* typicalList (const Parsed& parsed)
     {
-        auto parsed = t::parse (slurp (argv[3]));
         const auto* root = std::get_if<t::Table> (&parsed);
         const auto* list = root != nullptr ? root->find ("cab") : nullptr;
-        const auto* cabs = list != nullptr ? std::get_if<t::Tables> (&list->data) : nullptr;
+        return list != nullptr ? std::get_if<t::Tables> (&list->data) : nullptr;
+    }
+
+    /** CABPACK --TYPICAL: the typical cabinets made presets, each beside the list in typical/<id>.toml — a box, its back
+        and its horn from the list, its mics spread as the presets' are (placed) — so the packs and a plugin read them as
+        they read any preset, and only this searches. */
+    int writeTypical (const synth::Table& table, const fsys::path& list)
+    {
+        const auto parsed = t::parse (slurp (list));
+        const auto* cabs = typicalList (parsed);
         if (cabs == nullptr)
         {
-            std::fprintf (stderr, "BAD  %s: no [[cab]]\n", argv[3]);
+            std::fprintf (stderr, "BAD  %s: no [[cab]]\n", list.string().c_str());
             return 1;
         }
+        int bad = 0;
         struct Typical { std::string id, name; State state; };
         std::vector<Typical> typicals;
         for (const auto& c : *cabs)
@@ -435,42 +434,125 @@ int main (int argc, char** argv)
                 }));
             for (auto& w : work) w.get();
         }
+        const auto folder = fsys::path (list).replace_extension();
+        fsys::create_directories (folder);
         for (const auto& [id, ownName, s] : typicals)
         {
-            Item it;
-            it.state = s;
-            it.file = id;
-            it.style = "Typical";
             // A name of its own, or its size, back and horn said — the app's line alone names neither its own back nor the
             // horn, and two of the list would read alike in a preset menu.
             std::string said = Panel::wordOf (Panel::indexOf (ui::String (s.box))).toStdString() + " " + ui::String (backWord (s.back >= 0 ? s.back : Panel::ownBack (Panel::indexOf (ui::String (s.box))))).toUpperCase().toStdString()
                              + (s.horn ? " HORN " + hornWord (s) : std::string (" NO HORN")) + " \xc2\xb7 MD421+U47";
-            it.name = ownName.empty() ? said : ownName;
             t::Table head;
-            (void) head.insert ("name", t::Value (it.name));
-            (void) head.insert ("style", t::Value (it.style));
-            it.text = t::write (head) + toToml (s);
+            (void) head.insert ("name", t::Value (ownName.empty() ? said : ownName));
+            (void) head.insert ("style", t::Value (std::string ("Typical")));
+            std::ofstream (folder / (id + ".toml"), std::ios::binary) << t::write (head) + toToml (s);
             std::printf ("typical %-20s A at %+.2f %+.2f %4.1f cm, B at %+.2f %+.2f %4.1f cm, shift %+.2f ms, blend %.2f\n", id.c_str(),
                          s.a.x, s.a.y, s.a.distance * 100, s.b.x, s.b.y, s.b.distance * 100, s.shiftMs, s.blend);
-            folders["typical"].push_back (std::move (it));
+        }
+        return bad == 0 ? 0 : 1;
+    }
+}
+
+int main (int argc, char** argv)
+{
+    if (argc == 4 && std::string (argv[1]) == "--typical")
+        return writeTypical (synth::readTable (argv[2]), argv[3]);
+    if (argc != 5)
+    {
+        std::fprintf (stderr, "cabpack <cabinets.txt> <presets folder> <typical.toml> <out folder>\n"
+                              "cabpack --typical <cabinets.txt> <typical.toml>     (the typical cabinets as presets, typical/<id>.toml)\n");
+        return 2;
+    }
+    const auto table = synth::readTable (argv[1]);
+    std::map<std::string, std::vector<Item>> folders;   // by folder name, each in file order
+
+    // The factory presets, a folder for each style.
+    std::vector<fsys::path> presets;
+    for (const auto& e : fsys::directory_iterator (argv[2]))
+        if (e.path().extension() == ".toml")
+            presets.push_back (e.path());
+    std::sort (presets.begin(), presets.end());
+    int bad = 0;
+    for (const auto& p : presets)
+    {
+        if (auto it = presetAt (p))
+            folders[lower (it->style)].push_back (std::move (*it));
+        else
+        {
+            std::fprintf (stderr, "BAD  %s\n", p.string().c_str());
+            ++bad;
         }
     }
 
-    // Every cabinet at every rate.
+    // The typical cabinets, in the list's order, each as cabpack --typical made it a preset.
+    {
+        const auto parsed = t::parse (slurp (argv[3]));
+        const auto* cabs = typicalList (parsed);
+        if (cabs == nullptr)
+        {
+            std::fprintf (stderr, "BAD  %s: no [[cab]]\n", argv[3]);
+            return 1;
+        }
+        const auto folder = fsys::path (argv[3]).replace_extension();
+        for (const auto& c : *cabs)
+        {
+            const auto p = folder / (field (c, "id") + ".toml");
+            if (auto it = presetAt (p); it && lower (it->style) == "typical")
+                folders["typical"].push_back (std::move (*it));
+            else
+            {
+                std::fprintf (stderr, "BAD  %s: none, or not a typical one (cabpack --typical makes them)\n", p.string().c_str());
+                ++bad;
+            }
+        }
+    }
+
+    // Every cabinet at every rate, a folder for each style.
     struct Rate { double hz; const char* folder; size_t n; bool drawn; };   // drawn: the rate responses.svg is drawn at
     static constexpr Rate rates[] { { 44100.0, "44.1k", 1 << 14, false }, { 48000.0, "48k", 1 << 14, true }, { 96000.0, "96k", 1 << 15, false } };
     const fsys::path out (argv[4]);
     int written = 0;
+    // What every folder holds beside its rates: index.tsv, responses.svg and responses/ — and how many of its cabinets the
+    // panel's line stays green on, under 3 dB everywhere, each one it reddens on named. A size's (`homes`: the folder each
+    // of its cabinets lives in) holds no files of its own: its index.tsv says where each one's are, in a last column,
+    // `folder`, and only its responses.svg is its own.
+    const auto finish = [&out] (const std::string& folder, const std::string& title, const std::vector<Item>& items,
+                                const std::vector<Curve>& curves, const std::vector<std::string>* homes)
+    {
+        fsys::create_directories (out / folder);
+        std::string tsv = "file\tstyle\tname\tsize\tback\thorn\ta_model\ta_x\ta_y\ta_distance_m\ta_angle_deg\t"
+                          "b_model\tb_x\tb_y\tb_distance_m\tb_angle_deg\tblend\talign\tpolarity\tshift_ms\tlabel\tlink";
+        tsv += homes != nullptr ? "\tfolder\n" : "\n";
+        for (size_t i = 0; i < items.size(); ++i)
+        {
+            auto line = tsvLine (items[i]);
+            if (homes != nullptr)
+                line.insert (line.size() - 1, "\t" + (*homes)[i]);
+            tsv += line;
+        }
+        std::ofstream (out / folder / "index.tsv", std::ios::binary) << tsv;
+        std::ofstream (out / folder / "responses.svg", std::ios::binary) << responsesSvg (title, items, curves);
+        if (homes == nullptr)
+            fsys::create_directories (out / folder / "responses");
+        int clear = 0;
+        std::string red;
+        for (size_t i = 0; i < items.size() && i < curves.size(); ++i)
+        {
+            if (homes == nullptr)
+                std::ofstream (out / folder / "responses" / (items[i].file + ".svg"), std::ios::binary) << responseSvg (items[i], curves[i]);
+            const float worst = curves[i].bad.empty() ? 0.0f : *std::max_element (curves[i].bad.begin(), curves[i].bad.end());
+            if (worst <= 3.0f)
+                ++clear;
+            else
+                red += "         red " + items[i].file + "  " + number (worst, 1) + " dB\n";
+        }
+        std::printf ("%-10s %3zu cabinets x 3 rates, %d clear\n%s", folder.c_str(), items.size(), clear, red.c_str());
+    };
+    struct Made { const Item* item; std::string folder; Curve curve; };   // each cabinet as it was made, in the folders' order
+    std::vector<Made> made;
     for (const auto& [folder, items] : folders)
     {
-        std::string tsv = "file\tstyle\tname\tsize\tback\thorn\ta_model\ta_x\ta_y\ta_distance_m\ta_angle_deg\t"
-                          "b_model\tb_x\tb_y\tb_distance_m\tb_angle_deg\tblend\talign\tpolarity\tshift_ms\tlabel\tlink\n";
         std::vector<Curve> curves;
-        for (const auto& it : items)
-            tsv += tsvLine (it);
-        fsys::create_directories (out / folder);
-        std::ofstream (out / folder / "index.tsv", std::ios::binary) << tsv;
-
         for (const auto& r : rates)
         {
             const auto dir = out / folder / r.folder;
@@ -493,22 +575,30 @@ int main (int argc, char** argv)
                 ++written;
             }
         }
-        std::ofstream (out / folder / "responses.svg", std::ios::binary) << responsesSvg (items, curves);
-        fsys::create_directories (out / folder / "responses");
+        finish (folder, items.empty() ? folder : items.front().style, items, curves, nullptr);
         for (size_t i = 0; i < items.size() && i < curves.size(); ++i)
-            std::ofstream (out / folder / "responses" / (items[i].file + ".svg"), std::ios::binary) << responseSvg (items[i], curves[i]);
-        // ...and how many of them the panel's line stays green on — under 3 dB everywhere — each one it reddens on named.
-        int clear = 0;
-        std::string red;
-        for (size_t i = 0; i < items.size() && i < curves.size(); ++i)
+            made.push_back ({ &items[i], folder, curves[i] });
+    }
+
+    // ...and the same again by size (the owner, 06.11: a bassist with one 8x10 wants every 8x10), size/8x10/ and so on —
+    // every style's of that size and the typical ones, in the folders' order: a list of them, each one's files where they
+    // live (the owner, 06.11: one store, the sizes pointing into it — a page's zip gathers them).
+    std::map<std::string, std::vector<const Made*>> sizes;
+    for (const auto& m : made)
+        sizes[Panel::wordOf (Panel::indexOf (ui::String (m.item->state.box))).toStdString()].push_back (&m);
+    for (const auto& [size, list] : sizes)
+    {
+        const auto folder = "size/" + size;
+        std::vector<Item> items;
+        std::vector<Curve> curves;
+        std::vector<std::string> homes;
+        for (const auto* m : list)
         {
-            const float worst = curves[i].bad.empty() ? 0.0f : *std::max_element (curves[i].bad.begin(), curves[i].bad.end());
-            if (worst <= 3.0f)
-                ++clear;
-            else
-                red += "         red " + items[i].file + "  " + number (worst, 1) + " dB\n";
+            items.push_back (*m->item);
+            curves.push_back (m->curve);
+            homes.push_back (m->folder);
         }
-        std::printf ("%-8s %3zu cabinets x 3 rates, %d clear\n%s", folder.c_str(), items.size(), clear, red.c_str());
+        finish (folder, size, items, curves, &homes);
     }
     std::printf ("%d IRs written, %d bad\n", written, bad);
     return bad == 0 ? 0 : 1;

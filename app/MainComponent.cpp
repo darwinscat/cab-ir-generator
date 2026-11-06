@@ -116,8 +116,8 @@ MainComponent::MainComponent()
                },
                [this] (const juce::ValueTree& t)
                {
-                   if (const auto s = fromToml (t.getProperty ("state").toString().toStdString()))
-                       show (*s);
+                   const auto s = knownState (t.getProperty ("state").toString().toStdString());
+                   show (s ? *s : defaultState());   // one an older version kept, of a box since renamed: the default
                },
                felitronics::appkit::CompareHistory::Config {})
 {
@@ -505,7 +505,7 @@ void MainComponent::stepPreset (int by)
 
 void MainComponent::loadPreset (const juce::String& toml, const juce::String& name)
 {
-    const auto s = fromToml (toml.toStdString());
+    const auto s = knownState (toml.toStdString());
     if (! s)
         return;
     show (*s);

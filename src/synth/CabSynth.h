@@ -539,6 +539,8 @@ inline void forEachBin (size_t bins, const F& bin, size_t threadsAsked = 0)
 
 inline std::vector<double> render (const Cab& c, size_t n, size_t threads = 0)
 {
+    if (c.drivers.empty())   // a box the table has not (cabAt of an unknown name): silence, never a cone read that is not there
+        return std::vector<double> (n, 0.0);
     const size_t bins = n / 2 + 1;
     std::vector<cd> H (n, 0.0);
 

@@ -88,7 +88,7 @@ namespace
     /** A state that reads, of a box the table has — one naming a box it lacks is not a state to render. */
     std::optional<State> stateOf (const char* toml)
     {
-        auto state = fromToml (toml != nullptr ? toml : "");
+        auto state = knownState (toml != nullptr ? toml : "");
         if (! state)
             return std::nullopt;
         const auto boxes = synth::cabinets (session().table);
@@ -289,7 +289,7 @@ CABIR_EXPORT int cabir_find_best (const double* judged, int count)
 CABIR_EXPORT const char* cabir_with_b (const char* toml, double x, double y, double distance, double shiftMs)
 {
     auto& s = session();
-    auto state = fromToml (toml != nullptr ? toml : "");
+    auto state = knownState (toml != nullptr ? toml : "");
     if (! state)
         return nullptr;
     state->b.x = x;
@@ -303,7 +303,7 @@ CABIR_EXPORT const char* cabir_with_b (const char* toml, double x, double y, dou
 CABIR_EXPORT const char* cabir_with_found (const char* toml, double x, double y, double distance, double shiftMs)
 {
     auto& s = session();
-    auto state = fromToml (toml != nullptr ? toml : "");
+    auto state = knownState (toml != nullptr ? toml : "");
     if (! state)
         return nullptr;
     const bool pair = state->a.on && state->b.on;
@@ -332,7 +332,7 @@ CABIR_EXPORT const char* cabir_link_of (const char* toml)
 {
     // ...and the part after `#` that carries a state: the page and a WAV put the page's address before it.
     auto& s = session();
-    const auto state = fromToml (toml != nullptr ? toml : "");
+    const auto state = knownState (toml != nullptr ? toml : "");
     if (! state)
         return nullptr;
     s.withB = linkOf (*state);
@@ -341,6 +341,6 @@ CABIR_EXPORT const char* cabir_link_of (const char* toml)
 
 CABIR_EXPORT int cabir_b_on (const char* toml)
 {
-    const auto state = fromToml (toml != nullptr ? toml : "");
+    const auto state = knownState (toml != nullptr ? toml : "");
     return state && state->b.on ? 1 : 0;
 }

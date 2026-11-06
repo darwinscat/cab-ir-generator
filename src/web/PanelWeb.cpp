@@ -185,7 +185,7 @@ CABIR_EXPORT void cabir_panel_options (int find, int download, int def, int clos
 
 CABIR_EXPORT int cabir_panel_show (const char* toml)
 {
-    const auto state = fromToml (toml != nullptr ? toml : "");
+    const auto state = knownState (toml != nullptr ? toml : "");
     if (! state)
         return 0;
     const auto [cab, setup] = Panel::setupOf (*state);
@@ -251,7 +251,7 @@ CABIR_EXPORT const char* cabir_glyph_svg (const char* mic) { return micSvg (mic 
 CABIR_EXPORT const char* cabir_label (const char* toml)
 {
     static std::string label;
-    const auto state = fromToml (toml != nullptr ? toml : "");
+    const auto state = knownState (toml != nullptr ? toml : "");
     label = state ? Panel::labelOf (*state).toStdString() : std::string();
     return label.c_str();
 }

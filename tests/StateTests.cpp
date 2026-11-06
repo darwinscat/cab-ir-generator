@@ -8,6 +8,8 @@
 #include "synth/CabSynth.h"
 #include "synth/State.h"
 
+#include <algorithm>
+#include <cmath>
 #include <cstdio>
 
 namespace
@@ -116,6 +118,19 @@ int main()
         alone.b.on = false;
         const auto one = cabir::fromLink (cabir::linkOf (alone));
         check (one.has_value() && one->a == alone.a && ! one->b.on && one->box == alone.box, "a mic not heard is left out");
+    }
+
+    // A state of a box the table has not — a name an older version kept — is no state, and were it rendered, it would be
+    // silence, not a crash (0.1.3 crashed on its start over a 0.1.2 workspace).
+    {
+        check (! cabir::knownState ("cabir = 1\nbox = \"9x9-gone\"\n").has_value(), "a box the table has not: no state");
+        check (cabir::knownState (cabir::toToml (full)).has_value(), "a box it has: the state");
+        const auto table = cabir::synth::readTable (CABIR_TABLE);
+        State gone = full;
+        gone.box = "9x9-gone";
+        const auto parts = cabir::synth::renderPairParts (table, gone.box, cabir::synth::pairOf (gone));
+        check (std::all_of (parts.mix.begin(), parts.mix.end(), [] (float v) { return std::abs (v) < 1.0e-12f; }),
+               "a box the table has not renders silence");
     }
 
     std::printf ("%s\n%s", failures == 0 ? "state: all passed" : "state: FAILED", text.c_str());
