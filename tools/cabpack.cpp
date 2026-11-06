@@ -15,8 +15,8 @@
 // the app's DOWNLOAD IR writes it, and beside it its state as the app's preset — and index.tsv, a line for each, its last
 // column the link that opens it on the page; and its response as the panel draws it, with what the line and the bands say
 // — each alone in responses/<file>.svg, all of them together in responses.svg — a click on one opening it there too.
-// And the same by size, size/8x10/ and so on: every cabinet of that size, of every style and the typical ones, its files
-// the very bytes of its style folder's.
+// And the same by size, size/8x10/ and so on: every cabinet of that size, of every style and the typical ones — a list,
+// index.tsv saying in its last column, `folder`, where each one's files are, and the size's own responses.svg.
 
 #include <panel/Link.h>
 #include <panel/Panel.h>
@@ -513,21 +513,33 @@ int main (int argc, char** argv)
     const fsys::path out (argv[4]);
     int written = 0;
     // What every folder holds beside its rates: index.tsv, responses.svg and responses/ — and how many of its cabinets the
-    // panel's line stays green on, under 3 dB everywhere, each one it reddens on named.
-    const auto finish = [&out] (const std::string& folder, const std::string& title, const std::vector<Item>& items, const std::vector<Curve>& curves)
+    // panel's line stays green on, under 3 dB everywhere, each one it reddens on named. A size's (`homes`: the folder each
+    // of its cabinets lives in) holds no files of its own: its index.tsv says where each one's are, in a last column,
+    // `folder`, and only its responses.svg is its own.
+    const auto finish = [&out] (const std::string& folder, const std::string& title, const std::vector<Item>& items,
+                                const std::vector<Curve>& curves, const std::vector<std::string>* homes)
     {
+        fsys::create_directories (out / folder);
         std::string tsv = "file\tstyle\tname\tsize\tback\thorn\ta_model\ta_x\ta_y\ta_distance_m\ta_angle_deg\t"
-                          "b_model\tb_x\tb_y\tb_distance_m\tb_angle_deg\tblend\talign\tpolarity\tshift_ms\tlabel\tlink\n";
-        for (const auto& it : items)
-            tsv += tsvLine (it);
+                          "b_model\tb_x\tb_y\tb_distance_m\tb_angle_deg\tblend\talign\tpolarity\tshift_ms\tlabel\tlink";
+        tsv += homes != nullptr ? "\tfolder\n" : "\n";
+        for (size_t i = 0; i < items.size(); ++i)
+        {
+            auto line = tsvLine (items[i]);
+            if (homes != nullptr)
+                line.insert (line.size() - 1, "\t" + (*homes)[i]);
+            tsv += line;
+        }
         std::ofstream (out / folder / "index.tsv", std::ios::binary) << tsv;
         std::ofstream (out / folder / "responses.svg", std::ios::binary) << responsesSvg (title, items, curves);
-        fsys::create_directories (out / folder / "responses");
+        if (homes == nullptr)
+            fsys::create_directories (out / folder / "responses");
         int clear = 0;
         std::string red;
         for (size_t i = 0; i < items.size() && i < curves.size(); ++i)
         {
-            std::ofstream (out / folder / "responses" / (items[i].file + ".svg"), std::ios::binary) << responseSvg (items[i], curves[i]);
+            if (homes == nullptr)
+                std::ofstream (out / folder / "responses" / (items[i].file + ".svg"), std::ios::binary) << responseSvg (items[i], curves[i]);
             const float worst = curves[i].bad.empty() ? 0.0f : *std::max_element (curves[i].bad.begin(), curves[i].bad.end());
             if (worst <= 3.0f)
                 ++clear;
@@ -563,13 +575,14 @@ int main (int argc, char** argv)
                 ++written;
             }
         }
-        finish (folder, items.empty() ? folder : items.front().style, items, curves);
+        finish (folder, items.empty() ? folder : items.front().style, items, curves, nullptr);
         for (size_t i = 0; i < items.size() && i < curves.size(); ++i)
             made.push_back ({ &items[i], folder, curves[i] });
     }
 
     // ...and the same again by size (the owner, 06.11: a bassist with one 8x10 wants every 8x10), size/8x10/ and so on —
-    // every style's of that size and the typical ones, in the folders' order, each the very bytes of its style's.
+    // every style's of that size and the typical ones, in the folders' order: a list of them, each one's files where they
+    // live (the owner, 06.11: one store, the sizes pointing into it — a page's zip gathers them).
     std::map<std::string, std::vector<const Made*>> sizes;
     for (const auto& m : made)
         sizes[Panel::wordOf (Panel::indexOf (ui::String (m.item->state.box))).toStdString()].push_back (&m);
@@ -578,19 +591,14 @@ int main (int argc, char** argv)
         const auto folder = "size/" + size;
         std::vector<Item> items;
         std::vector<Curve> curves;
+        std::vector<std::string> homes;
         for (const auto* m : list)
         {
             items.push_back (*m->item);
             curves.push_back (m->curve);
-            for (const auto& r : rates)
-            {
-                fsys::create_directories (out / folder / r.folder);
-                for (const char* ext : { ".wav", ".toml" })
-                    fsys::copy_file (out / m->folder / r.folder / (m->item->file + ext), out / folder / r.folder / (m->item->file + ext),
-                                     fsys::copy_options::overwrite_existing);
-            }
+            homes.push_back (m->folder);
         }
-        finish (folder, size, items, curves);
+        finish (folder, size, items, curves, &homes);
     }
     std::printf ("%d IRs written, %d bad\n", written, bad);
     return bad == 0 ? 0 : 1;
