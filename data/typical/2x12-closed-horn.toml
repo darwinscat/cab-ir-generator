@@ -1,0 +1,27 @@
+name = "2x12 CLOSED HORN -6 · MD421+U47"
+style = "Typical"
+cabir = 1
+box = "2x12-round"
+back = "closed"
+horn = true
+horn_db = -6
+blend = 0.200
+align = true
+invert = false
+
+[mic.a]
+on = true
+model = "md421"
+x = -0.450
+y = 0.000
+distance = 0.030
+angle = 0.0
+
+[mic.b]
+on = true
+model = "u47"
+x = 0.075
+y = -0.350
+distance = 0.065
+angle = 0.0
+shift = -0.375

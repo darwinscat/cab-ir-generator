@@ -3,7 +3,8 @@
 # Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko & Alisa Lafoks. Part of Cab IR Generator — see LICENSE.
 #
 # Makes the IR packs a page offers (tools/cabpack.cpp) into one folder, with what made them (BUILD-INFO) — run again
-# whenever the presets or the typical list change; the same inputs on the same machine give the same bytes.
+# whenever the presets or the typical list change; the same inputs on the same machine give the same bytes. The typical
+# cabinets are presets in data/typical/: after a change to the list or the synthesis, `cabpack --typical` makes them again.
 #
 #   tools/cabpack.sh [out-dir]          (default build-pack/packs)
 #

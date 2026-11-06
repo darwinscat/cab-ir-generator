@@ -1,0 +1,27 @@
+name = "1x15 PORTED HORN -6 · MD421+U47"
+style = "Typical"
+cabir = 1
+box = "1x15-classic"
+back = "ported"
+horn = true
+horn_db = -6
+blend = 0.350
+align = true
+invert = false
+
+[mic.a]
+on = true
+model = "md421"
+x = -0.300
+y = 0.300
+distance = 0.050
+angle = 0.0
+
+[mic.b]
+on = true
+model = "u47"
+x = 0.150
+y = -0.425
+distance = 0.081
+angle = 0.0
+shift = 0.000
