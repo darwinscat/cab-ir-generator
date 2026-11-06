@@ -1,7 +1,7 @@
 name = "METAL · 8x8 BLADE"
 style = "Metal"
 cabir = 1
-box = "VB-88"
+box = "8x8-round"
 back = "closed"
 horn = true
 horn_db = 0

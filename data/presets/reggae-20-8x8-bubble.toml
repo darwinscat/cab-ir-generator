@@ -1,7 +1,7 @@
 name = "REGGAE · 8x8 BUBBLE"
 style = "Reggae"
 cabir = 1
-box = "VB-88"
+box = "8x8-round"
 back = "ported"
 horn = false
 horn_db = -12

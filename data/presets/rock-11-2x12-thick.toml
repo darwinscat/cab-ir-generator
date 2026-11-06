@@ -1,7 +1,7 @@
 name = "ROCK · 2x12 THICK"
 style = "Rock"
 cabir = 1
-box = "VB-212"
+box = "2x12-round"
 back = "ported"
 horn = true
 horn_db = -12

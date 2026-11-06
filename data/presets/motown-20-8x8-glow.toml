@@ -1,7 +1,7 @@
 name = "MOTOWN · 8x8 GLOW"
 style = "Motown"
 cabir = 1
-box = "VB-88"
+box = "8x8-round"
 back = "ported"
 horn = false
 horn_db = -12

@@ -1,7 +1,7 @@
 name = "METAL · 2x12 TORQUE"
 style = "Metal"
 cabir = 1
-box = "VB-212"
+box = "2x12-round"
 back = "closed"
 horn = true
 horn_db = 0

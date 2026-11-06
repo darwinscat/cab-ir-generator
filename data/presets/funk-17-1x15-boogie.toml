@@ -1,7 +1,7 @@
 name = "FUNK · 1x15 BOOGIE"
 style = "Funk"
 cabir = 1
-box = "SVT-15E"
+box = "1x15-classic"
 back = "ported"
 horn = true
 horn_db = 0

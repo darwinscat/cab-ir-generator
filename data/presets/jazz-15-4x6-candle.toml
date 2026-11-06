@@ -1,7 +1,7 @@
 name = "JAZZ · 4x6 CANDLE"
 style = "Jazz"
 cabir = 1
-box = "NY-604"
+box = "4x6-neo"
 back = "open"
 horn = false
 horn_db = -12

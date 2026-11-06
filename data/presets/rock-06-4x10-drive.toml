@@ -1,7 +1,7 @@
 name = "ROCK · 4x10 DRIVE"
 style = "Rock"
 cabir = 1
-box = "SVT-410HE"
+box = "4x10-classic"
 back = "closed"
 horn = true
 horn_db = -12

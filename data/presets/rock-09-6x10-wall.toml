@@ -1,7 +1,7 @@
 name = "ROCK · 6x10 WALL"
 style = "Rock"
 cabir = 1
-box = "SVT-610HLF"
+box = "6x10-classic"
 back = "ported"
 horn = true
 horn_db = -12

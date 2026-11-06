@@ -1,7 +1,7 @@
 name = "METAL · 2x15 TITAN"
 style = "Metal"
 cabir = 1
-box = "SUBWAY-215"
+box = "2x15-light"
 back = "closed"
 horn = true
 horn_db = -6

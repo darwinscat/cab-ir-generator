@@ -1,7 +1,7 @@
 name = "METAL · 6x10 SLAB"
 style = "Metal"
 cabir = 1
-box = "SVT-610HLF"
+box = "6x10-classic"
 back = "closed"
 horn = true
 horn_db = 0

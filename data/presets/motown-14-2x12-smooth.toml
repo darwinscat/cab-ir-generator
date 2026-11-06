@@ -1,7 +1,7 @@
 name = "MOTOWN · 2x12 SMOOTH"
 style = "Motown"
 cabir = 1
-box = "VB-212"
+box = "2x12-round"
 back = "ported"
 horn = false
 horn_db = -12

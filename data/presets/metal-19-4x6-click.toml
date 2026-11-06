@@ -1,7 +1,7 @@
 name = "METAL · 4x6 CLICK"
 style = "Metal"
 cabir = 1
-box = "NY-604"
+box = "4x6-neo"
 back = "closed"
 horn = true
 horn_db = 0

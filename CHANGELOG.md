@@ -19,6 +19,9 @@ All notable changes to **Cab IR Generator** are documented here. The format foll
 - **The typical pack's mics, spread as the presets' are.** Its A stood where DEFAULT puts it, and only B was moved — so
   a horn box's 4–5 kHz dip and a ported box's low one stayed. Now A first moves off its pit, then B goes where the two
   meet without a deep comb and the sum without a pit: 28 of its 30 cabinets stay green, against 17.
+- **Every box is named by its size and its family** — `4x10-classic`, `8x8-round`, `2x15-light` — and by no maker's
+  model, in a preset, in a WAV's preset or in a link. The sound is the same, sample for sample. A preset written by 0.1.2
+  or earlier keeps the old name and does not open in this one.
 
 ### Fixed
 - **A link with a value that is no number** — `shift=nan`, `blend=inf`, a mic's place as `nan` — opens no cabinet, as

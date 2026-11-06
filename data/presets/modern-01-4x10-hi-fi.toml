@@ -1,7 +1,7 @@
 name = "MODERN · 4x10 HI-FI"
 style = "Modern"
 cabir = 1
-box = "SVT-410HE"
+box = "4x10-classic"
 back = "closed"
 horn = true
 horn_db = 0

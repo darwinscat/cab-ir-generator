@@ -1,7 +1,7 @@
 name = "FUNK · 4x6 ZING"
 style = "Funk"
 cabir = 1
-box = "NY-604"
+box = "4x6-neo"
 back = "ported"
 horn = true
 horn_db = 0

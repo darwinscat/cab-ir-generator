@@ -93,7 +93,7 @@ mic_distance_m = 0.25
 mic_radial_offset_fraction = 0
 mic_axis_tilt_deg = 0
 
-[VB-112 cap]
+[1x12-round cap]
 inherit = defaults, mic-md421, pos-cap
 seed = 11201
 alignment = ported
@@ -113,12 +113,12 @@ woofer_lowpass_hz = 5500
 body_eq = 300/0.8/-1.5, 900/1/1.5
 cavity_modes = 330/5/0.10, 520/4/-0.08, 700/5/0.06
 panel_modes = 180/3/0.06
-[VB-112 edge]
-inherit = VB-112 cap, pos-edge
-[VB-112 offaxis]
-inherit = VB-112 cap, mic-sm57, pos-offaxis
+[1x12-round edge]
+inherit = 1x12-round cap, pos-edge
+[1x12-round offaxis]
+inherit = 1x12-round cap, mic-sm57, pos-offaxis
 
-[VB-115 cap]
+[1x15-round cap]
 inherit = defaults, mic-d112, pos-cap
 seed = 11501
 alignment = ported
@@ -138,12 +138,12 @@ woofer_lowpass_hz = 3800
 body_eq = 400/0.9/1.5, 1200/1.2/-1
 cavity_modes = 300/5/0.10, 430/4/-0.08, 620/5/0.06
 panel_modes = 140/3/0.06
-[VB-115 edge]
-inherit = VB-115 cap, mic-md421, pos-edge
-[VB-115 distance]
-inherit = VB-115 cap, mic-u87, pos-distance
+[1x15-round edge]
+inherit = 1x15-round cap, mic-md421, pos-edge
+[1x15-round distance]
+inherit = 1x15-round cap, mic-u87, pos-distance
 
-[VB-210 cap]
+[2x10-round cap]
 inherit = defaults, mic-md421, pos-cap
 seed = 21001
 alignment = ported
@@ -163,12 +163,12 @@ woofer_lowpass_hz = 5500
 body_eq = 300/0.8/-1.5, 1000/1/1.5
 cavity_modes = 330/5/0.08, 470/4/-0.08, 680/5/0.06
 panel_modes = 200/3/0.05
-[VB-210 edge]
-inherit = VB-210 cap, pos-edge
-[VB-210 offaxis]
-inherit = VB-210 cap, mic-sm57, pos-offaxis
+[2x10-round edge]
+inherit = 2x10-round cap, pos-edge
+[2x10-round offaxis]
+inherit = 2x10-round cap, mic-sm57, pos-offaxis
 
-[VB-212 cap]
+[2x12-round cap]
 inherit = defaults, mic-md421, pos-cap
 seed = 21201
 alignment = ported
@@ -188,12 +188,12 @@ woofer_lowpass_hz = 5500
 body_eq = 300/0.8/-1.5, 900/1/1.5
 cavity_modes = 300/5/0.10, 470/4/-0.08, 650/5/0.06
 panel_modes = 170/3/0.06
-[VB-212 edge]
-inherit = VB-212 cap, pos-edge
-[VB-212 offaxis]
-inherit = VB-212 cap, mic-sm57, pos-offaxis
+[2x12-round edge]
+inherit = 2x12-round cap, pos-edge
+[2x12-round offaxis]
+inherit = 2x12-round cap, mic-sm57, pos-offaxis
 
-[VB-410 cap]
+[4x10-round cap]
 inherit = defaults, mic-md421, pos-cap
 seed = 41001
 alignment = ported
@@ -213,12 +213,12 @@ woofer_lowpass_hz = 5500
 body_eq = 280/0.8/-2, 1000/1/1.5
 cavity_modes = 260/5/0.08, 330/5/-0.08, 470/4/0.08, 690/5/-0.06
 panel_modes = 160/3/0.05
-[VB-410 edge]
-inherit = VB-410 cap, pos-edge
-[VB-410 offaxis]
-inherit = VB-410 cap, mic-sm57, pos-offaxis
+[4x10-round edge]
+inherit = 4x10-round cap, pos-edge
+[4x10-round offaxis]
+inherit = 4x10-round cap, mic-sm57, pos-offaxis
 
-[SVT-15E cap]
+[1x15-classic cap]
 # Its own mic the RE20, not the kick drum's D112: a 15 recorded at home, not a stage's (the owner, 04.11).
 inherit = defaults, mic-re20, pos-cap
 seed = 15051
@@ -230,7 +230,7 @@ baffle = 0.61, 0.56, 0.41
 driver_xy = 0/0.02
 effective_radius_m = 0.165
 equivalent_port_xy = 0/-0.22
-# A horn of ours in its top corner, as the VB-115 has one — off unless the player turns it on (src/panel/CabPicker.h, hornOn).
+# A horn of ours in its top corner, as the 1x15-round has one — off unless the player turns it on (src/panel/CabPicker.h, hornOn).
 horn_xy = 0.22/0.20
 horn_crossover_hz = 3500
 horn_at_mic_db = -12
@@ -240,12 +240,12 @@ woofer_lowpass_hz = 3200
 body_eq = 120/0.9/1, 400/0.9/1.5, 900/1.2/1
 cavity_modes = 320/5/0.12, 490/5/0.10, 720/4/-0.07
 panel_modes = 140/4/0.04, 230/3/-0.03
-[SVT-15E edge]
-inherit = SVT-15E cap, mic-md421, pos-edge
-[SVT-15E distance]
-inherit = SVT-15E cap, mic-u87, pos-distance
+[1x15-classic edge]
+inherit = 1x15-classic cap, mic-md421, pos-edge
+[1x15-classic distance]
+inherit = 1x15-classic cap, mic-u87, pos-distance
 
-[SVT-210AV cap]
+[2x10-classic-tall cap]
 inherit = defaults, mic-md421, pos-cap
 seed = 21051
 alignment = sealed
@@ -261,13 +261,13 @@ woofer_lowpass_hz = 4800
 body_eq = 300/0.8/-1.5, 800/1/2.5, 1200/1.2/1
 cavity_modes = 300/5/0.10, 610/5/-0.08, 1040/4/0.05
 panel_modes = 220/3/0.03
-[SVT-210AV edge]
-inherit = SVT-210AV cap, pos-edge
-[SVT-210AV offaxis]
-inherit = SVT-210AV cap, mic-sm57, pos-offaxis
+[2x10-classic-tall edge]
+inherit = 2x10-classic-tall cap, pos-edge
+[2x10-classic-tall offaxis]
+inherit = 2x10-classic-tall cap, mic-sm57, pos-offaxis
 
 # The 2x10 with a rear port and a horn.
-[SVT-210HE cap]
+[2x10-classic cap]
 inherit = defaults, mic-md421, pos-cap
 seed = 21052
 alignment = ported
@@ -288,12 +288,12 @@ woofer_lowpass_hz = 4800
 body_eq = 300/0.8/-1.5, 800/1/2, 1200/1.2/1
 cavity_modes = 320/5/0.10, 440/5/-0.09, 560/4/0.08
 panel_modes = 180/3/0.04
-[SVT-210HE edge]
-inherit = SVT-210HE cap, pos-edge
-[SVT-210HE offaxis]
-inherit = SVT-210HE cap, mic-sm57, pos-offaxis
+[2x10-classic edge]
+inherit = 2x10-classic cap, pos-edge
+[2x10-classic offaxis]
+inherit = 2x10-classic cap, mic-sm57, pos-offaxis
 
-[SVT-410HE cap]
+[4x10-classic cap]
 inherit = defaults, mic-md421, pos-cap
 seed = 41051
 alignment = sealed
@@ -311,12 +311,12 @@ woofer_lowpass_hz = 4800
 body_eq = 300/0.8/-1.5, 800/1/2.5, 1200/1.2/1
 cavity_modes = 280/5/0.10, 330/5/-0.08, 420/4/0.08, 680/5/-0.06
 panel_modes = 165/3/0.04
-[SVT-410HE edge]
-inherit = SVT-410HE cap, pos-edge
-[SVT-410HE offaxis]
-inherit = SVT-410HE cap, mic-sm57, pos-offaxis
+[4x10-classic edge]
+inherit = 4x10-classic cap, pos-edge
+[4x10-classic offaxis]
+inherit = 4x10-classic cap, mic-sm57, pos-offaxis
 
-[SVT-410HLF cap]
+[4x10-classic-tall cap]
 inherit = defaults, mic-md421, pos-cap
 seed = 41052
 alignment = ported
@@ -336,12 +336,12 @@ woofer_lowpass_hz = 4800
 body_eq = 300/0.8/-2.5, 800/1/1.5, 1200/1.2/1
 cavity_modes = 225/5/0.08, 280/5/-0.08, 360/5/0.08, 620/4/-0.06
 panel_modes = 130/3/0.04
-[SVT-410HLF edge]
-inherit = SVT-410HLF cap, pos-edge
-[SVT-410HLF distance]
-inherit = SVT-410HLF cap, mic-u87, pos-distance
+[4x10-classic-tall edge]
+inherit = 4x10-classic-tall cap, pos-edge
+[4x10-classic-tall distance]
+inherit = 4x10-classic-tall cap, mic-u87, pos-distance
 
-[SVT-610HLF cap]
+[6x10-classic cap]
 inherit = defaults, mic-md421, pos-cap
 seed = 61051
 alignment = ported
@@ -361,12 +361,12 @@ woofer_lowpass_hz = 4800
 body_eq = 300/0.8/-1.5, 800/1/2, 1200/1.2/1
 cavity_modes = 170/4/0.06, 280/5/-0.08, 420/5/0.08, 680/4/-0.06
 panel_modes = 120/3/0.03, 210/3/-0.025
-[SVT-610HLF edge]
-inherit = SVT-610HLF cap, pos-edge
-[SVT-610HLF offaxis]
-inherit = SVT-610HLF cap, mic-sm57, pos-offaxis
+[6x10-classic edge]
+inherit = 6x10-classic cap, pos-edge
+[6x10-classic offaxis]
+inherit = 6x10-classic cap, mic-sm57, pos-offaxis
 
-[SVT-810 cap]
+[8x10-classic cap]
 inherit = defaults, mic-re20, pos-cap
 seed = 81051
 alignment = sealed
@@ -386,54 +386,54 @@ woofer_lowpass_hz = 4600
 body_eq = 300/0.8/-1.5, 800/1/3, 1200/1.2/1.5
 cavity_modes_per_chamber = 290/5/0.10, 420/5/-0.08, 530/4/0.06
 panel_modes = 150/3/0.03, 240/3/-0.02
-[SVT-810 edge]
-inherit = SVT-810 cap, mic-md421, pos-edge
-[SVT-810 distance]
-inherit = SVT-810 cap, mic-u87, pos-distance
+[8x10-classic edge]
+inherit = 8x10-classic cap, mic-md421, pos-edge
+[8x10-classic distance]
+inherit = 8x10-classic cap, mic-u87, pos-distance
 
-[VB-112 cap horn-off]
-inherit = VB-112 cap
+[1x12-round cap horn-off]
+inherit = 1x12-round cap
 horn = absent
 
-[VB-115 cap horn-off]
-inherit = VB-115 cap
+[1x15-round cap horn-off]
+inherit = 1x15-round cap
 horn = absent
 
-[VB-210 cap horn-off]
-inherit = VB-210 cap
+[2x10-round cap horn-off]
+inherit = 2x10-round cap
 horn = absent
 
-[VB-410 cap horn-off]
-inherit = VB-410 cap
+[4x10-round cap horn-off]
+inherit = 4x10-round cap
 horn = absent
 
-[SVT-15E cap horn-off]
-inherit = SVT-15E cap
+[1x15-classic cap horn-off]
+inherit = 1x15-classic cap
 horn = absent
 
-[SVT-810 cap horn-off]
-inherit = SVT-810 cap
+[8x10-classic cap horn-off]
+inherit = 8x10-classic cap
 horn = absent
 
-[SVT-210HE cap horn-off]
-inherit = SVT-210HE cap
+[2x10-classic cap horn-off]
+inherit = 2x10-classic cap
 horn = absent
 
-[SVT-410HE cap horn-off]
-inherit = SVT-410HE cap
+[4x10-classic cap horn-off]
+inherit = 4x10-classic cap
 horn = absent
 
-[SVT-410HLF cap horn-off]
-inherit = SVT-410HLF cap
+[4x10-classic-tall cap horn-off]
+inherit = 4x10-classic-tall cap
 horn = absent
 
-[SVT-610HLF cap horn-off]
-inherit = SVT-610HLF cap
+[6x10-classic cap horn-off]
+inherit = 6x10-classic cap
 horn = absent
 
-# Venture's 8x8: eight 8" neodymium cones in two columns, front-ported, its HF driver between them. Class-typical
+# The round family's 8x8: eight 8" neodymium cones in two columns, front-ported, its HF driver between them. Class-typical
 # numbers: the maker gives no dimensions or response.
-[VB-88 cap]
+[8x8-round cap]
 inherit = defaults, mic-md421, pos-cap
 seed = 88001
 alignment = ported
@@ -453,20 +453,20 @@ woofer_lowpass_hz = 6500
 body_eq = 300/0.8/-1, 1100/1/2
 cavity_modes = 260/5/0.08, 360/5/-0.08, 520/4/0.06
 panel_modes = 150/3/0.05
-[VB-88 edge]
-inherit = VB-88 cap, pos-edge
-[VB-88 offaxis]
-inherit = VB-88 cap, mic-sm57, pos-offaxis
-[VB-212 cap horn-off]
-inherit = VB-212 cap
+[8x8-round edge]
+inherit = 8x8-round cap, pos-edge
+[8x8-round offaxis]
+inherit = 8x8-round cap, mic-sm57, pos-offaxis
+[2x12-round cap horn-off]
+inherit = 2x12-round cap
 horn = absent
-[VB-88 cap horn-off]
-inherit = VB-88 cap
+[8x8-round cap horn-off]
+inherit = 8x8-round cap
 horn = absent
 
 # Orange's: sealed, no HF driver — the darker, mid-forward voice, the top falling earlier than the SVT's. Class-typical
 # numbers: no maker's response figures.
-[OBC115 cap]
+[1x15-plain cap]
 inherit = defaults, mic-d112, pos-cap
 seed = 11591
 alignment = sealed
@@ -482,12 +482,12 @@ woofer_lowpass_hz = 3000
 body_eq = 150/0.9/1, 600/0.9/2.5, 2500/1/-1.5
 cavity_modes = 290/5/0.12, 450/5/0.10, 680/4/-0.07
 panel_modes = 130/4/0.04, 220/3/-0.03
-[OBC115 edge]
-inherit = OBC115 cap, mic-md421, pos-edge
-[OBC115 distance]
-inherit = OBC115 cap, mic-u87, pos-distance
+[1x15-plain edge]
+inherit = 1x15-plain cap, mic-md421, pos-edge
+[1x15-plain distance]
+inherit = 1x15-plain cap, mic-u87, pos-distance
 
-[OBC210 cap]
+[2x10-plain cap]
 inherit = defaults, mic-md421, pos-cap
 seed = 21091
 alignment = sealed
@@ -503,12 +503,12 @@ woofer_lowpass_hz = 4000
 body_eq = 300/0.8/-1, 700/0.9/3, 2500/1/-1.5
 cavity_modes = 340/5/0.10, 520/5/-0.09, 760/4/0.07
 panel_modes = 200/3/0.04
-[OBC210 edge]
-inherit = OBC210 cap, pos-edge
-[OBC210 offaxis]
-inherit = OBC210 cap, mic-sm57, pos-offaxis
+[2x10-plain edge]
+inherit = 2x10-plain cap, pos-edge
+[2x10-plain offaxis]
+inherit = 2x10-plain cap, mic-sm57, pos-offaxis
 
-[OBC410 cap]
+[4x10-plain cap]
 inherit = defaults, mic-md421, pos-cap
 seed = 41091
 alignment = sealed
@@ -524,12 +524,12 @@ woofer_lowpass_hz = 4000
 body_eq = 300/0.8/-1, 700/0.9/3, 2500/1/-1.5
 cavity_modes = 270/5/0.10, 340/5/-0.08, 450/4/0.08, 700/5/-0.06
 panel_modes = 160/3/0.04
-[OBC410 edge]
-inherit = OBC410 cap, pos-edge
-[OBC410 offaxis]
-inherit = OBC410 cap, mic-sm57, pos-offaxis
+[4x10-plain edge]
+inherit = 4x10-plain cap, pos-edge
+[4x10-plain offaxis]
+inherit = 4x10-plain cap, mic-sm57, pos-offaxis
 
-[OBC810 cap]
+[8x10-plain cap]
 inherit = defaults, mic-re20, pos-cap
 seed = 81091
 alignment = sealed
@@ -545,14 +545,15 @@ woofer_lowpass_hz = 3800
 body_eq = 300/0.8/-1, 700/0.9/3.5, 2500/1/-1.5
 cavity_modes_per_chamber = 280/5/0.10, 400/5/-0.08, 520/4/0.06
 panel_modes = 140/3/0.03, 230/3/-0.02
-[OBC810 edge]
-inherit = OBC810 cap, mic-md421, pos-edge
-[OBC810 distance]
-inherit = OBC810 cap, mic-u87, pos-distance
+[8x10-plain edge]
+inherit = 8x10-plain cap, mic-md421, pos-edge
+[8x10-plain distance]
+inherit = 8x10-plain cap, mic-u87, pos-distance
 
-# Markbass's: neodymium, ported, the HF driver crossed at 3.5 kHz and louder at the mic than an Ampeg's — the flat,
-# hi-fi voice. HF front-ported, HR and the New Yorks rear-ported. Class-typical numbers where the maker gives none.
-[STD-104HF cap]
+# The neo family: neodymium, ported, the HF driver crossed at 3.5 kHz and louder at the mic than the classic family's —
+# the flat, hi-fi voice. The 4x10 and the 2x10 front-ported, the 1x15 and the small ones rear-ported. Class-typical
+# numbers where the maker gives none.
+[4x10-neo cap]
 inherit = defaults, mic-md421, pos-cap
 seed = 41071
 alignment = ported
@@ -572,12 +573,12 @@ woofer_lowpass_hz = 4500
 body_eq = 250/0.8/-1, 800/1/-1, 2000/1/1
 cavity_modes = 260/5/0.08, 330/5/-0.07, 440/4/0.06, 650/5/-0.05
 panel_modes = 150/3/0.03
-[STD-104HF edge]
-inherit = STD-104HF cap, pos-edge
-[STD-104HF offaxis]
-inherit = STD-104HF cap, mic-sm57, pos-offaxis
+[4x10-neo edge]
+inherit = 4x10-neo cap, pos-edge
+[4x10-neo offaxis]
+inherit = 4x10-neo cap, mic-sm57, pos-offaxis
 
-[STD-102HF cap]
+[2x10-neo cap]
 inherit = defaults, mic-md421, pos-cap
 seed = 21071
 alignment = ported
@@ -597,12 +598,12 @@ woofer_lowpass_hz = 4500
 body_eq = 250/0.8/-1, 800/1/-1, 2000/1/1
 cavity_modes = 300/5/0.09, 420/5/-0.08, 600/4/0.06
 panel_modes = 190/3/0.03
-[STD-102HF edge]
-inherit = STD-102HF cap, pos-edge
-[STD-102HF offaxis]
-inherit = STD-102HF cap, mic-sm57, pos-offaxis
+[2x10-neo edge]
+inherit = 2x10-neo cap, pos-edge
+[2x10-neo offaxis]
+inherit = 2x10-neo cap, mic-sm57, pos-offaxis
 
-[STD-151HR cap]
+[1x15-neo cap]
 inherit = defaults, mic-d112, pos-cap
 seed = 15071
 alignment = ported
@@ -623,12 +624,12 @@ woofer_lowpass_hz = 3800
 body_eq = 250/0.8/-1, 800/1/-1, 2000/1/1
 cavity_modes = 290/5/0.10, 430/4/-0.08, 640/5/0.06
 panel_modes = 140/3/0.04
-[STD-151HR edge]
-inherit = STD-151HR cap, mic-md421, pos-edge
-[STD-151HR distance]
-inherit = STD-151HR cap, mic-u87, pos-distance
+[1x15-neo edge]
+inherit = 1x15-neo cap, mic-md421, pos-edge
+[1x15-neo distance]
+inherit = 1x15-neo cap, mic-u87, pos-distance
 
-[NY-604 cap]
+[4x6-neo cap]
 inherit = defaults, mic-md421, pos-cap
 seed = 60471
 alignment = ported
@@ -649,12 +650,12 @@ woofer_lowpass_hz = 7000
 body_eq = 250/0.8/-1, 800/1/-1, 2000/1/1
 cavity_modes = 420/5/0.08, 610/5/-0.07, 880/4/0.05
 panel_modes = 260/3/0.03
-[NY-604 edge]
-inherit = NY-604 cap, pos-edge
-[NY-604 offaxis]
-inherit = NY-604 cap, mic-sm57, pos-offaxis
+[4x6-neo edge]
+inherit = 4x6-neo cap, pos-edge
+[4x6-neo offaxis]
+inherit = 4x6-neo cap, mic-sm57, pos-offaxis
 
-[NY-122 cap]
+[2x12-neo cap]
 inherit = defaults, mic-md421, pos-cap
 seed = 12271
 alignment = ported
@@ -675,14 +676,14 @@ woofer_lowpass_hz = 4800
 body_eq = 250/0.8/-1, 800/1/-1, 2000/1/1
 cavity_modes = 300/5/0.09, 470/5/-0.08, 650/4/0.06
 panel_modes = 170/3/0.04
-[NY-122 edge]
-inherit = NY-122 cap, pos-edge
-[NY-122 offaxis]
-inherit = NY-122 cap, mic-sm57, pos-offaxis
+[2x12-neo edge]
+inherit = 2x12-neo cap, pos-edge
+[2x12-neo offaxis]
+inherit = 2x12-neo cap, mic-sm57, pos-offaxis
 
-# Mesa's Subway: light neodymium boxes, front tri-ported (one equivalent port here), the HF horn crossed at 3 kHz —
+# The light family: neodymium boxes, front tri-ported (one equivalent port here), the HF horn crossed at 3 kHz —
 # a tight punch, a little scoop, a growl over it. Class-typical numbers where the maker gives none.
-[SUBWAY-112 cap]
+[1x12-light cap]
 inherit = defaults, mic-md421, pos-cap
 seed = 11281
 alignment = ported
@@ -702,12 +703,12 @@ woofer_lowpass_hz = 4800
 body_eq = 150/0.9/1.5, 500/0.9/-1.5, 1800/1/1.5
 cavity_modes = 360/5/0.09, 540/4/-0.08, 720/5/0.06
 panel_modes = 190/3/0.05
-[SUBWAY-112 edge]
-inherit = SUBWAY-112 cap, pos-edge
-[SUBWAY-112 offaxis]
-inherit = SUBWAY-112 cap, mic-sm57, pos-offaxis
+[1x12-light edge]
+inherit = 1x12-light cap, pos-edge
+[1x12-light offaxis]
+inherit = 1x12-light cap, mic-sm57, pos-offaxis
 
-[SUBWAY-115 cap]
+[1x15-light cap]
 inherit = defaults, mic-d112, pos-cap
 seed = 11581
 alignment = ported
@@ -727,13 +728,13 @@ woofer_lowpass_hz = 3800
 body_eq = 150/0.9/1.5, 500/0.9/-1.5, 1800/1/1.5
 cavity_modes = 320/5/0.10, 470/4/-0.08, 660/5/0.06
 panel_modes = 160/3/0.05
-[SUBWAY-115 edge]
-inherit = SUBWAY-115 cap, mic-md421, pos-edge
-[SUBWAY-115 distance]
-inherit = SUBWAY-115 cap, mic-u87, pos-distance
+[1x15-light edge]
+inherit = 1x15-light cap, mic-md421, pos-edge
+[1x15-light distance]
+inherit = 1x15-light cap, mic-u87, pos-distance
 
 # The 2x10 with its cones on a diagonal.
-[SUBWAY-210 cap]
+[2x10-light cap]
 inherit = defaults, mic-md421, pos-cap
 seed = 21081
 alignment = ported
@@ -753,12 +754,12 @@ woofer_lowpass_hz = 4800
 body_eq = 150/0.9/1.5, 500/0.9/-1.5, 1800/1/1.5
 cavity_modes = 330/5/0.09, 460/5/-0.08, 640/4/0.06
 panel_modes = 180/3/0.04
-[SUBWAY-210 edge]
-inherit = SUBWAY-210 cap, pos-edge
-[SUBWAY-210 offaxis]
-inherit = SUBWAY-210 cap, mic-sm57, pos-offaxis
+[2x10-light edge]
+inherit = 2x10-light cap, pos-edge
+[2x10-light offaxis]
+inherit = 2x10-light cap, mic-sm57, pos-offaxis
 
-[SUBWAY-212 cap]
+[2x12-light cap]
 inherit = defaults, mic-md421, pos-cap
 seed = 21281
 alignment = ported
@@ -778,12 +779,12 @@ woofer_lowpass_hz = 4800
 body_eq = 150/0.9/1.5, 500/0.9/-1.5, 1800/1/1.5
 cavity_modes = 250/5/0.09, 380/5/-0.08, 560/4/0.06
 panel_modes = 150/3/0.04
-[SUBWAY-212 edge]
-inherit = SUBWAY-212 cap, pos-edge
-[SUBWAY-212 offaxis]
-inherit = SUBWAY-212 cap, mic-sm57, pos-offaxis
+[2x12-light edge]
+inherit = 2x12-light cap, pos-edge
+[2x12-light offaxis]
+inherit = 2x12-light cap, mic-sm57, pos-offaxis
 
-[SUBWAY-410 cap]
+[4x10-light cap]
 inherit = defaults, mic-md421, pos-cap
 seed = 41081
 alignment = ported
@@ -803,12 +804,12 @@ woofer_lowpass_hz = 4800
 body_eq = 150/0.9/1.5, 500/0.9/-1.5, 1800/1/1.5
 cavity_modes = 270/5/0.09, 340/5/-0.07, 450/4/0.06, 660/5/-0.05
 panel_modes = 155/3/0.04
-[SUBWAY-410 edge]
-inherit = SUBWAY-410 cap, pos-edge
-[SUBWAY-410 offaxis]
-inherit = SUBWAY-410 cap, mic-sm57, pos-offaxis
+[4x10-light edge]
+inherit = 4x10-light cap, pos-edge
+[4x10-light offaxis]
+inherit = 4x10-light cap, mic-sm57, pos-offaxis
 
-[SUBWAY-215 cap]
+[2x15-light cap]
 inherit = defaults, mic-d112, pos-cap
 seed = 21581
 alignment = ported
@@ -828,7 +829,7 @@ woofer_lowpass_hz = 3800
 body_eq = 150/0.9/1.5, 500/0.9/-1.5, 1800/1/1.5
 cavity_modes = 220/5/0.09, 350/5/-0.08, 520/4/0.06
 panel_modes = 130/3/0.04
-[SUBWAY-215 edge]
-inherit = SUBWAY-215 cap, mic-md421, pos-edge
-[SUBWAY-215 distance]
-inherit = SUBWAY-215 cap, mic-u87, pos-distance
+[2x15-light edge]
+inherit = 2x15-light cap, mic-md421, pos-edge
+[2x15-light distance]
+inherit = 2x15-light cap, mic-u87, pos-distance

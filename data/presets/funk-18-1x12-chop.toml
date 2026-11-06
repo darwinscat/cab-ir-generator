@@ -1,7 +1,7 @@
 name = "FUNK · 1x12 CHOP"
 style = "Funk"
 cabir = 1
-box = "VB-112"
+box = "1x12-round"
 back = "ported"
 horn = true
 horn_db = 0

@@ -1,7 +1,7 @@
 name = "REGGAE · 1x15 YARD"
 style = "Reggae"
 cabir = 1
-box = "SVT-15E"
+box = "1x15-classic"
 back = "ported"
 horn = false
 horn_db = -12

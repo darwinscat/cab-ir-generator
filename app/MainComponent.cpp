@@ -231,7 +231,7 @@ State MainComponent::defaultState()
     // A 4x10, ported as eight boxes of the ten are, an MD421 close and a U47 at 12 cm where the two comb least: green
     // from 40 Hz to 12 kHz (synth::quietPlaceForB found the place; the owner, 05.11).
     State s;
-    s.box = "SVT-410HE";
+    s.box = "4x10-classic";
     s.back = 1;
     s.a = { true, "md421", -0.3, 0.0, 0.05, 0.0 };
     s.b = { true, "u47", -0.65, 0.0, 0.12, 0.0 };

@@ -1,7 +1,7 @@
 name = "JAZZ · 6x10 NOCTURNE"
 style = "Jazz"
 cabir = 1
-box = "SVT-610HLF"
+box = "6x10-classic"
 back = "ported"
 horn = false
 horn_db = -12

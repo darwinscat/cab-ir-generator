@@ -1,7 +1,7 @@
 name = "ROCK · 4x6 GARAGE"
 style = "Rock"
 cabir = 1
-box = "NY-604"
+box = "4x6-neo"
 back = "ported"
 horn = true
 horn_db = -12
