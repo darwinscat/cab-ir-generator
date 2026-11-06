@@ -15,7 +15,7 @@
 //   cabir_render_wav (toml, rate, bits, samples)   DOWNLOAD IR in a format (panel/Download.h): the WAV at cabir_wav() —
 //                                      44100|48000|96000, 16|24, 0 the whole IR|512|1024|2048 — its size, 0 for none
 //   cabir_download_name (toml, rate, bits, samples)   ...its file's name, no .wav: "8x10 MD421+RE20 44k 16bit 1024"
-//   cabir_download_note (rate, bits, samples)         ...the line under the button: "44.1 kHz · 16 bit · 1024 samples"
+//   cabir_download_note (rate, bits, samples)         ...the line under the button: "44.1 kHz, 16 bit, 1024 samples"
 //   cabir_find (toml, thorough)        B's quiet place against A: x, y, distance, shift (ms) at cabir_found() — or, with
 //                                      one mic heard, that one's place without a pit about where it is (shift 0)
 //     cabir_tried / cabir_tried_count  the places tried on the way, x, y, score each, for the search's map

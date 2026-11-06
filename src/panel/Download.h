@@ -38,10 +38,11 @@ inline std::vector<unsigned char> downloadWav (const synth::Table& table, const 
     return synth::wavPcm (synth::shortened (ir, (size_t) f.samples), f.rate, f.bits, &meta);
 }
 
-/** What a download in `f` will be, the line under the button: "44.1 kHz · 16 bit · 1024 samples", "48 kHz · 24 bit · 100 ms". */
+/** What a download in `f` will be, the line under the button: "44.1 kHz, 16 bit, 1024 samples", "48 kHz, 24 bit, 100 ms" — plain
+    words and commas (the owner, 06.11: no exotic symbols in the text). */
 inline std::string formatNote (const DownloadFormat& f)
 {
-    return std::string (f.rate == 44100 ? "44.1" : f.rate == 96000 ? "96" : "48") + " kHz \xc2\xb7 " + std::to_string (f.bits) + " bit \xc2\xb7 "
+    return std::string (f.rate == 44100 ? "44.1" : f.rate == 96000 ? "96" : "48") + " kHz, " + std::to_string (f.bits) + " bit, "
          + (f.samples > 0 ? std::to_string (f.samples) + " samples" : std::string ("100 ms"));
 }
 

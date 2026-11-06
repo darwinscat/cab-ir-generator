@@ -727,9 +727,9 @@ void MainComponent::showFormats()
     for (const int b : { 24, 16 })
         menu.addItem (juce::String (b) + " bit", true, format.bits == b, [this, b] { format.bits = b; formatChosen(); });
     menu.addSectionHeader ("LENGTH");
-    menu.addItem ("FULL \xc2\xb7 100 ms", true, format.samples == 0, [this] { format.samples = 0; formatChosen(); });
+    menu.addItem ("FULL (100 ms)", true, format.samples == 0, [this] { format.samples = 0; formatChosen(); });
     for (const int n : { 2048, 1024, 512 })
-        menu.addItem (juce::String (n) + " samples \xc2\xb7 " + juce::String (juce::roundToInt (1000.0 * n / format.rate)) + " ms", true,
+        menu.addItem (juce::String (n) + " samples (" + juce::String (juce::roundToInt (1000.0 * n / format.rate)) + " ms)", true,
                       format.samples == n, [this, n] { format.samples = n; formatChosen(); });
     menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition());
 }
