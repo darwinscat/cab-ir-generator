@@ -5,7 +5,7 @@ All notable changes to **Cab IR Generator** are documented here. The format foll
 [Keep a Changelog](https://keepachangelog.com/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.1.3] — 2026-11-06 — packs that show their cabinets, boxes named by their size
 
 ### Added
 - **Every IR pack shows its cabinets and links them.** Each cabinet's response as the panel draws it — the line green
