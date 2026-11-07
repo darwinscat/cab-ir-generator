@@ -703,8 +703,8 @@ private:
     double searchEnded = 0;            // the host's clock when it was done; -1 until the tick after
 
     /** A BACK'S CELL UNDER THE HAND (the owner, 07.11): the whole of it grown, the box cut through and its word, as a mic's
-        name grows its glyph but less — a third larger, over about a tenth of a second, and back as fast; WALL's too. */
-    static constexpr float backZoomBy = 0.35f, backZoomSeconds = 0.12f;
+        name grows its glyph but less — 1.4 times, over about a tenth of a second, and back as fast; WALL's too. */
+    static constexpr float backZoomBy = 0.4f, backZoomSeconds = 0.12f;
     float backZoom = 0.0f;               // 0 none .. 1 whole
     int backZoomI = -1;                  // the cell it shows — backs() for WALL — kept while it shrinks back
     int backHot() const { return chosen < 0 ? -1 : hot.part == Part::back ? hot.i : hot.part == Part::wall ? backs() : -1; }
@@ -857,11 +857,11 @@ private:
         return { d.getRight() + 4, d.getY(), 24, d.getHeight() };
     }
 
-    /** THE BACK over the pile, centred: a cell each, the box cut through from the side (paintBack), its word inside it —
-        no BACK before them, and the words two sizes under the reading one, the whole cell grown under the hand (the owner,
-        07.11); WALL, the guitar's, a fifth cell, narrower, after them. */
-    static constexpr float backCellW = 84.0f, backGap = 12.0f, wallCellW = 22.0f;   // narrower, further apart (the owner, 07.11)
-    static constexpr float backWordSize = 11.0f, wallLetterSize = 10.0f;
+    /** THE BACK over the pile, centred: a picture each, the box cut through from the side (paintBack), no words — under
+        the hand it grows and its word comes under it, as a speaker's curve does (the owner, 07.11); WALL, the guitar's, a
+        fifth, narrower, after them. */
+    static constexpr float backCellW = 64.0f, backGap = 26.0f, wallCellW = 22.0f;     // a cell, the hand's
+    static constexpr float backIconW = 56.0f, backIconHigh = 34.0f, wallIconW = 12.0f;  // the picture in it
 
     static float backRowW()
     {
@@ -1482,30 +1482,40 @@ private:
             for (int i = 0; i < backs(); ++i)
             {
                 if (i != zi)
-                    paintBackCell (g, i, backCell (i).reduced (2.0f), 1.0f);
-                // The box's own back, a dot before its cell: where DEFAULT goes back to.
+                    paintBackCell (g, i, backIcon (i));
+                // The box's own back, a dot before its picture: where DEFAULT goes back to.
                 if (backAt (i) == ownBack (chosen))
                 {
                     g.setColour (ui::look().txDim);
-                    g.fillEllipse (ui::Rectangle<float> (4.0f, 4.0f).withCentre ({ backCell (i).getX() - 0.5f * backGap, backCell (i).getCentreY() }));
+                    g.fillEllipse (ui::Rectangle<float> (4.0f, 4.0f).withCentre ({ backIcon (i).getX() - 8.0f, backIcon (i).getCentreY() }));
                 }
             }
             if (catalog().wallSwitch && zi != backs())
-                paintWallCell (g, wallArea().reduced (1.0f, 0.0f), 1.0f);
+                paintWallCell (g, backIcon (backs()));
             if (zi >= 0)
             {
+                // The one under the hand grown, its word under it, over what lies there.
                 const float e = backZoom * backZoom * (3.0f - 2.0f * backZoom), k = 1.0f + backZoomBy * e;   // eased in and out
-                const auto at = zi < backs() ? backCell (zi).reduced (2.0f) : wallArea().reduced (1.0f, 0.0f);
-                auto big = at.withSizeKeepingCentre (k * at.getWidth(), k * at.getHeight());
+                auto big = backIcon (zi, k);
                 const float right = (float) leftW + 0.5f * gutter - 1.0f;
                 big = big.translated (ui::jmax (0.0f, 1.0f - big.getX()) - ui::jmax (0.0f, big.getRight() - right),
                                       ui::jmax (0.0f, 1.0f - big.getY()));
-                g.setColour (ui::look().panel);   // the cells under it hidden, no box of its own
+                const auto font13 = ui::look().font (13.0f);
+                const ui::String word = zi < backs() ? ui::String (backWords[backAt (zi)]) : ui::String ("WALL");
+                const float w = ui::look().trackedWidth (word, font13, 0.06f) + 12.0f;
+                const float x = ui::jlimit (1.0f, right - w, big.getCentreX() - 0.5f * w);
+                const ui::Rectangle<float> label (x, big.getBottom() + 2.0f, w, 18.0f);
+                g.setColour (ui::look().panel);   // what is under them hidden, no box of their own
                 g.fillRoundedRectangle (big.expanded (4.0f, 3.0f), 4.0f);
+                g.setColour (ui::look().panel.withMultipliedAlpha (e));
+                g.fillRoundedRectangle (label, 3.0f);
                 if (zi < backs())
-                    paintBackCell (g, zi, big, k);
+                    paintBackCell (g, zi, big);
                 else
-                    paintWallCell (g, big, k);
+                    paintWallCell (g, big);
+                const bool on = zi < backs() ? backAt (zi) == backOf (chosen, setup_) : setup_.wall;
+                g.setColour ((on ? ui::look().orange : ui::look().tx).withMultipliedAlpha (e));
+                ui::look().drawTracked (g, word, label, font13, 0.06f, ui::Justification::centred);
             }
         }
 
@@ -1529,34 +1539,45 @@ private:
         }
     }
 
-    /** A back's cell in `cell`, its word `k` times its size: the box cut through, the word inside it — orange where the
-        box stands at it, brighter under the hand. */
-    void paintBackCell (ui::Graphics& g, int i, ui::Rectangle<float> cell, float k) const
+    /** A back's picture in `icon`: the box cut through — orange where the box stands at it, brighter under the hand. */
+    void paintBackCell (ui::Graphics& g, int i, ui::Rectangle<float> icon) const
     {
-        const int kind = backAt (i);
-        const bool on = kind == backOf (chosen, setup_), over = isHot (Part::back, -1, i);
-        paintBack (g, kind, cell, on ? ui::look().orange : ui::look().violet.withAlpha (over ? 0.95f : 0.6f));
-        g.setColour (on ? ui::look().orange : over ? ui::look().tx : ui::look().txDim);
-        const float speaker = 0.32f * ui::jmin (cell.getWidth(), 1.6f * cell.getHeight());   // the speaker's depth in it
-        drawFitted (g, backWords[kind], cell.withTrimmedLeft (speaker + 4.0f * k).withTrimmedRight (2.0f * k), k * backWordSize);
+        const bool on = backAt (i) == backOf (chosen, setup_), over = isHot (Part::back, -1, i);
+        paintBack (g, backAt (i), icon, on ? ui::look().orange : ui::look().violet.withAlpha (over ? 0.95f : 0.6f));
     }
 
-    /** WALL in `cell`, the guitar's: the wall itself, an upright rectangle, its letters down it one under another (the
-        owner, 07.11), `k` times their size — orange on, dim off, faint with the back closed, nothing gets out there. */
-    void paintWallCell (ui::Graphics& g, ui::Rectangle<float> cell, float k) const
+    /** WALL's picture in `icon`, the guitar's: the wall itself, upright, laid in bricks — orange on, violet off, faint with
+        the back closed, nothing gets out there. */
+    void paintWallCell (ui::Graphics& g, ui::Rectangle<float> icon) const
     {
         const bool over = isHot (Part::wall), closed = backOf (chosen, setup_) == 0;
         const auto ink = setup_.wall ? (closed ? ui::look().orange.withAlpha (0.45f) : ui::look().orange)
-                                     : over ? ui::look().tx : closed ? ui::look().txFaint : ui::look().txDim;
-        g.setColour (setup_.wall ? ink : ui::look().violet.withAlpha (over ? 0.95f : 0.6f));
-        g.drawRoundedRectangle (cell, 2.0f, setup_.wall ? 1.5f : 1.2f);
+                                     : ui::look().violet.withAlpha (closed ? 0.35f : over ? 0.95f : 0.6f);
         g.setColour (ink);
-        const float pitch = (cell.getHeight() - 4.0f * k) / 4.0f;
-        const auto letters = ui::look().font (k * wallLetterSize);
-        for (int i = 0; i < 4; ++i)
-            ui::look().drawTracked (g, std::string (1, "WALL"[i]),
-                                    { cell.getX(), cell.getY() + 2.0f * k + (float) i * pitch, cell.getWidth(), pitch }, letters, 0.0f,
-                                    ui::Justification::centred);
+        g.drawRoundedRectangle (icon, 1.5f, setup_.wall ? 1.5f : 1.2f);
+        constexpr int rows = 6;
+        const float brickH = icon.getHeight() / (float) rows, x = icon.getX(), w = icon.getWidth();
+        for (int r = 1; r < rows; ++r)
+            g.drawLine (x, icon.getY() + (float) r * brickH, x + w, icon.getY() + (float) r * brickH, 0.9f);
+        for (int r = 0; r < rows; ++r)   // the joints, every other row offset
+        {
+            const float y0 = icon.getY() + (float) r * brickH, y1 = y0 + brickH;
+            if (r % 2 == 0)
+                g.drawLine (x + 0.5f * w, y0, x + 0.5f * w, y1, 0.9f);
+            else
+            {
+                g.drawLine (x + 0.25f * w, y0, x + 0.25f * w, y1, 0.9f);
+                g.drawLine (x + 0.75f * w, y0, x + 0.75f * w, y1, 0.9f);
+            }
+        }
+    }
+
+    /** The picture in cell `i` (backs() for WALL) as the row stands it, `k` times its size about its middle. */
+    ui::Rectangle<float> backIcon (int i, float k = 1.0f) const
+    {
+        const auto cell = i < backs() ? backCell (i) : wallArea();
+        const float w = i < backs() ? backIconW : wallIconW;
+        return cell.withSizeKeepingCentre (k * w, k * backIconHigh);
     }
 
 public:
@@ -1908,14 +1929,6 @@ private:
 
     /** The foot: CLOSE and DEFAULT, buttons, at the right. */
     static int wordW (const char* word) { return ui::roundToInt (ui::look().trackedWidth (word, ui::look().font (13.0f), 0.06f)) + 4; }
-
-    /** A word centred in `r` at `size`, smaller where it would not fit. */
-    static void drawFitted (ui::Graphics& g, const ui::String& word, ui::Rectangle<float> r, float size)
-    {
-        if (const float w = ui::look().trackedWidth (word, ui::look().font (size), 0.06f); w > r.getWidth())
-            size *= r.getWidth() / w;
-        ui::look().drawTracked (g, word, r, ui::look().font (size), 0.06f, ui::Justification::centred);
-    }
 
     ui::Rectangle<int> closeArea() const
     {
