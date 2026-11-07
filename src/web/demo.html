@@ -31,11 +31,40 @@ const canvas = document.getElementById ('panel');
 canvas.width = W * scale; canvas.height = H * scale;
 const ctx = canvas.getContext ('2d');
 const panel = new PanelCanvas (m, ctx, { scale, onGlyphsReady: () => frame () });
-const table = await (await fetch ('cabinets.txt')).text ();
+// demo.html?guitar: the guitar's cabinets — its catalog first, then its table (cabinets-guitar.txt, the build puts it here).
+const guitar = new URLSearchParams (location.search).has ('guitar');
+const catalog = guitar ? 'guitar' : 'bass';
+call ('cabir_catalog', 'number', ['string'], [catalog]);
+const table = await (await fetch (guitar ? 'cabinets-guitar.txt' : 'cabinets.txt')).text ();
 call ('cabir_table', 'number', ['string'], [table]);
 
-// THE STATE: the app's first, a 4x10 ported, an MD421 near the cap and a U47 at 12 cm.
-let kept = `cabir = 1
+// THE STATE: the app's first — the bass's a 4x10 ported, an MD421 near the cap and a U47 at 12 cm; the guitar's a
+// 4x12 closed, an SM57 a little off its cap at 3 cm, B a ribbon not heard.
+let kept = guitar ? `cabir = 1
+box = "4x12-closed"
+back = "closed"
+horn = true
+horn_db = 0
+blend = 0.350
+align = true
+invert = false
+
+[mic.a]
+on = true
+model = "sm57"
+x = -0.300
+y = 0.000
+distance = 0.030
+angle = 0.0
+
+[mic.b]
+on = false
+model = "ribbon"
+x = 0.400
+y = 0.000
+distance = 0.100
+angle = 0.0
+` : `cabir = 1
 box = "4x10-classic"
 back = "ported"
 horn = true
@@ -81,7 +110,7 @@ function render (state, live)
 // one mic heard that one's search, one round.
 const workers = Array.from ({ length: Math.max (2, Math.min (8, (navigator.hardwareConcurrency || 4) - 1)) },
                             () => new Worker ('find-worker.mjs', { type: 'module' }));
-workers.forEach ((w) => w.postMessage ({ table }));
+workers.forEach ((w) => w.postMessage ({ catalog, table }));
 let job = 0;
 
 function judge (state, places, deadline)
@@ -152,6 +181,7 @@ function keep (state)
 {
     const bTakenUp = ! call ('cabir_b_on', 'number', ['string'], [kept]) && call ('cabir_b_on', 'number', ['string'], [state]);
     kept = state;
+    said ();   // a room makes the whole IR longer
     render (state, false);
     if (bTakenUp) find (state, false);
 }
@@ -224,8 +254,11 @@ function frame ()
 // DOWNLOAD IR's format: its ▾ asks for the page's menu (event 5), the line under the button says what the next will be.
 const fmt = { rate: 48000, bits: 24, samples: 0 };
 const menu = document.getElementById ('format');
-const said = () => call ('cabir_panel_download_note', null, ['string'],
-                         [m.UTF8ToString (call ('cabir_download_note', 'number', ['number', 'number', 'number'], [fmt.rate, fmt.bits, fmt.samples]))]);
+function said ()
+{
+    call ('cabir_panel_download_note', null, ['string'],
+          [m.UTF8ToString (call ('cabir_download_note', 'number', ['number', 'number', 'number', 'string'], [fmt.rate, fmt.bits, fmt.samples, kept]))]);
+}
 for (const id of ['rate', 'bits', 'len'])
     document.getElementById (id).addEventListener ('change', () =>
     {
@@ -241,5 +274,5 @@ said ();
 
 call ('cabir_panel_show', 'number', ['string'], [kept]);
 render (kept, false);
-document.title = 'Orbit Bass Cab Builder — ready';
+document.title = (guitar ? 'Orbit Guitar Cab Builder' : 'Orbit Bass Cab Builder') + ' — ready';
 </script></body></html>

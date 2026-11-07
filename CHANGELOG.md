@@ -24,6 +24,9 @@ All notable changes to **Orbit Bass Cab Builder** and **Orbit Guitar Cab Builder
   shadowing what goes behind it, and its tail follows, as long and as loud as the room's size and absorption make it —
   so a mic a metre off hears the room and one at the cap hardly does. WALL puts the box by the room's back wall. The IR
   grows to hold the tail: 150, 250 and 400 ms. OFF sounds as before.
+- **The page's module plays the guitar too**: cabir_catalog ("guitar") turns its panel, its links and what its WAVs
+  say to the guitar's; cabir_download_note takes the state, so its line says how long a room makes the IR; the build
+  puts both tables beside the module (cabinets.txt, cabinets-guitar.txt), and demo.html?guitar shows it.
 - **INPUT in the apps**: an audio interface played live through the cabinet, no DAW needed. It is the first item of
   the sample menu, silent until PLAY (Space), so a laptop's own mic by its speakers never howls; AUDIO picks the input
   device and its channel, the first one open heard. macOS asks for the microphone the first time it is picked.

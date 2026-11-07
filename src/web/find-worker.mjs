@@ -13,8 +13,10 @@ onmessage = async ({ data }) =>
 {
     await ready;
     const m = module;
-    if (data.table !== undefined)
+    if (data.table !== undefined)   // the page's catalog first (its boxes, mics, speakers and rooms), then the table
     {
+        if (data.catalog !== undefined)
+            m.ccall ('cabir_catalog', 'number', ['string'], [data.catalog]);
         m.ccall ('cabir_table', 'number', ['string'], [data.table]);
         return;
     }

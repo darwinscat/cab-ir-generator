@@ -4,7 +4,11 @@
 // THE GENERATOR FOR A PAGE: the synthesis behind a C ABI, built to WebAssembly (one module to a worker). Text in — the
 // cabinet table, a state as TOML — numbers out, in buffers the module owns until the next call of the same kind:
 //
-//   cabir_table (text)                 the cabinets, from cabinets.txt's text; the number of boxes, 0 for none
+//   cabir_catalog (name)               whose panel and cabinets: "bass" (the first) or "guitar" — its boxes, mics,
+//                                      speakers and rooms, and what its WAVs say made them; 1 for a name it knows, else
+//                                      0 and the catalog kept. Before the table, and in every worker too
+//   cabir_table (text)                 the cabinets, from cabinets.txt's text (the guitar's, data/guitar/cabinets.txt,
+//                                      under its catalog); the number of boxes, 0 for none
 //   cabir_render (toml, live)          a state rendered: the IR's length, 0 for a state that does not read or names a
 //                                      box the table lacks. live renders
 //                                      at half the size, as the app does while a hand is on a control
@@ -15,7 +19,8 @@
 //   cabir_render_wav (toml, rate, bits, samples)   DOWNLOAD IR in a format (panel/Download.h): the WAV at cabir_wav() —
 //                                      44100|48000|96000, 16|24, 0 the whole IR|512|1024|2048 — its size, 0 for none
 //   cabir_download_name (toml, rate, bits, samples)   ...its file's name, no .wav: "8x10 MD421+RE20 44k 16bit 1024"
-//   cabir_download_note (rate, bits, samples)         ...the line under the button: "44.1 kHz, 16 bit, 1024 samples"
+//   cabir_download_note (rate, bits, samples, toml)   ...the line under the button: "44.1 kHz, 16 bit, 1024 samples";
+//                                      the whole IR as long as the state's (a room makes it longer) — toml null, 100 ms
 //   cabir_find (toml, thorough)        B's quiet place against A: x, y, distance, shift (ms) at cabir_found() — or, with
 //                                      one mic heard, that one's place without a pit about where it is (shift 0)
 //     cabir_tried / cabir_tried_count  the places tried on the way, x, y, score each, for the search's map
@@ -40,6 +45,7 @@
 #include <felitronics/convolution/CabConvolver.h>
 #include <synth/CabSynth.h>
 #include <panel/Download.h>
+#include <panel/GuitarCatalog.h>
 #include <panel/Link.h>
 #include <synth/MicSearch.h>
 #include <synth/Response.h>
@@ -81,6 +87,7 @@ namespace
         double shift = 0;
         std::string withB;
         std::string text;   // a download's name or its format's line, until the next call
+        bool guitar = false;   // the catalog cabir_catalog chose
     };
 
     Session& session()
@@ -96,8 +103,9 @@ namespace
     {
         synth::WavMeta meta;
         meta.name = Panel::labelOf (s).toStdString();
-        meta.software = std::string ("Orbit Bass Cab Builder ") + CABIR_VERSION;
-        meta.comment = std::string (pageAddress) + "#" + linkOf (s);
+        const bool guitar = session().guitar;
+        meta.software = std::string (guitar ? "Orbit Guitar Cab Builder " : "Orbit Bass Cab Builder ") + CABIR_VERSION;
+        meta.comment = std::string (guitar ? guitarPageAddress : pageAddress) + "#" + linkOf (s);
         meta.preset = "name = \"" + meta.name + "\"\n\n" + toToml (s);
         return meta;
     }
@@ -175,6 +183,18 @@ namespace
     }
 }
 
+CABIR_EXPORT int cabir_catalog (const char* name)
+{
+    const std::string n = name != nullptr ? name : "";
+    if (n != "bass" && n != "guitar")
+        return 0;
+    auto& s = session();
+    s.guitar = n == "guitar";
+    Panel::useCatalog (s.guitar ? guitarCatalog() : Panel::bassCatalog());
+    s.renderer = {};
+    return 1;
+}
+
 CABIR_EXPORT int cabir_table (const char* text)
 {
     auto& s = session();
@@ -218,12 +238,13 @@ CABIR_EXPORT const char* cabir_download_name (const char* toml, int rate, int bi
     return s.text.c_str();
 }
 
-CABIR_EXPORT const char* cabir_download_note (int rate, int bits, int samples)
+CABIR_EXPORT const char* cabir_download_note (int rate, int bits, int samples, const char* toml)
 {
     auto& s = session();
     if (! DownloadFormat::offered (rate, bits, samples))
         return nullptr;
-    s.text = formatNote ({ rate, bits, samples });
+    const auto state = toml != nullptr ? stateOf (toml) : std::nullopt;
+    s.text = state ? formatNote ({ rate, bits, samples }, wholeMs (s.table, *state)) : formatNote ({ rate, bits, samples });
     return s.text.c_str();
 }
 

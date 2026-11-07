@@ -32,6 +32,7 @@ namespace cabir
 // Every address it had before — /felitronics/cab-ir-generator, bass-cab-ir-generator, bass-cab-ir-builder — answers with a
 // permanent redirect that keeps the #cab= part, so the WAVs already out still open.
 inline constexpr const char* pageAddress = "https://darwinscat.com/felitronics/orbit-bass-cab-builder";
+inline constexpr const char* guitarPageAddress = "https://darwinscat.com/felitronics/orbit-guitar-cab-builder";
 
 namespace link
 {

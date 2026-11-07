@@ -7,8 +7,9 @@
 #   cabir.mjs     the emscripten glue, an ES module whose default export is the factory (createCabir)
 #   cabir.wasm    the module: the synthesis and the panel
 #   cabir-panel.mjs  the panel's drawing calls played onto a canvas, as the app's JUCE draws them
-#   demo.html, find-worker.mjs   the generator on a page wired the plainest way: a reference (cabinets.txt and
-#                 Michroma-web.woff2 beside them to run it)
+#   demo.html, find-worker.mjs   the generator on a page wired the plainest way: a reference (Michroma-web.woff2
+#                 beside them to run it; demo.html?guitar for the guitar's)
+#   cabinets.txt, cabinets-guitar.txt   the tables: the bass's, and the guitar's (cabir_catalog ("guitar") first)
 #   BUILD-INFO    what it was built from: this repository, felitronics-core, felitronics-toml, the toolchain, the flags
 #
 #   tools/wasm/build.sh [out-dir]          (default tools/wasm/build)
@@ -43,6 +44,9 @@ emcmake cmake -S "$ROOT" -B "$BUILD" "${GEN[@]}" \
     "-DCMAKE_CXX_FLAGS=$FLAGS" > "$OUT/configure.log" || { cat "$OUT/configure.log"; exit 1; }
 cmake --build "$BUILD" --target cabir_web
 cp "$BUILD/cabir.mjs" "$BUILD/cabir.wasm" "$ROOT/src/web/cabir-panel.mjs" "$ROOT/src/web/find-worker.mjs" "$ROOT/src/web/demo.html" "$OUT/"
+# The tables the module reads (cabir_table), the bass's and — under cabir_catalog ("guitar") — the guitar's.
+cp "$ROOT/data/cabinets.txt" "$OUT/cabinets.txt"
+cp "$ROOT/data/guitar/cabinets.txt" "$OUT/cabinets-guitar.txt"
 
 CORE_SRC="$(sed -n 's/^felitronics_core_SOURCE_DIR:STATIC=//p' "$BUILD/CMakeCache.txt")"
 [ -n "$CORE_SRC" ] || CORE_SRC="$BUILD/_deps/felitronics_core-src"
