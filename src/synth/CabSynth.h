@@ -286,6 +286,9 @@ struct Cab
     double portArea = 150, portLeakHz = 700;
     // cone
     double wooferLp = 5000, wooferQ = 0.707, decoupleHz = 1200;
+    // A second section over it (woofer_lowpass_second = Hz/Q): a guitar's cone, flat to its knee and falling off a cliff
+    // past it, which one second-order section cannot draw. 0, none — the bass's.
+    double wooferLp2 = 0, wooferQ2 = 0.707;
     std::vector<std::vector<Mode>> modes;   // per driver
     std::vector<double> sens;               // per driver, linear
     // box
@@ -349,6 +352,11 @@ inline Cab build (const Section& s)
 
     c.wooferLp = num (s, "woofer_lowpass_hz", 5000);
     c.wooferQ = num (s, "woofer_envelope_Q", 0.707);
+    if (const auto second = nums (str (s, "woofer_lowpass_second")); second.size() >= 2)
+    {
+        c.wooferLp2 = second[0];
+        c.wooferQ2 = second[1];
+    }
     c.decoupleHz = num (s, "cone_decouple_hz", range (s, "breakup_hz", 1200, 7000).first);
     c.body = triples (s, "body_eq");
     c.cavity = triples (s, "cavity_modes");
@@ -665,7 +673,7 @@ inline std::vector<double> render (const Cab& c, size_t n, size_t threads = 0)
         // The baffle step: the low end, radiating into the whole room, a few tenths of a dB under the top.
         box *= std::pow (10.0, -stepDb / 20 * (1 / (1 + (f / stepHz) * (f / stepHz))));
 
-        const cd piston = lowpass2 (f, c.wooferLp, c.wooferQ);
+        const cd piston = lowpass2 (f, c.wooferLp, c.wooferQ) * (c.wooferLp2 > 0 ? lowpass2 (f, c.wooferLp2, c.wooferQ2) : cd (1.0));
         cd sum = 0.0;
         for (size_t d = 0; d < patches.size(); ++d)
         {
