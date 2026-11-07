@@ -103,10 +103,6 @@ public:
         float shiftMs = 0.0f;   // B moved in time against A, ms, later positive (TIME)
     };
 
-    /** The mics to choose from, as the table names them (its "mic-<name>" sections), and as the columns write them. */
-    static const ui::StringArray& mics()      { static const ui::StringArray m { "md421", "sm57", "re20", "d112", "u87", "u47", "ribbon" }; return m; }
-    static const ui::StringArray& micWords()  { static const ui::StringArray m { "MD421", "SM57", "RE20", "D112", "U87", "U47", "RIBB" }; return m; }
-
     struct Cab
     {
         ui::String name;                       // as the table names it: "4x10-classic"
@@ -122,11 +118,27 @@ public:
         bool hornOn = true;                      // how its horn comes when the box is picked: the 1x15-classic's and the 8x10's off
     };
 
-    static const std::vector<Cab>& cabs()
+    /** WHAT A PANEL OFFERS: its boxes, how they stand, its mics, and which boxes the table seals and which it leaves open.
+        The bass's (bassCatalog) unless a host hands it another before it draws one (useCatalog): the guitar's app hands
+        its own (GuitarCatalog.h). One for the whole program — every panel and every static below reads it. */
+    struct Catalog
+    {
+        std::vector<Cab> cabs;
+        // The boxes it offers, as they stand: its columns left to right, each from the floor up. The table's other boxes
+        // stay in cabs: a state that kept one still reads as its size.
+        std::vector<ui::StringArray> pile;
+        // The mics to choose from, as the table names them (its "mic-<name>" sections), and as the columns write them.
+        ui::StringArray mics, micWords;
+        // The boxes the table calls sealed and open (its `alignment`); every other one is ported.
+        ui::StringArray sealed, open;
+    };
+
+    static const Catalog& bassCatalog()
     {
         using P = ui::Point<float>;
-        static const std::vector<Cab> all {
-            { "1x15-classic",    0, 0.61f, 0.56f, { P (0, 0.02f) }, 0.165f, true, P (0.22f, 0.20f), true, P (0, -0.22f), "re20", false },
+        static const Catalog bass {
+          {
+            { "1x15-classic",   0, 0.61f, 0.56f, { P (0, 0.02f) }, 0.165f, true, P (0.22f, 0.20f), true, P (0, -0.22f), "re20", false },
             { "2x10-classic-tall",  0, 0.33f, 0.61f, { P (0, 0.14f), P (0, -0.14f) }, 0.105f, false, {}, false, {} },
             { "2x10-classic",  0, 0.61f, 0.46f, { P (-0.14f, 0), P (0.14f, 0) }, 0.105f, true, P (0, 0.16f), false, {} },
             { "4x10-classic",  0, 0.61f, 0.66f, { P (-0.145f, 0.145f), P (0.145f, 0.145f), P (-0.145f, -0.145f), P (0.145f, -0.145f) },
@@ -169,22 +181,30 @@ public:
             { "4x10-light", 4, 0.56f, 0.58f, { P (-0.13f, 0.15f), P (0.13f, 0.15f), P (-0.13f, -0.11f), P (0.13f, -0.11f) },
               0.105f, true, P (0, 0.02f), true, P (0, -0.26f) },
             { "2x15-light", 4, 0.49f, 0.87f, { P (0, 0.20f), P (0, -0.16f) }, 0.165f, true, P (0, 0.40f), true, P (0, -0.38f), "d112" },
-        };
-        return all;
+          },
+            // A box of each size, no maker's name over them (the owner, 05.11) — the small on the big, the tall ones
+            // alone, the way a backline is stacked. Every size the table holds — 1x15, 1x12, 8x10, 4x10, 2x10, 6x10,
+            // 2x12, 2x15, 4x6, 8x8 — the same for every bass of the family (the owner, 05.11).
+          { { "1x15-classic", "1x12-round" }, { "8x10-classic" }, { "4x10-classic", "2x10-round" }, { "6x10-classic", "2x12-round" },
+            { "2x15-light", "4x6-neo" }, { "8x8-round" } },
+          { "md421", "sm57", "re20", "d112", "u87", "u47", "ribbon" },
+          { "MD421", "SM57", "RE20", "D112", "U87", "U47", "RIBB" },
+          { "2x10-classic-tall", "4x10-classic", "8x10-classic", "1x15-plain", "2x10-plain", "4x10-plain", "8x10-plain" },
+          {} };
+        return bass;
     }
 
-    /** The boxes it offers, as they stand: a box of each size, no maker's name over them (the owner, 05.11), its columns
-        left to right, each from the floor up — the small on the big, the tall ones alone, the way a backline is stacked.
-        Every size the table holds — 1x15, 1x12, 8x10, 4x10, 2x10, 6x10, 2x12, 2x15, 4x6, 8x8 — the same for every bass
-        of the family (the owner, 05.11). The table's other boxes stay in cabs(): a state that kept one still reads as
-        its size. */
-    static const std::vector<ui::StringArray>& pile()
-    {
-        static const std::vector<ui::StringArray> every {
-            { "1x15-classic", "1x12-round" }, { "8x10-classic" }, { "4x10-classic", "2x10-round" }, { "6x10-classic", "2x12-round" },
-            { "2x15-light", "4x6-neo" }, { "8x8-round" } };
-        return every;
-    }
+    /** The catalog every panel draws from here on: before the first is made, and once — a program offers one set. */
+    static void useCatalog (const Catalog& c) { current() = &c; }
+    static const Catalog& catalog() { return *current(); }
+private:
+    static const Catalog*& current() { static const Catalog* c = &bassCatalog(); return c; }
+public:
+
+    static const std::vector<Cab>& cabs() { return catalog().cabs; }
+    static const std::vector<ui::StringArray>& pile() { return catalog().pile; }
+    static const ui::StringArray& mics() { return catalog().mics; }
+    static const ui::StringArray& micWords() { return catalog().micWords; }
 
     /** A BOX AS THE PLAYER READS IT: its speakers and their size — "4x10" — and no maker's model (the owner, 05.11). The
         table's name stays the key a state keeps. */
@@ -195,19 +215,16 @@ public:
         return ui::String ((int) c.drivers.size()) + "x" + ui::String (inches);
     }
 
-    /** The boxes the table calls sealed (data/cabinets.txt, `alignment`); every other one is ported. */
-    static bool sealed (const ui::String& name)
-    {
-        static const ui::StringArray closed { "2x10-classic-tall", "4x10-classic", "8x10-classic", "1x15-plain", "2x10-plain", "4x10-plain", "8x10-plain" };
-        return closed.contains (name);
-    }
+    /** The boxes the table calls sealed (data/cabinets.txt, `alignment`). */
+    static bool sealed (const ui::String& name) { return catalog().sealed.contains (name); }
 
     /** THE BOX'S BACK, as its switch is marked — a click each, the one it stands at in the block's orange; the index the
         engine's (synth::Back). A box comes with its own (ownBack) until one is turned, and that one stays from
         box to box; turned, a sealed one gets a port at its foot. */
     static constexpr const char* backWords[] { "CLOSED", "PORTED", "OPEN" };
     static constexpr int backs = 3;
-    static int ownBack (int cab) { return sealed (cabs()[(size_t) cab].name) ? 0 : 1; }
+    static int ownBackOf (const ui::String& name) { return sealed (name) ? 0 : catalog().open.contains (name) ? 2 : 1; }
+    static int ownBack (int cab) { return ownBackOf (cabs()[(size_t) cab].name); }
     static int backOf (int cab, const Setup& s) { return s.back >= 0 ? s.back : ownBack (cab); }
 
     /** Where a box's port is drawn: the table's, or the one a sealed box is given when turned ported — in the middle of
@@ -1092,7 +1109,7 @@ public:
         g.drawRoundedRectangle (box, c.family == 1 ? 4.0f : 2.0f, orange ? 1.5f : 1.0f);
 
         // The port where the back the chosen one is turned to has one: none closed, at its foot on a sealed box ported.
-        if (const int back = isChosen ? setup.back : -1; back < 0 || back == (sealed (c.name) ? 0 : 1) ? c.port : back == 1)
+        if (const int back = isChosen ? setup.back : -1; back < 0 || back == ownBackOf (c.name) ? c.port : back == 1)
         {
             const auto at = portOf (c);
             g.setColour (ui::Colours::black);
