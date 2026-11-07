@@ -100,6 +100,7 @@ inline std::string linkOf (const State& s)
                     + (s.speaker.empty() ? std::string() : "&speaker=" + s.speaker)   // the guitar's, where turned
                     + (s.wall ? "&wall=1" : "")                                        // ...and its wall, where on
                     + (s.cone.empty() ? std::string() : "&cone=" + s.cone)              // ...and its cone, where a variant
+                    + (s.room.empty() ? std::string() : "&room=" + s.room)              // ...and its room, where one
                     + "&horn=" + (s.horn ? number (std::round (s.hornDb), 0) : std::string ("off"));
     if (s.a.on) out += "&a=" + mic (s.a);
     if (s.b.on) out += "&b=" + mic (s.b);
@@ -169,6 +170,7 @@ inline std::optional<State> fromLink (std::string_view text)
         }
         else if (key == "wall") s.wall = value == "1";
         else if (key == "cone") { if (! Panel::catalog().coneVariant.isEmpty() && value == Panel::catalog().coneVariant.toStdString()) s.cone = value; }
+        else if (key == "room") { if (Panel::catalog().rooms.contains (ui::String (value))) s.room = value; }
         else if (key == "speaker")
         {
             if (Panel::catalog().speakers.contains (ui::String (value)))

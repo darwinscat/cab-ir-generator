@@ -63,6 +63,13 @@ namespace
         return nullptr;
     }
 
+    /** The cabinet table, once: what the download's note reads the IR's length from. */
+    const synth::Table& cabinetTable()
+    {
+        static const auto table = synth::parseTable (std::string (BinaryData::cabinets_txt, (size_t) BinaryData::cabinets_txtSize));
+        return table;
+    }
+
     juce::PropertiesFile::Options storage()
     {
         // A plugin's settings apart from the app's, so neither writes over what the other kept.
@@ -172,7 +179,7 @@ MainComponent::MainComponent (Session* host)
             if (DownloadFormat::offered (r, b, n))
                 format = { r, b, n };
         }
-        picker.setDownloadNote (juce::String::fromUTF8 (formatNote (format).c_str()));
+        noteDownload();
     }
 
     // The sample the last run played — a riff of ours, a file, or the live input (silent until played) — else the first riff.
@@ -445,6 +452,7 @@ void MainComponent::keep (const State& s)
 {
     const bool bTakenUp = ! state.b.on && s.b.on;
     state = s;
+    noteDownload();
     render (s, false);
     repaint (header());
     if (bTakenUp)
@@ -494,6 +502,7 @@ void MainComponent::findPlace (const State& s, bool thorough)
 void MainComponent::show (const State& s)
 {
     state = s;
+    noteDownload();
     const auto [cab, setup] = CabPicker::setupOf (s);
     picker.show (cab, setup);
     render (s, false);
@@ -811,7 +820,8 @@ void MainComponent::showFormats()
     for (const int b : { 24, 16 })
         menu.addItem (juce::String (b) + " bit", true, format.bits == b, [this, b] { format.bits = b; formatChosen(); });
     menu.addSectionHeader ("LENGTH");
-    menu.addItem ("FULL (100 ms)", true, format.samples == 0, [this] { format.samples = 0; formatChosen(); });
+    menu.addItem ("FULL (" + juce::String (wholeMs (cabinetTable(), state)) + " ms)", true, format.samples == 0,
+                  [this] { format.samples = 0; formatChosen(); });
     for (const int n : { 2048, 1024, 512 })
         menu.addItem (juce::String (n) + " samples (" + juce::String (juce::roundToInt (1000.0 * n / format.rate)) + " ms)", true,
                       format.samples == n, [this, n] { format.samples = n; formatChosen(); });
@@ -821,7 +831,13 @@ void MainComponent::showFormats()
 void MainComponent::formatChosen()
 {
     properties.getUserSettings()->setValue ("downloadFormat", juce::String (format.rate) + " " + juce::String (format.bits) + " " + juce::String (format.samples));
-    picker.setDownloadNote (juce::String::fromUTF8 (formatNote (format).c_str()));
+    noteDownload();
+}
+
+void MainComponent::noteDownload()
+{
+    // The whole IR as long as the cabinet's: a room's tail makes it longer (the guitar's).
+    picker.setDownloadNote (juce::String::fromUTF8 (formatNote (format, wholeMs (cabinetTable(), state)).c_str()));
 }
 
 void MainComponent::timerCallback()

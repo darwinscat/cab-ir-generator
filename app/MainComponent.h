@@ -122,6 +122,7 @@ private:
     DownloadFormat format;                         // panel/Download.h
     void showFormats();
     void formatChosen();
+    void noteDownload();                           // the line under DOWNLOAD IR, the whole IR as long as the cabinet's
     synth::WavMeta metaOf (const State&) const;   // what a WAV of `s` says of itself
     void timerCallback() override;
 

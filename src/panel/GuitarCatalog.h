@@ -41,7 +41,9 @@ inline const Panel::Catalog& guitarCatalog()
       { 0, 3, 2, 1 },
       true,
       "paper",
-      150.0f, 1.0f };
+      150.0f, 1.0f,
+      { "booth", "studio", "live" },   // the rooms round the box (its table's room-<name>), OFF before them
+      { "BOOTH", "STUDIO", "LIVE" } };
     return guitar;
 }
 

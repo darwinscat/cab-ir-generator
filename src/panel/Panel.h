@@ -104,6 +104,7 @@ public:
         int speaker = -1;   // the box's speaker as the player turned it — an index of the catalog's speakers — or -1, its own
         bool wall = false;  // the wall behind the box, the guitar's switch (WALL)
         bool cone = false;  // the speakers' cone as the catalog's variant has it (the guitar's PAPER, SPEAKER clicked)
+        int room = -1;      // the room round the box — an index of the catalog's rooms — or -1, none (ROOM's OFF)
     };
 
     struct Cab
@@ -149,6 +150,9 @@ public:
         ui::String coneVariant;
         // How far a mic goes and where ROOM puts it: the bass's 30 cm, the guitar's a metre and a half, ROOM at one.
         float farthestCm = 30.0f, roomM = 0.30f;
+        // The rooms round the box, as the table names them (its "room-<name>" sections), and as their row writes them after
+        // OFF — the guitar's; none, no row (the bass's).
+        ui::StringArray rooms, roomWords;
     };
 
     static const Catalog& bassCatalog()
@@ -285,7 +289,7 @@ public:
         { return Spot { (float) m.x, (float) m.y, (float) m.distance, s.horn, ui::String (m.model), (float) m.angle, (float) s.hornDb }; };
         return { indexOf (ui::String (s.box)), { spot (s.a), spot (s.b), (float) s.blend, s.align, s.invert, s.a.on, s.b.on, s.back,
                                                    (float) s.shiftMs, catalog().speakers.indexOf (ui::String (s.speaker)), s.wall,
-                                                   ! s.cone.empty() } };
+                                                   ! s.cone.empty(), catalog().rooms.indexOf (ui::String (s.room)) } };
     }
 
     /** A STATE AS A LINE READS IT: its box's size, its back where turned from the box's own, and the mics heard —
@@ -299,7 +303,9 @@ public:
         const auto box = at < 0 ? ui::String (s.box)
                        : wordOf (at) + (s.back >= 0 && s.back != ownBack (at) ? " " + ui::String (backWords[s.back]) : ui::String())
                              + (speaker >= 0 && speaker != ownSpeaker (at) ? " " + catalog().speakerWords[speaker] : ui::String())
-                             + (s.wall ? " WALL" : "") + (s.cone.empty() ? ui::String() : " " + ui::String (s.cone).toUpperCase());
+                             + (s.wall ? " WALL" : "") + (s.cone.empty() ? ui::String() : " " + ui::String (s.cone).toUpperCase())
+                             + (catalog().rooms.indexOf (ui::String (s.room)) >= 0
+                                    ? " " + catalog().roomWords[catalog().rooms.indexOf (ui::String (s.room))] : ui::String());
         return box + ui::String::fromUTF8 (" \xc2\xb7 ")
              + (s.a.on ? word (s.a) : ui::String()) + (s.a.on && s.b.on ? "+" : "") + (s.b.on ? word (s.b) : ui::String());
     }
@@ -315,6 +321,8 @@ public:
         s.wall = su.wall;
         if (su.cone && ! catalog().coneVariant.isEmpty())
             s.cone = catalog().coneVariant.toStdString();
+        if (su.room >= 0 && su.room < catalog().rooms.size())
+            s.room = catalog().rooms[su.room].toStdString();
         s.horn = su.a.horn;
         s.hornDb = su.a.hornDb;
         s.a = mic (su.a, su.aOn);
@@ -533,7 +541,7 @@ private:
 
     /** WHAT A CLICK AT A POINT WORKS — the one thing both the hand's light and its press go by (hotAt), so what is lit is
         what a click does. */
-    enum class Part { none, download, downloadFormat, back, speaker, speakerCone, wall, cab, cabHorn, horn, distance, place, micRow, angle, shift, mic, close, reset, find,
+    enum class Part { none, download, downloadFormat, back, speaker, speakerCone, wall, room, cab, cabHorn, horn, distance, place, micRow, angle, shift, mic, close, reset, find,
                       align, invert, blend };
     struct Hot
     {
@@ -617,7 +625,7 @@ private:
     static constexpr int pileTop = backTop + backIconH + 2 + backWordH + 6;
     // ...and under the back, where the catalog offers speakers, their row: the pile a row lower.
     static constexpr int speakerRowH = 24;
-    static int pileTopNow() { return pileTop + (hasSpeakers() ? speakerRowH : 0); }
+    static int pileTopNow() { return pileTop + (hasSpeakers() ? speakerRowH : 0) + (hasRooms() ? speakerRowH : 0); }
 
     ui::Rectangle<int> pileArea() const { return { 0, pileTopNow(), leftW, bodyH() - pileTopNow() - 2 }; }
 
@@ -689,6 +697,25 @@ private:
             x += ui::look().trackedWidth (catalog().speakerWords[k], font, 0.06f) + speakerGap;
         return { x, speakerWordArea().getY(), ui::look().trackedWidth (catalog().speakerWords[i], font, 0.06f),
                  speakerWordArea().getHeight() };
+    }
+
+    /** THE ROOM under the speakers, the guitar's: ROOM in SPEAKER's column, then OFF and a word a room, from under the
+        first speaker's word. Cell -1 is OFF. */
+    static bool hasRooms() { return ! catalog().rooms.isEmpty(); }
+    ui::String roomWord (int i) const { return i < 0 ? ui::String ("OFF") : catalog().roomWords[i]; }
+
+    ui::Rectangle<float> roomWordArea() const
+    {
+        return speakerWordArea().translated (0.0f, (float) speakerRowH);
+    }
+
+    ui::Rectangle<float> roomCell (int i) const
+    {
+        const auto font = ui::look().font (13.0f);
+        float x = roomWordArea().getRight() + backLabelGap;
+        for (int k = -1; k < i; ++k)
+            x += ui::look().trackedWidth (roomWord (k), font, 0.06f) + speakerGap;
+        return { x, roomWordArea().getY(), ui::look().trackedWidth (roomWord (i), font, 0.06f), roomWordArea().getHeight() };
     }
 
     /** A BOX CUT THROUGH FROM THE SIDE, as its back is: the baffle at the left with the speaker on it in profile, its cone
@@ -909,6 +936,11 @@ private:
                 for (int i = 0; i < catalog().speakers.size(); ++i)
                     if (speakerCell (i).expanded (speakerGap / 2, 2.0f).contains (p))
                         return { Part::speaker, -1, i };
+            // ...and the room round it, OFF first.
+            if (chosen >= 0 && hasRooms())
+                for (int i = -1; i < catalog().rooms.size(); ++i)
+                    if (roomCell (i).expanded (speakerGap / 2, 2.0f).contains (p))
+                        return { Part::room, -1, i };
 
             const int at = cabAt (p);
             if (at < 0)
@@ -1005,6 +1037,12 @@ private:
             // The speaker, kept as the back is.
             case Part::speaker:
                 setup_.speaker = h.i;
+                send();
+                return;
+
+            // The room round the box, or none; kept from box to box as the back is.
+            case Part::room:
+                setup_.room = h.i;
                 send();
                 return;
 
@@ -1233,6 +1271,25 @@ private:
                     g.setColour (ui::look().txDim);
                     g.fillEllipse (ui::Rectangle<float> (4.0f, 4.0f).withCentre ({ cell.getX() - 7.0f, cell.getCentreY() }));
                 }
+            }
+        }
+
+        // ...and under them the room, where the catalog has rooms: ROOM, then OFF and theirs, the one round the box lit.
+        if (chosen >= 0 && hasRooms())
+        {
+            g.setColour (ui::look().txFaint);
+            ui::look().drawTracked (g, "ROOM", roomWordArea(), font, 0.08f, ui::Justification::centredLeft);
+            for (int i = -1; i < catalog().rooms.size(); ++i)
+            {
+                const bool on = i == setup_.room, over = ! on && isHot (Part::room, -1, i);
+                const auto cell = roomCell (i);
+                if (over)
+                {
+                    g.setColour (ui::look().violet.withAlpha (0.7f));
+                    g.drawRoundedRectangle (cell.expanded (6.0f, 0.0f), 3.0f, 1.0f);
+                }
+                g.setColour (on ? ui::look().orange : over ? ui::look().tx : ui::look().txDim);
+                ui::look().drawTracked (g, roomWord (i), cell, font, 0.06f, ui::Justification::centred);
             }
         }
     }
