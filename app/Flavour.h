@@ -75,4 +75,15 @@ inline State defaultState()
 
 inline constexpr int numRiffs = (int) std::size (riffs);
 
+/** WHAT IT RUNS AS: the app, or — built with CABIR_PLUGIN — a plugin, the same window in a host's, the track played through
+    it. A host lists it by the instrument's name, the bass's said as the guitar's is (the owner, 07.11); the header and the
+    version window say that one too. Its presets are the app's, in the app's folder. */
+#if CABIR_PLUGIN
+inline constexpr bool plugin = true;
+inline constexpr const char* name = guitar ? "Guitar Cab IR Generator" : "Bass Cab IR Generator";
+#else
+inline constexpr bool plugin = false;
+inline constexpr const char* name = product;
+#endif
+
 } // namespace cabir::app::flavour

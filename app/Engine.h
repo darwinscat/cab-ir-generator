@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "Sound.h"
+
 #include <felitronics/convolution/CabConvolver.h>
 #include <juce_audio_utils/juce_audio_utils.h>
 
@@ -16,7 +18,8 @@ namespace cabir::app
     the plugins play their cabinets through (felitronics::convolution::CabConvolver), so what is heard here is what a
     plugin plays. A sample in, an IR in, the output device out. The IR is taken on the message thread and crossfaded in
     by the convolver; one that lands mid-fade waits for the next tick (flush). */
-class Engine final : public juce::AudioIODeviceCallback
+class Engine final : public juce::AudioIODeviceCallback,
+                     public Sound
 {
 public:
     Engine();
@@ -34,15 +37,12 @@ public:
     void play (bool on);
     bool isPlaying() const { return transport.isPlaying(); }
 
-    /** The cabinet: its IR, mono, at `rate`. Message thread. */
-    void setIr (std::vector<float> ir, double rate);
-
-    /** A load the convolver turned away mid-fade, offered again. Message thread, often. */
-    void flush();
+    void setIr (std::vector<float> ir, double rate) override;
+    void flush() override;
 
     /** BYPASS: the sample heard as it is, the cabinet out — faded either way over 20 ms, the convolver running on under
-        it so the cabinet comes back without a start. Any thread. */
-    void setBypass (bool on) { bypass = on; }
+        it so the cabinet comes back without a start. */
+    void setBypass (bool on) override { bypass = on; }
 
     void audioDeviceIOCallbackWithContext (const float* const* inputs, int numInputs, float* const* outputs, int numOutputs,
                                            int numSamples, const juce::AudioIODeviceCallbackContext&) override;
