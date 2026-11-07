@@ -1,14 +1,17 @@
 name: release
 
-# A version tag (vX.Y.Z) builds the app everywhere and attaches it to a GitHub Release. A manual run
-# builds the same files and publishes nothing unless dry_run is turned off, so they can be downloaded
-# from the run's page and tried first.
+# A version tag (vX.Y.Z) builds both instruments everywhere and attaches them to a GitHub Release. A manual run builds
+# the same files and publishes nothing unless dry_run is turned off, so they can be downloaded from the run's page and
+# tried first.
 #
-#   • macOS   → a signed, notarized, stapled .dmg — one app for Apple silicon and Intel  [self-hosted]
-#   • Windows → a .zip with the .exe, x64 and arm64
-#   • Linux   → a .tar.gz with the binary, x86_64 and arm64
+# Two files a platform, one an instrument — each its app and its plugins:
+#   • macOS   → Orbit<Bass|Guitar>CabBuilder-<ver>-macOS.pkg: the app, VST3, AU, CLAP; signed, notarized, stapled;
+#               one for Apple silicon and Intel  [self-hosted]
+#   • Windows → Orbit<Bass|Guitar>CabBuilder-<ver>-Windows-<x64|arm64>.exe: the app, VST3, CLAP (Inno Setup)
+#   • Linux   → Orbit<Bass|Guitar>CabBuilder-<ver>-Linux-<x86_64|arm64>.tar.gz: the app, VST3, CLAP
+# The site files each page's downloads by that prefix and sorts them by those exact platform words: keep them as they are.
 #
-# Signing: the org's secrets MACOS_APP_IDENTITY and KCH_PWD and its variable NOTARY_PROFILE.
+# Signing: the org's secrets MACOS_APP_IDENTITY, MACOS_INSTALLER_IDENTITY and KCH_PWD, and its variable NOTARY_PROFILE.
 
 on:
   push:
@@ -29,7 +32,7 @@ permissions:
 
 jobs:
   version:
-    # The tag and the version the app shows (project() in CMakeLists.txt) are one number, or nothing is built.
+    # The tag and the version the apps show (project() in CMakeLists.txt) are one number, or nothing is built.
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -47,11 +50,11 @@ jobs:
           echo "version=$VER" >> "$GITHUB_OUTPUT"
 
   macos:
-    # Only the runner labelled `signing` holds the Developer ID certificate and the notary profile;
+    # Only the runner labelled `signing` holds the Developer ID certificates and the notary profile;
     # on any other the job dies at `security unlock-keychain`, which reads like a bad KCH_PWD.
     needs: version
     runs-on: [self-hosted, macOS, signing]
-    timeout-minutes: 120
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v7
       - name: Build
@@ -63,67 +66,34 @@ jobs:
         run: |
           ctest --test-dir build --output-on-failure
           ./build/presetcheck data/cabinets.txt data/presets/*.toml
-      - name: Sign, notarize, staple
+          ./build/presetcheck data/guitar/cabinets.txt data/guitar/presets/*.toml
+      - name: Sign, notarize, package
         env:
           APP_ID:  ${{ secrets.MACOS_APP_IDENTITY }}
+          INST_ID: ${{ secrets.MACOS_INSTALLER_IDENTITY }}
           NOTARY:  ${{ vars.NOTARY_PROFILE }}
           KCH_PWD: ${{ secrets.KCH_PWD }}
         run: |
           set -euo pipefail
-          KEYCHAIN="$HOME/Library/Keychains/login.keychain-db"
-          # The notary profile lives in the login keychain too (--keychain below), so it is found with the screen locked.
+          export KEYCHAIN="$HOME/Library/Keychains/login.keychain-db"
+          # The notary profile lives in the login keychain too (--keychain in the script), so it is found with the screen locked.
           security unlock-keychain -p "$KCH_PWD" "$KEYCHAIN"
           # The partition list is a precaution, refused on this host at times (SecKeychainItemSetAccessWithPassword) even
           # with the password that just unlocked the keychain — the key's ACL written in another security session; codesign
-          # right below is the real gate (as tabby-eq's release has it).
+          # in the script is the real gate (as tabby-eq's release has it).
           if ! security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KCH_PWD" "$KEYCHAIN" >/dev/null 2>&1; then
             echo "::warning::set-key-partition-list refused the keychain password (the unlock above succeeded); continuing — codesign is the gate"
           fi
-
-          VER="${{ needs.version.outputs.version }}"
-          APP="build/OrbitBassCabBuilder_artefacts/Release/Orbit Bass Cab Builder.app"
-          DMG="dist/CabIrGenerator-$VER-macOS.dmg"
-          lipo -info "$APP/Contents/MacOS/Orbit Bass Cab Builder"
-          rm -rf dist stage && mkdir -p dist stage
-
-          # The ticket takes a moment to reach the replica stapler asks: notarytool's Accepted is not
-          # yet a ticket stapler can fetch (Error 65), so it is asked again, not given up on.
-          staple_retry() {
-            local item="$1" i
-            for i in 1 2 3 4 5; do
-              xcrun stapler staple "$item" && return 0
-              echo "staple: no ticket yet for $item (attempt $i of 5)"
-              sleep 20
-            done
-            return 1
-          }
-
-          # The app reads the audio interface when INPUT is picked: the hardened runtime needs the audio-input entitlement.
-          codesign --force --options runtime --timestamp --entitlements app/standalone.entitlements --sign "$APP_ID" "$APP"
-          codesign --verify --strict --verbose=1 "$APP"
-
-          # The app notarized and stapled on its own, so a copy dragged out of the image carries its ticket.
-          ditto -c -k --keepParent "$APP" dist/_app.zip
-          xcrun notarytool submit dist/_app.zip --keychain-profile "$NOTARY" --keychain "$KEYCHAIN" --wait
-          rm -f dist/_app.zip
-          staple_retry "$APP"
-          xcrun stapler validate "$APP"
-
-          # The image: the app and a link to Applications to drag it onto; signed, notarized, stapled.
-          cp -R "$APP" stage/
-          ln -s /Applications stage/Applications
-          hdiutil create -volname "Orbit Bass Cab Builder" -srcfolder stage -ov -format UDZO "$DMG"
-          codesign --force --timestamp --sign "$APP_ID" "$DMG"
-          xcrun notarytool submit "$DMG" --keychain-profile "$NOTARY" --keychain "$KEYCHAIN" --wait
-          staple_retry "$DMG"
-          xcrun stapler validate "$DMG"
-          spctl -a -vvv -t open --context context:primary-signature "$DMG" || true
+          rm -rf dist
+          installer/macos-release.sh build "${{ needs.version.outputs.version }}" dist
       - uses: actions/upload-artifact@v7
         with:
           name: macos
-          path: dist/*
+          path: dist/*.pkg
 
   windows:
+    # Each architecture built natively; what an installer takes staged for the job after (ISCC is x86, so the
+    # installers are made on x64 for both).
     needs: version
     strategy:
       fail-fast: false
@@ -132,7 +102,7 @@ jobs:
           - { runner: windows-latest, arch: x64,   plat: x64   }
           - { runner: windows-11-arm, arch: arm64, plat: ARM64 }
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7
       - name: Build
@@ -144,17 +114,52 @@ jobs:
         run: |
           ctest --test-dir build -C Release --output-on-failure
           ./build/Release/presetcheck.exe data/cabinets.txt data/presets/*.toml
-      - name: Zip
-        shell: pwsh
+          ./build/Release/presetcheck.exe data/guitar/cabinets.txt data/guitar/presets/*.toml
+      - name: Stage
+        shell: bash
         run: |
-          $ver = "${{ needs.version.outputs.version }}"
-          New-Item -ItemType Directory -Force -Path dist | Out-Null
-          Compress-Archive -Force -DestinationPath "dist\CabIrGenerator-$ver-Windows-${{ matrix.arch }}.zip" `
-            -Path "build\OrbitBassCabBuilder_artefacts\Release\Orbit Bass Cab Builder.exe", "LICENSE"
+          set -euo pipefail
+          for inst in Bass Guitar; do
+            name="Orbit $inst Cab Builder"
+            plug="build/Orbit${inst}CabBuilderPlugin_artefacts/Release"
+            s="stage/$inst"
+            mkdir -p "$s/VST3" "$s/CLAP"
+            cp "build/Orbit${inst}CabBuilder_artefacts/Release/$name.exe" LICENSE "$s/"
+            cp -R "$plug/VST3/$name.vst3" "$s/VST3/"
+            cp "$plug/CLAP/$name.clap" "$s/CLAP/"
+          done
       - uses: actions/upload-artifact@v7
         with:
-          name: windows-${{ matrix.arch }}
-          path: dist/*
+          name: windows-stage-${{ matrix.arch }}
+          path: stage/
+
+  windows-installers:
+    needs: [ version, windows ]
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: windows-stage-*
+          path: stage
+      - name: Inno Setup
+        shell: pwsh
+        run: |
+          choco install innosetup -y --no-progress
+          $ver = "${{ needs.version.outputs.version }}"
+          foreach ($arch in "x64", "arm64") {
+            foreach ($inst in "Bass", "Guitar") {
+              & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /Q "/DInstrument=$inst" "/DArch=$arch" "/DAppVersion=$ver" `
+                  "/DSourceDir=$PWD\stage\windows-stage-$arch\$inst" installer\cabbuilder.iss
+              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            }
+          }
+          Get-ChildItem installer\output
+      - uses: actions/upload-artifact@v7
+        with:
+          name: windows
+          path: installer/output/*.exe
 
   linux:
     needs: version
@@ -165,7 +170,7 @@ jobs:
           - { runner: ubuntu-latest,    arch: x86_64 }
           - { runner: ubuntu-24.04-arm, arch: arm64  }
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7
       - name: Install build deps
@@ -184,19 +189,30 @@ jobs:
         run: |
           ctest --test-dir build --output-on-failure
           ./build/presetcheck data/cabinets.txt data/presets/*.toml
+          ./build/presetcheck data/guitar/cabinets.txt data/guitar/presets/*.toml
       - name: Package (.tar.gz)
         run: |
+          set -euo pipefail
           VER="${{ needs.version.outputs.version }}"
-          mkdir -p "stage/CabIrGenerator-$VER" dist
-          cp "build/OrbitBassCabBuilder_artefacts/Release/Orbit Bass Cab Builder" LICENSE "stage/CabIrGenerator-$VER/"
-          tar -C stage -czf "dist/CabIrGenerator-$VER-Linux-${{ matrix.arch }}.tar.gz" "CabIrGenerator-$VER"
+          mkdir -p dist
+          for inst in Bass Guitar; do
+            name="Orbit $inst Cab Builder"
+            plug="build/Orbit${inst}CabBuilderPlugin_artefacts/Release"
+            dir="Orbit${inst}CabBuilder-$VER"
+            mkdir -p "stage/$dir"
+            cp "build/Orbit${inst}CabBuilder_artefacts/Release/$name" LICENSE "stage/$dir/"
+            cp installer/linux-INSTALL.txt "stage/$dir/INSTALL.txt"
+            cp -R "$plug/VST3/$name.vst3" "stage/$dir/"
+            cp "$plug/CLAP/$name.clap" "stage/$dir/"   # one file on Linux
+            tar -C stage -czf "dist/$dir-Linux-${{ matrix.arch }}.tar.gz" "$dir"
+          done
       - uses: actions/upload-artifact@v7
         with:
           name: linux-${{ matrix.arch }}
           path: dist/*
 
   release:
-    needs: [ version, macos, windows, linux ]
+    needs: [ version, macos, windows-installers, linux ]
     # A tag push publishes; a manual run only with dry_run off.
     if: ${{ github.event_name == 'push' || github.event.inputs.dry_run == 'false' }}
     runs-on: ubuntu-latest
@@ -211,10 +227,10 @@ jobs:
         run: |
           VER="${{ needs.version.outputs.version }}"
           mkdir -p out
-          find artifacts -type f -exec cp {} out/ \;
-          ( cd out && sha256sum CabIrGenerator-* > SHA256SUMS )
+          find artifacts -type f -name 'Orbit*CabBuilder-*' -exec cp {} out/ \;
+          ( cd out && sha256sum Orbit* > SHA256SUMS )
           gh release create "v$VER" \
             --repo "${{ github.repository }}" \
-            --title "Cab IR Generator v$VER" \
+            --title "Orbit Bass Cab Builder and Orbit Guitar Cab Builder v$VER" \
             --generate-notes \
             out/*
