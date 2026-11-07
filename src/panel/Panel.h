@@ -69,14 +69,16 @@ public:
 
     void tick (double nowSeconds)
     {
+        const double dt = clock > 0.0 ? ui::jlimit (0.0, 0.05, nowSeconds - clock) : 0.0;   // a long pause counts one frame
         clock = nowSeconds;
         if (defaultArmed && clock >= armedUntil)
             disarmDefault();
         timerCallback();
+        stepMicZoom (dt);
     }
 
     /** True while something moves on its own: a host ticks it then, and need not otherwise. */
-    bool wantsFrames() const { return ! downloadArea().isEmpty() || searchFade > 0.0f || defaultArmed; }
+    bool wantsFrames() const { return ! downloadArea().isEmpty() || searchFade > 0.0f || defaultArmed || micZoom != micZoomTo(); }
 
     /** The size it is drawn for — small enough to open over a cabin's face too. */
     static constexpr int panelW = 906, panelH = 518;
@@ -484,6 +486,7 @@ public:
         g.fillRect (ui::Rectangle<float> (x, (float) (getHeight() - footHeight()), 1.0f, (float) footHeight()));
         paintSpeaker (g);
         paintResponse (g);
+        paintMicZoom (g);
     }
 
     void mouseMove (const ui::MouseEvent& e)
@@ -609,6 +612,51 @@ private:
     bool searching = false;
     float searchFade = 0.0f;
     double searchEnded = 0;            // the host's clock when it was done; -1 until the tick after
+
+    /** A MIC'S NAME UNDER THE HAND (the owner, 07.11): its glyph grown big beside it, left of the name — A's out of its own
+        glyph, B's before its words — growing in over about a sixth of a second and fading out as fast. */
+    static constexpr float micZoomH = 120.0f, micZoomSeconds = 0.15f;
+    float micZoom = 0.0f;               // 0 none .. 1 whole
+    int zoomM = -1, zoomI = -1;          // the column and the mic it shows, kept while it fades
+    float micZoomTo() const { return hot.part == Part::micRow ? 1.0f : 0.0f; }
+
+    void stepMicZoom (double dt)
+    {
+        if (hot.part == Part::micRow)
+        {
+            zoomM = hot.m;
+            zoomI = hot.i;
+        }
+        const float to = micZoomTo(), by = (float) (dt / micZoomSeconds);
+        if (micZoom == to)
+            return;
+        micZoom = to > micZoom ? ui::jmin (to, micZoom + by) : ui::jmax (to, micZoom - by);
+        repaint();
+    }
+
+    void paintMicZoom (ui::Graphics& g) const
+    {
+        if (micZoom <= 0.0f || chosen < 0 || zoomM < 0 || zoomI < 0 || zoomI >= mics().size())
+            return;
+        const float e = micZoom * micZoom * (3.0f - 2.0f * micZoom);   // eased in and out
+        const auto row = micRow (zoomM, zoomI).toFloat();
+        const float h = 12.0f + (micZoomH - 12.0f) * e, w = h * 36.0f / 96.0f;   // the glyphs' own 36 x 96
+        // Its backdrop clear of the words: A's out past its column's left edge, B's before the longest of its names.
+        float longest = 0.0f;
+        for (const auto& word : micWords())
+            longest = ui::jmax (longest, ui::look().trackedWidth (word, ui::look().font (13.0f), 0.06f));
+        const float right = zoomM == 0 ? row.getX() - 10.0f : row.getRight() - 12.0f - 8.0f - longest - 12.0f;
+        const float top = ui::jlimit (6.0f, (float) bodyH() - 6.0f - h, row.getCentreY() - 0.5f * h);
+        const ui::Rectangle<float> box (right - w, top, w, h);
+        g.setColour (ui::look().panel2.withMultipliedAlpha (e));
+        g.fillRoundedRectangle (box.expanded (8.0f, 6.0f), 6.0f);
+        g.setColour (ui::look().hair.withMultipliedAlpha (e));
+        g.drawRoundedRectangle (box.expanded (8.0f, 6.0f), 6.0f, 1.0f);
+        const auto& sp = mic (zoomM);
+        const auto heardBy = sp.mic.isNotEmpty() ? sp.mic : cabs()[(size_t) chosen].mic;
+        const auto tint = mics()[zoomI] == heardBy ? colourOf (zoomM) : ui::look().tx;
+        paintMicGlyph (g, mics()[zoomI], box, tint.withMultipliedAlpha (e), 0.0f, {});
+    }
 
     void timerCallback()
     {
