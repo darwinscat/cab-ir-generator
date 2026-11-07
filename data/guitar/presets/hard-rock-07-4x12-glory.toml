@@ -1,0 +1,28 @@
+name = "HARD ROCK: 4x12 GLORY"
+style = "Hard Rock"
+cabir = 1
+box = "4x12-closed"
+back = "closed"
+speaker = "bright"
+horn = false
+horn_db = 0
+blend = 0.400
+align = true
+invert = false
+
+[mic.a]
+on = true
+model = "sm57"
+x = 0.450
+y = 0.300
+distance = 0.015
+angle = 0.0
+
+[mic.b]
+on = true
+model = "u87"
+x = -0.825
+y = -0.350
+distance = 0.300
+angle = 0.0
+shift = -0.150

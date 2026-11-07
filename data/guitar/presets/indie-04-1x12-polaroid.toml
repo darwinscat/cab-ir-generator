@@ -1,0 +1,29 @@
+name = "INDIE: 1x12 POLAROID"
+style = "Indie"
+cabir = 1
+box = "1x12-open"
+back = "open"
+speaker = "bright"
+cone = "paper"
+horn = false
+horn_db = 0
+blend = 0.250
+align = true
+invert = false
+
+[mic.a]
+on = true
+model = "sm57"
+x = 0.400
+y = -0.300
+distance = 0.048
+angle = 0.0
+
+[mic.b]
+on = true
+model = "ribbon"
+x = -0.975
+y = 0.275
+distance = 0.215
+angle = 0.0
+shift = 0.100

@@ -1,0 +1,29 @@
+name = "INDIE: 1x12 BEDROOM"
+style = "Indie"
+cabir = 1
+box = "1x12-open"
+back = "open"
+speaker = "mid"
+wall = true
+horn = false
+horn_db = 0
+blend = 0.550
+align = true
+invert = false
+
+[mic.a]
+on = true
+model = "sm57"
+x = 0.600
+y = 0.000
+distance = 0.024
+angle = 0.0
+
+[mic.b]
+on = true
+model = "u87"
+x = 0.150
+y = -0.350
+distance = 0.162
+angle = 0.0
+shift = 0.000

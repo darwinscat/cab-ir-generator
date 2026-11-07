@@ -17,7 +17,10 @@
 // — each alone in responses/<file>.svg, all of them together in responses.svg — a click on one opening it there too.
 // And the same by size, size/8x10/ and so on: every cabinet of that size, of every style and the typical ones — a list,
 // index.tsv saying in its last column, `folder`, where each one's files are, and the size's own responses.svg.
+// The guitar's table (data/guitar/cabinets.txt) is known by its boxes: the panel's catalog is then the guitar's
+// (GuitarCatalog.h), its typical cabinets the guitar's DEFAULT's mics, an SM57 and B the ribbon, and named with a colon.
 
+#include <panel/GuitarCatalog.h>
 #include <panel/Link.h>
 #include <panel/Panel.h>
 #include <synth/CabSynth.h>
@@ -68,6 +71,19 @@ namespace
         return s;
     }
 
+    bool guitar = false;   // the table read is the guitar's (useCatalogOf)
+
+    /** THE GUITAR'S TABLE, known by its boxes: every one of the guitar's catalog a "<box> cap" of it. Its catalog is then
+        the panel's (Panel::useCatalog), before anything reads a state — else the bass's stands, and calls them unknown. */
+    void useCatalogOf (const synth::Table& table)
+    {
+        const auto& cabs = guitarCatalog().cabs;
+        guitar = std::all_of (cabs.begin(), cabs.end(), [&table] (const Panel::Cab& c)
+        { return std::any_of (table.begin(), table.end(), [&c] (const auto& s) { return s.first == c.name.toStdString() + " cap"; }); });
+        if (guitar)
+            Panel::useCatalog (guitarCatalog());
+    }
+
     /** A box as the list names it: the panel's size word, or a table key. Empty for neither. */
     std::string boxOf (const synth::Table& table, const std::string& word)
     {
@@ -98,7 +114,7 @@ namespace
         return s;
     }
 
-    const char* backWord (int b) { return b == 0 ? "closed" : b == 1 ? "ported" : "open"; }
+    const char* backWord (int b) { return b == 0 ? "closed" : b == 1 ? "ported" : b == 3 ? "half" : "open"; }
 
     std::string hornWord (const State& s)
     {
@@ -403,7 +419,7 @@ namespace
         {
             const auto id = field (c, "id"), back = field (c, "back"), horn = field (c, "horn");
             const auto box = boxOf (table, field (c, "box"));
-            const std::map<std::string, int> backs { { "own", -1 }, { "closed", 0 }, { "ported", 1 }, { "open", 2 } };
+            const std::map<std::string, int> backs { { "own", -1 }, { "closed", 0 }, { "ported", 1 }, { "open", 2 }, { "half", 3 } };
             const std::map<std::string, double> horns { { "-12", -12.0 }, { "-6", -6.0 }, { "0", 0.0 } };
             if (id.empty() || box.empty() || backs.count (back) == 0 || (horn != "off" && horns.count (horn) == 0))
             {
@@ -418,6 +434,11 @@ namespace
             s.hornDb = s.horn ? horns.at (horn) : 0.0;
             s.a = { true, "md421", -0.3, 0.0, 0.05, 0.0 };
             s.b = { true, "u47", -0.65, 0.0, 0.12, 0.0 };
+            if (guitar)   // the guitar's DEFAULT (app/Flavour.h): an SM57 a little off its cap at 3 cm, B the ribbon a step back
+            {
+                s.a = { true, "sm57", -0.3, 0.0, 0.03, 0.0 };
+                s.b = { true, "ribbon", 0.4, 0.0, 0.10, 0.0 };
+            }
             s.blend = 0.35;
             s.align = true;
             typicals.push_back ({ id, field (c, "name"), s });
@@ -441,8 +462,9 @@ namespace
         {
             // A name of its own, or its size, back and horn said — the app's line alone names neither its own back nor the
             // horn, and two of the list would read alike in a preset menu.
+            // The guitar's no horn to name, and a colon for the dot (the owner: no such symbol in its text).
             std::string said = Panel::wordOf (Panel::indexOf (ui::String (s.box))).toStdString() + " " + ui::String (backWord (s.back >= 0 ? s.back : Panel::ownBack (Panel::indexOf (ui::String (s.box))))).toUpperCase().toStdString()
-                             + (s.horn ? " HORN " + hornWord (s) : std::string (" NO HORN")) + " \xc2\xb7 MD421+U47";
+                             + (guitar ? std::string (": SM57+RIBBON") : (s.horn ? " HORN " + hornWord (s) : std::string (" NO HORN")) + " \xc2\xb7 MD421+U47");
             t::Table head;
             (void) head.insert ("name", t::Value (ownName.empty() ? said : ownName));
             (void) head.insert ("style", t::Value (std::string ("Typical")));
@@ -457,7 +479,11 @@ namespace
 int main (int argc, char** argv)
 {
     if (argc == 4 && std::string (argv[1]) == "--typical")
-        return writeTypical (synth::readTable (argv[2]), argv[3]);
+    {
+        const auto table = synth::readTable (argv[2]);
+        useCatalogOf (table);
+        return writeTypical (table, argv[3]);
+    }
     if (argc != 5)
     {
         std::fprintf (stderr, "cabpack <cabinets.txt> <presets folder> <typical.toml> <out folder>\n"
@@ -465,6 +491,7 @@ int main (int argc, char** argv)
         return 2;
     }
     const auto table = synth::readTable (argv[1]);
+    useCatalogOf (table);
     std::map<std::string, std::vector<Item>> folders;   // by folder name, each in file order
 
     // The factory presets, a folder for each style.
