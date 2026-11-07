@@ -90,7 +90,7 @@ std::optional<State> fromToml (std::string_view text)
             m.optional ("model", out.model);
             m.optional ("x", out.x, { -1.5, 1.5 });
             m.optional ("y", out.y, { -1.5, 1.5 });
-            m.optional ("distance", out.distance, { 0.001, 2.0 });   // the guitar's room mic goes to 1.5 m
+            m.optional ("distance", out.distance, { 0.001, 2.0 });   // wide: a state kept when the guitar's mic went to 1.5 m still reads (the panel clamps it)
             m.optional ("angle", out.angle, { 0.0, 90.0 });
         };
         in.table ("mic", t::Need::Optional, [&] (t::Reader& mics)
