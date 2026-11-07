@@ -283,6 +283,15 @@ struct Cab
     // under it and holds it above, and the depth's mode kept as much as the back is closed.
     bool half = false;
     double halfClosed = 0.5, halfQ = 1.2;
+    // The guitar's open back as it is low down (open_back_full_below_step): under the baffle's step the box neither
+    // shadows the back's sound nor leaves the front the half space alone — the back as loud there as its volume velocity
+    // says, so it takes the low end the front makes. Off, the bass's: half, and blocked as at the top.
+    bool openFullLow = false;
+    // A wall behind the box (Spot::wall, the guitar's switch): back_wall_m behind the back's plane, back_wall_reflection of
+    // the back's sound coming back off it — its image beyond the wall, heard as the back is. 0, none.
+    double wallM = 0, wallRefl = 0;
+    // What of the box's own modes an open back keeps (open_back_cavity_share): 1, the bass's, as closed.
+    double openCavity = 1;
     double fsd = 50, qts = 0.4, vas = 30, vb = 60, perChamber = 1, chambers = 1, fb = 45, ql = 8;
     bool portRear = false, hornAtMic = false;
     double fixedMass = 0, coilHz = 0, proxStrength = 1, proxCorner = 0, micTop = 12000, depth = 0.4;
@@ -335,6 +344,10 @@ inline Cab build (const Section& s)
     c.half = str (s, "alignment") == "half";
     c.halfClosed = num (s, "half_back_closed_fraction", 0.5);
     c.halfQ = num (s, "half_back_Q", 1.2);
+    c.openFullLow = num (s, "open_back_full_below_step", 0) > 0;
+    c.wallM = num (s, "back_wall_m", 0);
+    c.wallRefl = num (s, "back_wall_reflection", 0);
+    c.openCavity = num (s, "open_back_cavity_share", 1);
     c.openLp = num (s, "open_back_lowpass_hz", 150);
     c.openLoss = num (s, "open_back_loss", 0.48);
     const auto ts = nums (str (s, "ts", "50,0.4,30"));
@@ -679,7 +692,10 @@ inline std::vector<double> render (const Cab& c, size_t n, size_t threads = 0)
         cd box = 1.0;
         // An open back lets go of the depth's mode, the air shut between baffle and back; across, the box still rings.
         for (auto& m : c.cavity)
-            if (! (c.open && std::abs (m[0] - c0 / (2 * c.depth)) < 0.08 * m[0]))
+            if (c.open && c.openCavity != 1.0 && ! (std::abs (m[0] - c0 / (2 * c.depth)) < 0.08 * m[0]))
+                // the guitar's: an open back lets the modes across go too, a half closed one half of that
+                box += (c.half ? 1 - (1 - c.openCavity) * (1 - c.halfClosed) : c.openCavity) * m[2] * resonance (f, m[0], m[1]);
+            else if (! (c.open && std::abs (m[0] - c0 / (2 * c.depth)) < 0.08 * m[0]))
                 box += m[2] * resonance (f, m[0], m[1]);
             else if (c.half)   // half closed: as much of it as the back is
                 box += c.halfClosed * m[2] * resonance (f, m[0], m[1]);
@@ -765,6 +781,7 @@ inline std::vector<double> render (const Cab& c, size_t n, size_t threads = 0)
             // Half closed: the back's sound through the box's resonator — the opening's air on the air behind the cones
             // (Helmholtz: c/2pi sqrt(A / V L), L the panel and the opening's two ends) — out under it, held above it.
             cd halfOut = 1.0;
+            const double low = 1 / (1 + (f / stepHz) * (f / stepHz));   // under the baffle's step, 1
             if (c.half)
             {
                 const double area = (1 - c.halfClosed) * c.bw * c.bh, volume = c.bw * c.bh * c.depth;
@@ -778,8 +795,26 @@ inline std::vector<double> render (const Cab& c, size_t n, size_t threads = 0)
                     double r, dx, dy, dz;
                     pathTo (c.drivers[d].x, mirrored (img, c.drivers[d].y), -c.depth, r, dx, dy, dz);
                     const double block = std::clamp (1 - 2 / pi * (disc - z * std::atan (disc / z)) * r / (c.depth * c.depth), 0.2, 1.0);
-                    sum -= floorBy * cone * pipe * coil[k] * c.sens[d] * 0.5 * block * (r0 / r) * (c.half ? halfOut : lowpass1 (f, c.openLp))
-                         * heard (c, mic, dx, dy, dz, f) * std::polar (1.0, -2 * pi * f * (r / c0 - minDelay));
+                    if (! c.openFullLow)
+                        sum -= floorBy * cone * pipe * coil[k] * c.sens[d] * 0.5 * block * (r0 / r) * (c.half ? halfOut : lowpass1 (f, c.openLp))
+                             * heard (c, mic, dx, dy, dz, f) * std::polar (1.0, -2 * pi * f * (r / c0 - minDelay));
+                    else
+                    {
+                        // The guitar's: whole and unshadowed under the baffle's step, half and blocked over it.
+                        const auto share = [&] (double blocked) { return (0.5 + 0.5 * low) * (blocked + (1 - blocked) * low); };
+                        sum -= floorBy * cone * pipe * coil[k] * c.sens[d] * share (block) * (r0 / r) * (c.half ? halfOut : lowpass1 (f, c.openLp))
+                             * heard (c, mic, dx, dy, dz, f) * std::polar (1.0, -2 * pi * f * (r / c0 - minDelay));
+                        // ...and off the wall behind, where there is one: the back's image beyond it, round the box.
+                        if (c.wallM > 0)
+                        {
+                            double rw, wx, wy, wz;
+                            pathTo (c.drivers[d].x, mirrored (img, c.drivers[d].y), -c.depth - 2 * c.wallM, rw, wx, wy, wz);
+                            const double blockW = std::clamp (1 - 2 / pi * (disc - z * std::atan (disc / z)) * rw / (c.depth * c.depth), 0.2, 1.0);
+                            sum -= floorBy * c.wallRefl * cone * pipe * coil[k] * c.sens[d] * share (blockW) * (r0 / rw)
+                                 * (c.half ? halfOut : lowpass1 (f, c.openLp)) * heard (c, mic, wx, wy, wz, f)
+                                 * std::polar (1.0, -2 * pi * f * (rw / c0 - minDelay));
+                        }
+                    }
                 }
         }
         if (c.horn)
@@ -863,6 +898,7 @@ struct Spot
     double hornDb = 0;  // the horn's level against the table's, its attenuator's step: 0, -6, -12
     int back = -1;      // -1 the table's; 0 closed, 1 ported, 2 open (Back)
     std::string speaker;   // a "speaker-<name>" section laid over the cabinet's own speaker, or empty for its own
+    bool wall = false;     // the wall behind the box the table places (back_wall_m), the guitar's switch: off, none
 };
 
 /** THE BOX'S BACK, turned: closed, the cone on the air inside alone; ported, the port tuned as the table tunes it —
@@ -891,6 +927,8 @@ inline Cab cabAt (const Table& table, const std::string& cab, const Spot& spot, 
     c.micD    = spot.distance;
     c.tilt    = spot.angle;
     c.horn    = c.horn && spot.horn;
+    if (! spot.wall)
+        c.wallM = 0;
     c.hornDb += spot.hornDb;
     if (spot.back == closedBack || spot.back == openBack || spot.back == halfBack)
     {
@@ -1004,6 +1042,7 @@ public:
         bSpot.hornDb = p.a.hornDb;
         bSpot.back = p.a.back;
         bSpot.speaker = p.a.speaker;
+        bSpot.wall = p.a.wall;
         auto ca = cabAt (table, cab, p.a, rate), cb = cabAt (table, cab, bSpot, rate);
         const double da = firstArrival (ca), db = firstArrival (cb), first = std::min (da, db);
         ca.refDelay = p.align ? da : first;
@@ -1059,7 +1098,7 @@ private:
         char text[256];
         std::snprintf (text, sizeof text, "|%.6f|%.6f|%.6f|%d|%.4f|%.4f|%d|%.12g|%zu|%.0f|", s.x, s.y, s.distance, s.horn ? 1 : 0,
                        s.angle, s.hornDb, s.back, refDelay, n, rate);
-        return cab + "|" + s.mic + "|" + s.speaker + text;
+        return cab + "|" + s.mic + "|" + s.speaker + (s.wall ? "|wall" : "|") + text;
     }
 
     static const std::vector<double>& irOf (Kept& kept, const std::string& key, const Cab& c, size_t n)
@@ -1096,6 +1135,7 @@ inline Pair pairOf (const State& s)
         p.hornDb = s.hornDb;
         p.back = s.back;
         p.speaker = s.speaker;
+        p.wall = s.wall;
         return p;
     };
     Pair pair { spot (s.a), spot (s.b), s.blend, s.align, s.invert, s.shiftMs / 1000.0 };

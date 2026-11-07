@@ -102,6 +102,7 @@ public:
         int back = -1;   // the box's back as the player turned it — an index of backWords — or -1, the box's own (ownBack)
         float shiftMs = 0.0f;   // B moved in time against A, ms, later positive (TIME)
         int speaker = -1;   // the box's speaker as the player turned it — an index of the catalog's speakers — or -1, its own
+        bool wall = false;  // the wall behind the box, the guitar's switch (WALL)
     };
 
     struct Cab
@@ -140,6 +141,8 @@ public:
         // — none said, CLOSED PORTED OPEN (the bass's); the guitar's has HALF too.
         ui::StringArray half;
         std::vector<int> backRow;
+        // WALL under BACK, the switch for a wall behind the box (the guitar's): false, none (the bass's).
+        bool wallSwitch = false;
     };
 
     static const Catalog& bassCatalog()
@@ -275,7 +278,7 @@ public:
         const auto spot = [&s] (const Mic& m)
         { return Spot { (float) m.x, (float) m.y, (float) m.distance, s.horn, ui::String (m.model), (float) m.angle, (float) s.hornDb }; };
         return { indexOf (ui::String (s.box)), { spot (s.a), spot (s.b), (float) s.blend, s.align, s.invert, s.a.on, s.b.on, s.back,
-                                                   (float) s.shiftMs, catalog().speakers.indexOf (ui::String (s.speaker)) } };
+                                                   (float) s.shiftMs, catalog().speakers.indexOf (ui::String (s.speaker)), s.wall } };
     }
 
     /** A STATE AS A LINE READS IT: its box's size, its back where turned from the box's own, and the mics heard —
@@ -288,7 +291,8 @@ public:
         const int speaker = catalog().speakers.indexOf (ui::String (s.speaker));   // the guitar's, where turned from the box's own
         const auto box = at < 0 ? ui::String (s.box)
                        : wordOf (at) + (s.back >= 0 && s.back != ownBack (at) ? " " + ui::String (backWords[s.back]) : ui::String())
-                             + (speaker >= 0 && speaker != ownSpeaker (at) ? " " + catalog().speakerWords[speaker] : ui::String());
+                             + (speaker >= 0 && speaker != ownSpeaker (at) ? " " + catalog().speakerWords[speaker] : ui::String())
+                             + (s.wall ? " WALL" : "");
         return box + ui::String::fromUTF8 (" \xc2\xb7 ")
              + (s.a.on ? word (s.a) : ui::String()) + (s.a.on && s.b.on ? "+" : "") + (s.b.on ? word (s.b) : ui::String());
     }
@@ -301,6 +305,7 @@ public:
         s.back = su.back;
         if (su.speaker >= 0 && su.speaker < catalog().speakers.size())
             s.speaker = catalog().speakers[su.speaker].toStdString();
+        s.wall = su.wall;
         s.horn = su.a.horn;
         s.hornDb = su.a.hornDb;
         s.a = mic (su.a, su.aOn);
@@ -518,7 +523,7 @@ private:
 
     /** WHAT A CLICK AT A POINT WORKS — the one thing both the hand's light and its press go by (hotAt), so what is lit is
         what a click does. */
-    enum class Part { none, download, downloadFormat, back, speaker, cab, cabHorn, horn, distance, place, micRow, angle, shift, mic, close, reset, find,
+    enum class Part { none, download, downloadFormat, back, speaker, wall, cab, cabHorn, horn, distance, place, micRow, angle, shift, mic, close, reset, find,
                       align, invert, blend };
     struct Hot
     {
@@ -637,6 +642,13 @@ private:
         const float label = ui::look().trackedWidth ("BACK", ui::look().font (13.0f), 0.08f) + 4.0f;
         const float total = label + backLabelGap + (float) backs() * backCellW + (float) (backs() - 1) * backGap();
         return { 0.5f * ((float) leftW - total), (float) backTop, label, (float) backIconH };
+    }
+
+    /** WALL, the guitar's: in the back's label column, on its words' line, under BACK. */
+    ui::Rectangle<float> wallArea() const
+    {
+        const auto label = backWordArea();
+        return { label.getX(), (float) (backTop + backIconH + 2), label.getWidth(), (float) backWordH };
     }
 
     ui::Rectangle<float> backCell (int i) const
@@ -877,6 +889,9 @@ private:
                 for (int i = 0; i < backs(); ++i)
                     if (backCell (i).expanded (backGap() / 2, 2.0f).contains (p))
                         return { Part::back, -1, i };
+            // ...the wall behind it, where the catalog has the switch...
+            if (chosen >= 0 && catalog().wallSwitch && wallArea().expanded (4.0f, 2.0f).contains (p))
+                return { Part::wall };
             // ...and its speaker, where it has a row of them.
             if (chosen >= 0 && hasSpeakers())
                 for (int i = 0; i < catalog().speakers.size(); ++i)
@@ -960,6 +975,12 @@ private:
             // The back: kept as turned, its own one too, so every box after comes with it.
             case Part::back:
                 setup_.back = backAt (h.i);
+                send();
+                return;
+
+            // The wall behind the box, on and off; kept from box to box as the back is.
+            case Part::wall:
+                setup_.wall = ! setup_.wall;
                 send();
                 return;
 
@@ -1161,6 +1182,15 @@ private:
                     g.fillEllipse (ui::Rectangle<float> (4.0f, 4.0f).withCentre ({ word.getCentreX() - 0.5f * w - 8.0f, word.getCentreY() }));
                 }
             }
+        }
+
+        // WALL under BACK, where the catalog has it: orange on, dim off, faint with the back closed — nothing gets out there.
+        if (chosen >= 0 && catalog().wallSwitch)
+        {
+            const bool over = isHot (Part::wall), closed = backOf (chosen, setup_) == 0;
+            g.setColour (setup_.wall ? (closed ? ui::look().orange.withAlpha (0.45f) : ui::look().orange)
+                                     : over ? ui::look().tx : closed ? ui::look().txFaint : ui::look().txDim);
+            ui::look().drawTracked (g, "WALL", wallArea(), font, 0.08f, ui::Justification::centredLeft);
         }
 
         // Under it the speakers, where the catalog has them: SPEAKER, then their words, the box's own dotted as its back is.

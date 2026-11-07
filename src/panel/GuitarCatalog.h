@@ -38,7 +38,8 @@ inline const Panel::Catalog& guitarCatalog()
       { "mid", "bright", "dark", "scoop", "flat", "snap" },
       { "MID", "BRIGHT", "DARK", "SCOOP", "FLAT", "SNAP" },
       { "2x12-vertical" },
-      { 0, 3, 2, 1 } };
+      { 0, 3, 2, 1 },
+      true };
     return guitar;
 }
 

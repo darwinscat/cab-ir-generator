@@ -21,6 +21,12 @@ driver_mode_frequency_spread_percent = -2..2
 driver_mode_residue_spread_db = -1.5..1.5
 open_back_lowpass_hz = 400
 open_back_loss = 0.6
+# An open back heard whole low down, where the box does not shadow it; the wall the WALL switch puts 40 cm behind the
+# box, giving back 80 % of the back's sound; an open back letting the box's modes across go to 40 %.
+open_back_full_below_step = 1
+back_wall_m = 0.4
+back_wall_reflection = 0.8
+open_back_cavity_share = 0.4
 
 # A GUITAR SPEAKER'S CHARACTER — its paper's breakup (the modes, their Q, how loud against the piston), its knee and
 # the cliff past it (woofer_lowpass_hz under woofer_lowpass_second), the surround's dip and the presence its breakup
@@ -179,8 +185,9 @@ mic_distance_m = 0.25
 mic_radial_offset_fraction = 0
 mic_axis_tilt_deg = 0
 
-# THE BOXES: four twelves' sealed box, the tall half-closed 2x12, the open combos, the tens. Their cavity modes across the box (c/2W, c/2H) — an
-# open back lets the depth's go (CabSynth.h, render).
+# THE BOXES: four twelves' sealed box, the tall half-closed 2x12, the open combos, the tens. Their cavity modes across the box (c/2W, c/2H) and
+# through it (c/2D), as an empty box rings — an open back lets the depth's go and keeps 40 % of the others (CabSynth.h,
+# render).
 
 [4x12-closed cap]
 inherit = defaults, speaker-mid, mic-sm57, pos-cap
@@ -191,7 +198,7 @@ baffle = 0.76, 0.76, 0.36
 driver_xy = -0.185/0.185, 0.185/0.185, -0.185/-0.185, 0.185/-0.185
 effective_radius_m = 0.125
 horn = absent
-cavity_modes = 225/5/0.12, 320/4/-0.08, 470/5/0.06, 900/8/0.04
+cavity_modes = 225/5/0.24, 320/4/-0.16, 470/5/0.12, 900/8/0.08
 panel_modes = 120/3/0.08
 [4x12-closed edge]
 inherit = 4x12-closed cap, pos-edge
@@ -210,7 +217,7 @@ baffle = 0.545, 0.70, 0.30
 driver_xy = 0/0.165, 0/-0.165
 effective_radius_m = 0.125
 horn = absent
-cavity_modes = 245/4/0.08, 315/5/-0.06, 572/5/0.08
+cavity_modes = 245/4/0.16, 315/5/-0.12, 572/5/0.16
 panel_modes = 140/3/0.06
 [2x12-vertical edge]
 inherit = 2x12-vertical cap, pos-edge
@@ -228,7 +235,7 @@ baffle = 0.70, 0.50, 0.27
 driver_xy = -0.17/0, 0.17/0
 effective_radius_m = 0.125
 horn = absent
-cavity_modes = 245/5/0.08, 343/4/-0.06
+cavity_modes = 245/5/0.16, 343/4/-0.12, 635/5/0.16
 panel_modes = 130/3/0.06
 [2x12-open edge]
 inherit = 2x12-open cap, pos-edge
@@ -246,7 +253,7 @@ baffle = 0.60, 0.48, 0.25
 driver_xy = 0/-0.02
 effective_radius_m = 0.125
 horn = absent
-cavity_modes = 286/5/0.08, 357/4/-0.06
+cavity_modes = 286/5/0.16, 357/4/-0.12, 686/5/0.16
 panel_modes = 150/3/0.06
 [1x12-open edge]
 inherit = 1x12-open cap, pos-edge
@@ -264,7 +271,7 @@ baffle = 0.62, 0.62, 0.25
 driver_xy = -0.145/0.145, 0.145/0.145, -0.145/-0.145, 0.145/-0.145
 effective_radius_m = 0.105
 horn = absent
-cavity_modes = 277/5/0.08, 343/4/-0.06
+cavity_modes = 277/5/0.16, 343/4/-0.12, 686/5/0.16
 panel_modes = 140/3/0.06
 [4x10-open edge]
 inherit = 4x10-open cap, pos-edge
@@ -282,7 +289,7 @@ baffle = 0.60, 0.46, 0.24
 driver_xy = -0.14/0, 0.14/0
 effective_radius_m = 0.105
 horn = absent
-cavity_modes = 286/5/0.08, 373/4/-0.06
+cavity_modes = 286/5/0.16, 373/4/-0.12, 715/5/0.16
 panel_modes = 160/3/0.06
 [2x10-open edge]
 inherit = 2x10-open cap, pos-edge
@@ -300,7 +307,7 @@ baffle = 0.46, 0.40, 0.22
 driver_xy = 0/0
 effective_radius_m = 0.105
 horn = absent
-cavity_modes = 373/5/0.08, 429/4/-0.06
+cavity_modes = 373/5/0.16, 429/4/-0.12, 780/5/0.16
 panel_modes = 180/3/0.06
 [1x10-open edge]
 inherit = 1x10-open cap, pos-edge
