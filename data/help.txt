@@ -1,0 +1,16 @@
+# WHAT THE BASS'S "?" SAY: a [<key>] section per "?" on the panel (src/panel/Panel.h, helpSpot), its text under it, plain,
+# drawn as it is at 13 px. A blank line starts a paragraph; the lines of one join, so they wrap here as they read. A line
+# from "#" is a note, left out. Baked into the build (CMakeLists.txt): no "@" in it.
+
+[comb]
+When two mics hear one speaker from different distances, their signals arrive a fraction of a millisecond apart.
+Where they meet out of phase they cancel, leaving a row of notches: a comb.
+
+On a bass cab the notches land in the low mids and mids, from a few hundred Hz to a couple of kHz. That is where a
+bass is actually heard in a mix: its growl and the definition of each note. So the tone turns hollow, and some notes
+speak less than others.
+
+That is why Orbit Bass Cab Builder treats a comb as a fault. The response line turns red wherever the two mics cancel
+by 3 dB or more. FIND BEST POSITION moves mic B to where the pair cancels least. Every factory preset keeps its pair
+within about 3 dB across the whole range. ALIGN, on by default, lines the two mics up in time, which moves the first
+notches up above about 3 kHz.

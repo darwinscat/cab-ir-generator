@@ -41,6 +41,16 @@ target_compile_definitions(cabir_synth INTERFACE CABIR_VERSION="${PROJECT_VERSIO
 target_sources(cabir_synth INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/src/synth/State.cpp")
 target_link_libraries(cabir_synth INTERFACE felitronics::toml)
 
+# WHAT THE PANEL'S "?" SAY — a plain text per instrument (data/help.txt, data/guitar/help.txt), baked into a header as it
+# is configured (panel/HelpText.h), so every host has it, the page's module too, with nothing to load. On the synthesis's
+# include path, as src is: everything that draws the panel links that. No "@" in the texts: configure_file reads it.
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/data/help.txt" CABIR_HELP_BASS)
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/data/guitar/help.txt" CABIR_HELP_GUITAR)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+             "${CMAKE_CURRENT_SOURCE_DIR}/data/help.txt" "${CMAKE_CURRENT_SOURCE_DIR}/data/guitar/help.txt")
+configure_file(src/panel/HelpText.h.in "${CMAKE_CURRENT_BINARY_DIR}/generated/panel/HelpText.h" @ONLY)
+target_include_directories(cabir_synth INTERFACE "${CMAKE_CURRENT_BINARY_DIR}/generated")
+
 # THE CABINETS the synthesis reads: a host embeds the file the way it embeds its other data.
 set(CABIR_CABINETS "${CMAKE_CURRENT_SOURCE_DIR}/data/cabinets.txt" CACHE INTERNAL "The cabinet table the synthesis reads")
 

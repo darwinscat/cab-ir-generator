@@ -45,7 +45,8 @@ inline const Panel::Catalog& guitarCatalog()
       {}, {},         // no ROOM row
       5.0f,     // the line reddens with a pit from 5 dB (the table's pit_red_db, the same)
       6.0f,     // ...and with a comb from 2 kHz up at 6 dB (comb_top_red_db, the same)
-      "GUITAR CAB" };   // the watermark across the response
+      "GUITAR CAB",     // the watermark across the response
+      helpText::guitar };   // what its "?" say (data/guitar/help.txt)
     return guitar;
 }
 

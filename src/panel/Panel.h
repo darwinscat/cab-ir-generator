@@ -8,6 +8,7 @@
 #include <array>
 #include "../synth/Response.h"
 #include "../synth/State.h"
+#include <panel/HelpText.h>   // made by the build from data/help.txt, data/guitar/help.txt
 
 #include <functional>
 #include <optional>
@@ -80,13 +81,14 @@ public:
         stepBackZoom (dt);
         stepHandles (dt);
         stepResponseFade (dt);
+        stepHelp (dt);
     }
 
     /** True while something moves on its own: a host ticks it then, and need not otherwise. */
     bool wantsFrames() const
     {
         return ! downloadArea().isEmpty() || searchFade > 0.0f || defaultArmed || zoomMoving() || backZoomMoving()
-            || (handlesOf >= 0 && ! handHolds) || responseFading();
+            || (handlesOf >= 0 && ! handHolds) || responseFading() || (helpOpen >= 0 && ! helpPinned && ! helpHeld);
     }
 
     /** The size it is drawn for — small enough to open over a cabin's face too. */
@@ -172,6 +174,9 @@ public:
         float combTopRedDb = 3.0f;
         // Its name as a watermark across the response, so it reads at a glance which builder this is (the owner, 07.11).
         ui::String instrumentWord = "BASS CAB";
+        // What its "?" say, a section each (helpSpot): its help file's text, the bass's data/help.txt, the guitar's
+        // data/guitar/help.txt, baked in by the build.
+        const char* help = helpText::bass;
     };
 
     static const Catalog& bassCatalog()
@@ -511,6 +516,7 @@ public:
         paintSpeaker (g);
         paintResponse (g);
         paintMicZoom (g);
+        paintHelp (g);
     }
 
     void mouseMove (const ui::MouseEvent& e)
@@ -526,6 +532,7 @@ public:
             backZoomI = backHot();
         overResponse = responseArea().toFloat().contains (e.position);
         keepHandles (e.position);
+        keepHelp();
         if (hot != was)
             repaint();
     }
@@ -536,6 +543,9 @@ public:
         handlesOf = -1;
         handHolds = false;
         overResponse = false;
+        helpHeld = helpQuiet = false;
+        if (! helpPinned)
+            helpOpen = -1;
         repaint();
     }
 
@@ -543,7 +553,10 @@ public:
     {
         if (defaultArmed && ! defaultArea().contains (e.getPosition()))
             disarmDefault();   // a click anywhere else: DEFAULT's question withdrawn
-        press (hotAt (e.position), e);
+        const auto h = hotAt (e.position);
+        if (helpOpen >= 0 && h.part != Part::help && h.part != Part::helpBox)
+            closeHelp();       // ...and a "?"'s window closed, the click going on to what it is on
+        press (h, e);
     }
 
     void mouseDrag (const ui::MouseEvent& e)
@@ -616,6 +629,7 @@ public:
         }
         hot = hotAt (e.position);
         keepHandles (e.position);   // a mic tapped (a touch screen's, no hand hovering): its distance and angle come to it
+        keepHelp();
     }
 
 private:
@@ -634,7 +648,7 @@ private:
     /** WHAT A CLICK AT A POINT WORKS — the one thing both the hand's light and its press go by (hotAt), so what is lit is
         what a click does. */
     enum class Part { none, download, downloadFormat, back, speaker, speakerCone, wall, room, cab, cabHorn, horn, distance, place, micRow, angle, shift, mic, close, reset, find,
-                      align, invert, blend };
+                      align, invert, blend, help, helpBox };
     struct Hot
     {
         Part part = Part::none;
@@ -701,6 +715,157 @@ private:
             return dragMic;
         return drag == Drag::none && handlesOf >= 0 && heard (handlesOf) ? handlesOf : -1;
     }
+
+    /** A "?" AND ITS WINDOW (the owner, 07.11): the hand on the "?" opens it, and it stays while the hand is on either, a
+        moment more once it is off them; a click keeps it open till a click anywhere else — a tap where no hand hovers, a
+        touch screen's, the same. What it says is its section of the catalog's help text, plain paragraphs. */
+    struct HelpSpot
+    {
+        const char* key;            // its section in the help text: [comb]
+        ui::Rectangle<int> mark;    // the "?"
+        ui::Rectangle<int> room;    // where its window opens: across it from the "?", up where it would run out
+    };
+    static constexpr int helpSpots = 1;
+    static constexpr int helpMarkSize = 18, helpPad = 14, helpLineH = 18, helpGap = 8;
+    static constexpr float helpLinger = 0.3f, helpTextSize = 13.0f;
+
+    HelpSpot helpSpot (int) const
+    {
+        const auto r = responseArea();   // the response's corner, over its +10: what the comb is
+        return { "comb", { r.getX() + 8, r.getY() + 3, helpMarkSize, helpMarkSize }, r };
+    }
+
+    int helpOpen = -1;          // the "?" whose window is out; -1 none
+    bool helpPinned = false;    // ...kept open by a click
+    bool helpHeld = false;      // the hand on the "?" or its window
+    float helpLeft = 0.0f;      // ...else how long it stays, counted down by the tick
+    bool helpQuiet = false;     // closed by a click on its "?": not opened again till the hand is off it
+
+    void keepHelp()
+    {
+        const int was = helpOpen;
+        const bool on = hot.part == Part::help || hot.part == Part::helpBox;
+        if (! on)
+            helpQuiet = false;
+        if (hot.part == Part::help && ! helpQuiet && helpOpen != hot.i)
+        {
+            helpOpen = hot.i;
+            helpPinned = false;
+        }
+        helpHeld = on && ! helpQuiet;
+        if (helpHeld)
+            helpLeft = helpLinger;
+        if (helpOpen != was)
+            repaint();
+    }
+
+    void closeHelp()
+    {
+        helpOpen = -1;
+        helpPinned = helpHeld = false;
+        repaint();
+    }
+
+    void stepHelp (double dt)
+    {
+        if (helpOpen < 0 || helpPinned || helpHeld)
+            return;
+        helpLeft -= (float) dt;
+        if (helpLeft <= 0.0f)
+            closeHelp();
+    }
+
+    /** The paragraphs of a help text's section: under its "[key]" to the next section, a blank line between two, the lines
+        of one joined; a line from "#" a note, left out. */
+    static std::vector<std::string> helpParagraphs (const char* text, const std::string& key)
+    {
+        std::vector<std::string> out;
+        if (text == nullptr)
+            return out;
+        const std::string all (text);
+        bool in = false, open = false;   // in its section; a paragraph begun
+        for (size_t from = 0; from <= all.size();)
+        {
+            const size_t end = all.find ('\n', from), to = end == std::string::npos ? all.size() : end;
+            std::string line = all.substr (from, to - from);
+            from = to + 1;
+            while (! line.empty() && (line.back() == '\r' || line.back() == ' ' || line.back() == '\t'))
+                line.pop_back();
+            line.erase (0, ui::jmin (line.size(), line.find_first_not_of (" \t")));
+            if (! line.empty() && line.front() == '#')
+                continue;
+            if (line.size() > 1 && line.front() == '[' && line.back() == ']')
+            {
+                in = line.substr (1, line.size() - 2) == key;
+                open = false;
+                continue;
+            }
+            if (! in)
+                continue;
+            if (line.empty())
+                open = false;
+            else if (open)
+                out.back() += " " + line;
+            else
+            {
+                out.push_back (line);
+                open = true;
+            }
+        }
+        return out;
+    }
+
+    /** A "?"'s text wrapped to `width` as the host measures it: a line each, an empty one between two paragraphs — kept,
+        as the hand's every move asks for its window. */
+    struct HelpWrap { std::string key; int width = 0; std::vector<std::string> lines; };
+    mutable HelpWrap helpWrap;
+
+    const std::vector<std::string>& helpLines (int i, int width) const
+    {
+        const std::string key = helpSpot (i).key;
+        if (helpWrap.key == key && helpWrap.width == width)
+            return helpWrap.lines;
+        helpWrap = { key, width, {} };
+        const auto font = ui::look().font (helpTextSize);
+        for (const auto& paragraph : helpParagraphs (catalog().help, key))
+        {
+            if (! helpWrap.lines.empty())
+                helpWrap.lines.emplace_back();
+            std::string line;
+            for (size_t from = 0; from < paragraph.size();)
+            {
+                const size_t end = paragraph.find (' ', from), to = end == std::string::npos ? paragraph.size() : end;
+                const std::string word = paragraph.substr (from, to - from);
+                from = to + 1;
+                if (word.empty())
+                    continue;
+                const std::string longer = line.empty() ? word : line + " " + word;
+                if (! line.empty() && ui::look().trackedWidth (longer, font, 0.0f) > (float) width)
+                {
+                    helpWrap.lines.push_back (line);
+                    line = word;
+                }
+                else
+                    line = longer;
+            }
+            if (! line.empty())
+                helpWrap.lines.push_back (line);
+        }
+        return helpWrap.lines;
+    }
+
+    /** Its window: from the "?" to its room's right, as high as its text; down from the "?", up as far as it must. */
+    ui::Rectangle<int> helpBox (int i) const
+    {
+        const auto s = helpSpot (i);
+        const int x = s.mark.getRight() + 8, w = s.room.getRight() - 12 - x;
+        int h = 2 * helpPad - 4;
+        for (const auto& line : helpLines (i, w - 2 * helpPad))
+            h += line.empty() ? helpGap : helpLineH;
+        const int y = ui::jmax (2, ui::jmin (s.mark.getY(), s.room.getBottom() - 3 - h));
+        return { x, y, w, h };
+    }
+
     int hoverCab() const { return hot.part == Part::cab || hot.part == Part::cabHorn ? hot.i : -1; }
     struct SearchDot { float x, y, score; };
     std::vector<SearchDot> searchDots;  // the search's map (showSearch), fading once it is done
@@ -1172,6 +1337,12 @@ private:
     Hot hotAt (ui::Point<float> p) const
     {
         const auto pos = p.roundToInt();
+        // A "?"'s window over all else while it is out, then the "?" themselves.
+        if (helpOpen >= 0 && helpBox (helpOpen).contains (pos))
+            return { Part::helpBox, -1, helpOpen };
+        for (int i = 0; i < helpSpots; ++i)
+            if (helpSpot (i).mark.expanded (3).contains (pos))
+                return { Part::help, -1, i };
         if (downloadArea().contains (pos))
             return { Part::download };
         if (downloadFormatArea().contains (pos))
@@ -1277,6 +1448,27 @@ private:
         switch (h.part)
         {
             case Part::none:
+                return;
+
+            // A "?": its window kept open; clicked again, closed, and not opened till the hand has been off it.
+            case Part::help:
+                if (helpPinned && helpOpen == h.i)
+                {
+                    closeHelp();
+                    helpQuiet = true;
+                }
+                else
+                {
+                    helpOpen = h.i;
+                    helpPinned = true;
+                    helpQuiet = false;
+                    repaint();
+                }
+                return;
+
+            case Part::helpBox:   // a click in it keeps it, as one on its "?"
+                helpPinned = true;
+                repaint();
                 return;
 
             case Part::download:
@@ -2514,6 +2706,44 @@ private:
                 ui::look().drawTracked (g, downloadNote, { right - 320.0f, (float) d.getBottom() + 4.0f, 320.0f, 16.0f },
                                         ui::look().font (13.0f), 0.0f, ui::Justification::centredRight);
             }
+        }
+    }
+
+    /** The "?" — a ring, lit under the hand and while its window is out, its line orange once a click keeps it — and over
+        everything the window out, its text at 13 px. */
+    void paintHelp (ui::Graphics& g) const
+    {
+        const auto font = ui::look().font (helpTextSize);
+        for (int i = 0; i < helpSpots; ++i)
+        {
+            const auto m = helpSpot (i).mark.toFloat().reduced (0.5f);
+            const bool open = helpOpen == i, lit = open || isHot (Part::help, -1, i);
+            g.setColour (ui::look().panel2);
+            g.fillEllipse (m);
+            g.setColour (open && helpPinned ? ui::look().orange : lit ? ui::look().lilac : ui::look().txFaint);
+            g.drawEllipse (m, 1.2f);
+            g.setColour (lit ? ui::look().tx : ui::look().txDim);
+            ui::look().drawTracked (g, "?", m, font, 0.0f, ui::Justification::centred);
+        }
+        if (helpOpen < 0)
+            return;
+        const auto b = helpBox (helpOpen).toFloat();
+        g.setColour (ui::look().panel2.withAlpha (0.97f));
+        g.fillRoundedRectangle (b, 6.0f);
+        g.setColour (helpPinned ? ui::look().orange.withAlpha (0.7f) : ui::look().violet.withAlpha (0.6f));
+        g.drawRoundedRectangle (b.reduced (0.5f), 6.0f, 1.0f);
+        g.setColour (ui::look().tx);
+        float y = b.getY() + (float) helpPad - 2.0f;
+        for (const auto& line : helpLines (helpOpen, (int) b.getWidth() - 2 * helpPad))
+        {
+            if (line.empty())
+            {
+                y += (float) helpGap;
+                continue;
+            }
+            ui::look().drawTracked (g, line, { b.getX() + (float) helpPad, y, b.getWidth() - 2.0f * (float) helpPad, (float) helpLineH },
+                                    font, 0.0f, ui::Justification::centredLeft);
+            y += (float) helpLineH;
         }
     }
 

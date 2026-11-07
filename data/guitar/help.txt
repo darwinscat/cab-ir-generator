@@ -1,0 +1,16 @@
+# WHAT THE GUITAR'S "?" SAY: a [<key>] section per "?" on the panel (src/panel/Panel.h, helpSpot), its text under it,
+# plain, drawn as it is at 13 px. A blank line starts a paragraph; the lines of one join, so they wrap here as they read.
+# A line from "#" is a note, left out. Baked into the build (CMakeLists.txt): no "@" in it.
+
+[comb]
+When two mics hear one speaker from different distances, their signals arrive a fraction of a millisecond apart.
+Where they meet out of phase they cancel, leaving a row of notches: a comb.
+
+On a guitar cab a comb does two different things. Below about 2 kHz it hurts: palm mutes and chugs go thin and loose.
+Higher up it is a classic tone tool. Engineers nudge the second mic so the pair notches out fizz or adds a phase colour
+that EQ can't quite copy.
+
+Orbit Guitar Cab Builder follows that split. Below 2 kHz the pair may cancel by at most 3 dB. From 2 to 12 kHz it may
+cancel by up to 6 dB before the response line turns red. FIND BEST POSITION judges by the same rule, and ALIGN, on by
+default, lines the two mics up in time. Some metal, modern metal and hard rock presets keep a light comb in the top on
+purpose.
