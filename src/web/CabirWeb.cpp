@@ -96,7 +96,7 @@ namespace
     {
         synth::WavMeta meta;
         meta.name = Panel::labelOf (s).toStdString();
-        meta.software = std::string ("Cab IR Generator ") + CABIR_VERSION;
+        meta.software = std::string ("Orbit Bass Cab Builder ") + CABIR_VERSION;
         meta.comment = std::string (pageAddress) + "#" + linkOf (s);
         meta.preset = "name = \"" + meta.name + "\"\n\n" + toToml (s);
         return meta;

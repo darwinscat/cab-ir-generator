@@ -81,9 +81,9 @@ jobs:
           fi
 
           VER="${{ needs.version.outputs.version }}"
-          APP="build/CabIrGenerator_artefacts/Release/Cab IR Generator.app"
+          APP="build/OrbitBassCabBuilder_artefacts/Release/Orbit Bass Cab Builder.app"
           DMG="dist/CabIrGenerator-$VER-macOS.dmg"
-          lipo -info "$APP/Contents/MacOS/Cab IR Generator"
+          lipo -info "$APP/Contents/MacOS/Orbit Bass Cab Builder"
           rm -rf dist stage && mkdir -p dist stage
 
           # The ticket takes a moment to reach the replica stapler asks: notarytool's Accepted is not
@@ -112,7 +112,7 @@ jobs:
           # The image: the app and a link to Applications to drag it onto; signed, notarized, stapled.
           cp -R "$APP" stage/
           ln -s /Applications stage/Applications
-          hdiutil create -volname "Cab IR Generator" -srcfolder stage -ov -format UDZO "$DMG"
+          hdiutil create -volname "Orbit Bass Cab Builder" -srcfolder stage -ov -format UDZO "$DMG"
           codesign --force --timestamp --sign "$APP_ID" "$DMG"
           xcrun notarytool submit "$DMG" --keychain-profile "$NOTARY" --keychain "$KEYCHAIN" --wait
           staple_retry "$DMG"
@@ -150,7 +150,7 @@ jobs:
           $ver = "${{ needs.version.outputs.version }}"
           New-Item -ItemType Directory -Force -Path dist | Out-Null
           Compress-Archive -Force -DestinationPath "dist\CabIrGenerator-$ver-Windows-${{ matrix.arch }}.zip" `
-            -Path "build\CabIrGenerator_artefacts\Release\Cab IR Generator.exe", "LICENSE"
+            -Path "build\OrbitBassCabBuilder_artefacts\Release\Orbit Bass Cab Builder.exe", "LICENSE"
       - uses: actions/upload-artifact@v7
         with:
           name: windows-${{ matrix.arch }}
@@ -188,7 +188,7 @@ jobs:
         run: |
           VER="${{ needs.version.outputs.version }}"
           mkdir -p "stage/CabIrGenerator-$VER" dist
-          cp "build/CabIrGenerator_artefacts/Release/Cab IR Generator" LICENSE "stage/CabIrGenerator-$VER/"
+          cp "build/OrbitBassCabBuilder_artefacts/Release/Orbit Bass Cab Builder" LICENSE "stage/CabIrGenerator-$VER/"
           tar -C stage -czf "dist/CabIrGenerator-$VER-Linux-${{ matrix.arch }}.tar.gz" "CabIrGenerator-$VER"
       - uses: actions/upload-artifact@v7
         with:

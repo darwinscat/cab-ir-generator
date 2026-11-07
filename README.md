@@ -1,21 +1,23 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 
-<p align="center"><img src="assets/logo/lockup.svg" alt="Cab IR Generator" width="520"></p>
+<p align="center"><img src="assets/logo/lockup.svg" alt="Orbit Bass Cab Builder" width="650"></p>
 
-# Cab IR Generator
+# Orbit Bass Cab Builder and Orbit Guitar Cab Builder
 
 Bass cabinet impulse responses, synthesized: a box of each size, its back closed, ported or open, a
 horn switched in and out, and up to two mics placed on the speaker — kind, spot, distance, angle and
 blend — rendered to a 48 kHz IR while you move them, with the response and where two mics comb drawn
-as you go.
+as you go. **Orbit Guitar Cab Builder** is the same on a guitar's cabinets: seven boxes, six speakers and six mics
+of its own.
 
 <p align="center"><img src="docs/app.png" alt="The app: the boxes, the speaker with two mics on it, and the response" width="880"></p>
 
-One code base for three homes:
+One code base for four homes:
 
 - the cabinet panel and its miniature inside Darwin's Cat's bass amps (OrbitBass, RedGrooveBass);
 - a standalone app for Windows, macOS and Linux, with a sample player to audition by ear, history,
   undo/redo and A/B/C/D;
+- plugins, VST3, AU and CLAP: the same window in a host, the track played through the cabinet;
 - a live web page.
 
 ## Download
@@ -87,7 +89,7 @@ sudo apt-get install ninja-build libasound2-dev libfreetype-dev libfontconfig1-d
   libxrender-dev libglu1-mesa-dev mesa-common-dev
 ```
 
-Options: `CABIR_APP` (the app), `CABIR_TOOLS` (the tools below), `CABIR_TESTS`, `CABIR_WEB` (the
+Options: `CABIR_APP` (the apps), `CABIR_GUITAR_APP` (the guitar's too), `CABIR_PLUGINS`, `CABIR_TOOLS` (the tools below), `CABIR_TESTS`, `CABIR_WEB` (the
 page's module, and `irdump`, its check against the native build).
 
 - **The page's module** — `tools/wasm/build.sh`, with Emscripten on the path (or in `~/emsdk`).
@@ -101,7 +103,7 @@ page's module, and `irdump`, its check against the native build).
 - `src/panel/` — the panel, JUCE-free (`Panel.h`, drawn through `ui/Ui.h`), and `CabPicker.h`, its
   JUCE host; colours and type come from the host.
 - `src/web/` — the page's module (WebAssembly): the synthesis and the same panel, drawn on a canvas.
-- `app/` — the standalone app.
+- `app/` — the standalone apps and the plugins.
 - `data/` — `cabinets.txt`, the cabinets, mics and positions the synthesis reads; the factory presets;
   the typical cabinets; the riffs.
 - `tools/` — `cabgen` renders a table to files, `irlook` reads an IR's response back, `presetcheck`

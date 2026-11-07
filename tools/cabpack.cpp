@@ -332,7 +332,7 @@ namespace
         std::string out = svgOpen (columns * cellW, head + (float) rows * cellH + 8.0f);
         out += "<text x=\"20\" y=\"32\" fill=\"#ece9f6\" font-size=\"20\" font-weight=\"600\" letter-spacing=\"1.5\" " + svgFont + ">"
              + escaped (title) + " \xc2\xb7 " + std::to_string (items.size()) + " BASS CABINETS from Darwin's Cat</text>\n";
-        out += "<text x=\"20\" y=\"56\" fill=\"#a6a2bd\" font-size=\"13\" " + svgFont + ">Made with Cab IR Generator " + CABIR_VERSION
+        out += "<text x=\"20\" y=\"56\" fill=\"#a6a2bd\" font-size=\"13\" " + svgFont + ">Made with Orbit Bass Cab Builder " + CABIR_VERSION
              + ". A click on one opens it in the generator.</text>\n";
         legendSvg (out, 20, 80, true, true);
         for (size_t i = 0; i < items.size() && i < curves.size(); ++i)
@@ -567,7 +567,7 @@ int main (int argc, char** argv)
                 // What each WAV says of itself (synth::WavMeta): its name, the link that opens it on the page, its preset.
                 synth::WavMeta meta;
                 meta.name = it.name;
-                meta.software = "Cab IR Generator";   // no version (the owner, 06.11): a WAV's bytes change only with its sound — BUILD-INFO says the version
+                meta.software = "Orbit Bass Cab Builder";   // no version (the owner, 06.11): a WAV's bytes change only with its sound — BUILD-INFO says the version
                 meta.comment = linkTo (it.state);
                 meta.preset = it.text;
                 const auto wav = synth::wav24 (ir, (int) r.hz, &meta);

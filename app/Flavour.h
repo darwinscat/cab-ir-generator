@@ -8,9 +8,10 @@
 
 #include <iterator>
 
-/** WHICH APP THIS IS: Cab IR Generator, the bass's — or, built with CABIR_GUITAR, the guitar's, the same app on its own
-    table, presets and riffs (data/guitar), under its own name, its settings and its presets apart. CMake builds it twice;
-    whatever else the two differ in is the panel's catalog (GuitarCatalog.h), handed in before the window opens. */
+/** WHICH APP THIS IS: Orbit Bass Cab Builder — or, built with CABIR_GUITAR, Orbit Guitar Cab Builder, the same app on its
+    own table, presets and riffs (data/guitar), under its own name, its settings and its presets apart (the names, the
+    owner's, 07.11). CMake builds it twice; whatever else the two differ in is the panel's catalog (GuitarCatalog.h),
+    handed in before the window opens. `formerly`: the name it had before, whose settings and presets a first run copies. */
 namespace cabir::app::flavour
 {
 
@@ -19,7 +20,8 @@ struct Riff { const char* file; const char* title; };
 
 #if CABIR_GUITAR
 inline constexpr bool guitar = true;
-inline constexpr const char* product = "Guitar Cab IR Generator";
+inline constexpr const char* product = "Orbit Guitar Cab Builder";
+inline constexpr const char* formerly = "Guitar Cab IR Generator";
 inline constexpr const char* page = "https://darwinscat.com/felitronics/guitar-cab-ir-generator";   // its own, on the site
 inline constexpr const char* utmSource = "guitar-cab-ir-generator";
 inline constexpr const char* sampleWord = "GUITAR";
@@ -43,7 +45,8 @@ inline State defaultState()
 }
 #else
 inline constexpr bool guitar = false;
-inline constexpr const char* product = "Cab IR Generator";
+inline constexpr const char* product = "Orbit Bass Cab Builder";
+inline constexpr const char* formerly = "Cab IR Generator";
 inline constexpr const char* page = pageAddress;   // the bass's (Link.h)
 inline constexpr const char* utmSource = "cab-ir-generator";
 inline constexpr const char* sampleWord = "BASS";
@@ -75,15 +78,12 @@ inline State defaultState()
 
 inline constexpr int numRiffs = (int) std::size (riffs);
 
-/** WHAT IT RUNS AS: the app, or — built with CABIR_PLUGIN — a plugin, the same window in a host's, the track played through
-    it. A host lists it by the instrument's name, the bass's said as the guitar's is (the owner, 07.11); the header and the
-    version window say that one too. Its presets are the app's, in the app's folder. */
+/** WHAT IT RUNS AS: the app, or — built with CABIR_PLUGIN — a plugin, the same window in a host's under the same name, the
+    track played through it. Its presets are the app's, in the app's folder; its settings its own. */
 #if CABIR_PLUGIN
 inline constexpr bool plugin = true;
-inline constexpr const char* name = guitar ? "Guitar Cab IR Generator" : "Bass Cab IR Generator";
 #else
 inline constexpr bool plugin = false;
-inline constexpr const char* name = product;
 #endif
 
 } // namespace cabir::app::flavour

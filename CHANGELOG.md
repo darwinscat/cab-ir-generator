@@ -1,14 +1,15 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 # Changelog
 
-All notable changes to **Cab IR Generator** are documented here. The format follows
+All notable changes to **Orbit Bass Cab Builder** and **Orbit Guitar Cab Builder** (Cab IR Generator up to
+0.1.5) are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
 ### Added
-- **Guitar Cab IR Generator**, a second app from the same code, on the guitar's own table: seven boxes (4x12 closed,
+- **Orbit Guitar Cab Builder**, a second app from the same code, on the guitar's own table: seven boxes (4x12 closed,
   a tall half-closed 2x12, open 2x12, 1x12, 4x10, 2x10 and 1x10), six mics with the E906 among them, a row of six
   speakers under the back (MID, BRIGHT, DARK, SCOOP, FLAT, SNAP) and a paper cone for each (SPEAKER clicked), a
   half-closed back (HALF), a wall behind an open box (WALL), the mic up to a metre and a half off (ROOM at one metre).
@@ -16,6 +17,9 @@ All notable changes to **Cab IR Generator** are documented here. The format foll
   app sounds exactly as it did.
 
 ### Changed
+- **The names: Orbit Bass Cab Builder** (Cab IR Generator until now) **and Orbit Guitar Cab Builder** — the apps, their
+  windows, the version window, the WAVs they write and the IR packs. A first run under the new name copies the
+  workspace, the settings and your own presets from where the old name kept them; nothing is moved or deleted.
 - **The page's new address**, darwinscat.com/felitronics/bass-cab-ir-generator: the app's links, DOWNLOAD IR's WAVs
   (their comment, the link that opens the cabinet live), the page's own downloads and the IR packs' WAVs and
   index.html all name it. The old address leads there, the cabinet in the link kept, so the WAVs already out still open.

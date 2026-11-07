@@ -86,7 +86,8 @@ if(CABIR_TESTS)
     add_test(NAME state COMMAND cabir_state_test)
 endif()
 
-# THE APP — Cab IR Generator itself: the panel, a player through the family's convolver, the family's version window.
+# THE APPS — Orbit Bass Cab Builder and Orbit Guitar Cab Builder: the panel, a player through the family's convolver, the
+# family's version window.
 option(CABIR_APP "Build the standalone app" ${cabirNative})
 option(CABIR_WEB "Build the page's module (src/web) and irdump, the check of it against the native build" ${PROJECT_IS_TOP_LEVEL})
 
@@ -167,9 +168,10 @@ if(CABIR_APP)
     # draws, from `logo` (assets/logo, the bass's, or assets/logo/guitar) — and its data: the cabinet table, the factory's
     # presets and the riffs the player carries, from `data` (the bass's) or `data/guitar`.
     function(cabir_add_app target logo data dataTarget riffsTarget)
-        cmake_parse_arguments(APP "GUITAR" "PRODUCT;BUNDLE" "" ${ARGN})
+        cmake_parse_arguments(APP "GUITAR" "PRODUCT;BUNDLE;DESCRIPTION" "" ${ARGN})
         juce_add_gui_app(${target}
             PRODUCT_NAME  "${APP_PRODUCT}"
+            DESCRIPTION   "${APP_DESCRIPTION}"
             COMPANY_NAME  "Darwin's Cat"
             BUNDLE_ID     ${APP_BUNDLE}
             ICON_BIG      "${CMAKE_CURRENT_SOURCE_DIR}/${logo}/icon.png"   # the logo's mark, drawn from mark.svg
@@ -201,14 +203,16 @@ if(CABIR_APP)
             juce::juce_recommended_warning_flags)
     endfunction()
 
-    cabir_add_app(CabIrGenerator assets/logo data CabIrData CabIrRiffs
-        PRODUCT "Cab IR Generator" BUNDLE com.darwinscat.cabirgenerator)
+    cabir_add_app(OrbitBassCabBuilder assets/logo data CabIrData CabIrRiffs
+        PRODUCT "Orbit Bass Cab Builder" BUNDLE com.darwinscat.orbitbasscabbuilder
+        DESCRIPTION "Bass cabinet IR generator and cab sim")
 
     # THE GUITAR'S — the same app on the guitar's cabinets (data/guitar, src/panel/GuitarCatalog.h).
     option(CABIR_GUITAR_APP "Build the guitar's app too" ON)
     if(CABIR_GUITAR_APP)
-        cabir_add_app(GuitarCabIrGenerator assets/logo/guitar data/guitar GuitarCabIrData GuitarCabIrRiffs GUITAR
-            PRODUCT "Guitar Cab IR Generator" BUNDLE com.darwinscat.guitarcabirgenerator)
+        cabir_add_app(OrbitGuitarCabBuilder assets/logo/guitar data/guitar GuitarCabIrData GuitarCabIrRiffs GUITAR
+            PRODUCT "Orbit Guitar Cab Builder" BUNDLE com.darwinscat.orbitguitarcabbuilder
+            DESCRIPTION "Guitar cabinet IR generator and cab sim")
     endif()
 
     # THE PLUGINS — the same window in a host's, the track through the cabinet (app/Plugin.h): VST3, AU and CLAP, one for
@@ -222,9 +226,10 @@ if(CABIR_APP)
 
         # 4-char codes, kept once released: the family's maker (Dcat), the plugin's own (`code`).
         function(cabir_add_plugin target logo dataTarget code)
-            cmake_parse_arguments(PLUG "GUITAR" "PRODUCT;BUNDLE" "" ${ARGN})
+            cmake_parse_arguments(PLUG "GUITAR" "PRODUCT;BUNDLE;DESCRIPTION" "" ${ARGN})
             juce_add_plugin(${target}
                 PRODUCT_NAME                "${PLUG_PRODUCT}"
+                DESCRIPTION                 "${PLUG_DESCRIPTION}"
                 COMPANY_NAME                "Darwin's Cat"
                 BUNDLE_ID                   ${PLUG_BUNDLE}
                 PLUGIN_MANUFACTURER_CODE    Dcat
@@ -275,11 +280,13 @@ if(CABIR_APP)
                 juce::juce_recommended_warning_flags)
         endfunction()
 
-        cabir_add_plugin(BassCabIrGeneratorPlugin assets/logo CabIrData Cirb
-            PRODUCT "Bass Cab IR Generator" BUNDLE com.darwinscat.basscabirgenerator.plugin)
+        cabir_add_plugin(OrbitBassCabBuilderPlugin assets/logo CabIrData Cirb
+            PRODUCT "Orbit Bass Cab Builder" BUNDLE com.darwinscat.orbitbasscabbuilder.plugin
+            DESCRIPTION "Bass cabinet IR generator and cab sim")
         if(CABIR_GUITAR_APP)
-            cabir_add_plugin(GuitarCabIrGeneratorPlugin assets/logo/guitar GuitarCabIrData Cirg GUITAR
-                PRODUCT "Guitar Cab IR Generator" BUNDLE com.darwinscat.guitarcabirgenerator.plugin)
+            cabir_add_plugin(OrbitGuitarCabBuilderPlugin assets/logo/guitar GuitarCabIrData Cirg GUITAR
+                PRODUCT "Orbit Guitar Cab Builder" BUNDLE com.darwinscat.orbitguitarcabbuilder.plugin
+                DESCRIPTION "Guitar cabinet IR generator and cab sim")
         endif()
     endif()
 endif()

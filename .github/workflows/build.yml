@@ -67,9 +67,9 @@ jobs:
       - uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: CabIrGenerator-Windows
+          name: OrbitBassCabBuilder-Windows
           if-no-files-found: ignore
-          path: build/CabIrGenerator_artefacts/Release/*.exe
+          path: build/OrbitBassCabBuilder_artefacts/Release/*.exe
 
   linux:
     runs-on: ubuntu-latest
@@ -126,7 +126,7 @@ jobs:
           ./build-native/irdump --compare native.bin wasm.bin
       - uses: actions/upload-artifact@v7
         with:
-          name: CabIrGenerator-web
+          name: cabir-web
           path: |
             build-web/cabir.mjs
             build-web/cabir.wasm

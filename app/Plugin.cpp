@@ -79,7 +79,7 @@ Plugin::~Plugin()
 
 const juce::String Plugin::getName() const
 {
-    return flavour::name;
+    return flavour::product;
 }
 
 juce::String Plugin::format() const
@@ -204,7 +204,7 @@ void Plugin::keepWorkspace (const juce::String& xml, const std::string& state)
 
 void Plugin::getStateInformation (juce::MemoryBlock& out)
 {
-    juce::ValueTree t ("CabIrGenerator");
+    juce::ValueTree t ("OrbitCabBuilder");
     {
         std::lock_guard<std::mutex> lock (keeping);
         t.setProperty ("workspace", kept, nullptr);
@@ -221,7 +221,7 @@ void Plugin::setStateInformation (const void* data, int size)
     if (xml == nullptr)
         return;
     const auto t = juce::ValueTree::fromXml (*xml);
-    if (! t.hasType ("CabIrGenerator"))
+    if (! t.hasType ("OrbitCabBuilder"))
         return;
     const auto state = t.getProperty ("state").toString().toStdString();
     {

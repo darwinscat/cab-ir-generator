@@ -138,7 +138,7 @@ int main()
     // as a pedal takes it — its header saying so, its length exact, its end faded to nothing.
     {
         const auto table = cabir::synth::readTable (CABIR_TABLE);
-        const cabir::synth::WavMeta meta { "test", "Darwin's Cat", "Cab IR Generator", "", "" };
+        const cabir::synth::WavMeta meta { "test", "Darwin's Cat", "Orbit Bass Cab Builder", "", "" };
         const auto usual = cabir::downloadWav (table, full, {}, meta);
         const auto was = cabir::synth::wav24 (cabir::synth::PairRenderer {}.render (table, full.box, cabir::synth::pairOf (full)).mix, 48000, &meta);
         check (usual == was, "the usual format is the WAV it always was");

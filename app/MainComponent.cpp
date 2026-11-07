@@ -66,7 +66,7 @@ namespace
     {
         // A plugin's settings apart from the app's, so neither writes over what the other kept.
         juce::PropertiesFile::Options o;
-        o.applicationName     = flavour::plugin ? juce::String (flavour::name) + " Plugin" : juce::String (flavour::product);
+        o.applicationName     = flavour::plugin ? juce::String (flavour::product) + " Plugin" : juce::String (flavour::product);
         o.filenameSuffix      = ".settings";
         o.folderName          = "Darwin's Cat";
         o.osxLibrarySubFolder = "Application Support";
@@ -82,7 +82,7 @@ namespace
     felitronics::appkit::VersionBadge::Config about()
     {
         felitronics::appkit::VersionBadge::Config c;
-        c.productName = flavour::name;
+        c.productName = flavour::product;
         c.productUrl  = productUrl;
         c.gitHash     = CABIR_GIT_HASH;
         c.os          = juce::SystemStats::getOperatingSystemName();
@@ -106,7 +106,7 @@ namespace
 
 MainComponent::MainComponent (Session* host)
     : session (host),
-      checker ({ .ownerRepo = "darwinscat/cab-ir-generator", .productName = flavour::name, .currentVersion = CABIR_VERSION,
+      checker ({ .ownerRepo = "darwinscat/cab-ir-generator", .productName = flavour::product, .currentVersion = CABIR_VERSION,
                  .settings = [this] { return properties.getUserSettings(); } }),
       badge (checker, about(), host != nullptr ? host->format() : juce::String ("Standalone")),
       history (felitronics::appkit::CompareHistory::Mode::PerRegister,
@@ -125,7 +125,10 @@ MainComponent::MainComponent (Session* host)
 {
     properties.setStorageParameters (storage());
     if (session == nullptr)
+    {
+        carryFormerName();
         engine = std::make_unique<Engine>();
+    }
     mark = markOf();
     cat = catOf();
 
@@ -208,6 +211,27 @@ MainComponent::~MainComponent()
         properties.getUserSettings()->setValue ("workspace", history.toTree().toXmlString());
     }
     properties.saveIfNeeded();
+}
+
+void MainComponent::carryFormerName()
+{
+    // THE NAME IT HAD BEFORE (Flavour.h's `formerly`; the owner renamed the apps 07.11): on the first run under the new one
+    // its settings — the workspace, the window, the output, the sample — and the player's own presets come along, copied,
+    // the old files left where they were.
+    auto& now = *properties.getUserSettings();
+    auto before = storage();
+    before.applicationName = flavour::formerly;
+    if (! now.getFile().existsAsFile() && before.getDefaultFile().existsAsFile())
+    {
+        juce::PropertiesFile old (before);
+        now.addAllPropertiesFrom (old);
+        now.saveIfNeeded();
+    }
+    const auto folder = presetFolder();
+    const auto former = folder.getParentDirectory().getParentDirectory().getChildFile (flavour::formerly).getChildFile ("Presets");
+    if (! folder.exists() && former.isDirectory() && folder.createDirectory())
+        for (const auto& f : former.findChildFiles (juce::File::findFiles, false, "*.toml"))
+            f.copyFileTo (folder.getChildFile (f.getFileName()));
 }
 
 void MainComponent::loadWorkspace (const juce::String& xml)
@@ -719,7 +743,7 @@ synth::WavMeta MainComponent::metaOf (const State& s) const
     // line says it; the link that opens it on the page; and its TOML, named the same.
     synth::WavMeta meta;
     meta.name = (presetName.isNotEmpty() && toToml (s) == presetText ? presetName : CabPicker::labelOf (s)).toStdString();
-    meta.software = std::string (flavour::name) + " " + CABIR_VERSION;
+    meta.software = std::string (flavour::product) + " " + CABIR_VERSION;
     meta.comment = std::string (flavour::page) + "#" + linkOf (s);   // its own page: the bass's, or the guitar's
     meta.preset = "name = \"" + meta.name + "\"\n\n" + toToml (s);
     return meta;
@@ -843,7 +867,7 @@ juce::Rectangle<int> MainComponent::presetArea() const
 juce::Rectangle<int> MainComponent::brandLink() const
 {
     const float h = (float) brandH;
-    const float right = h * 2.0f + 18.0f + look().trackedWidth (flavour::name, look().font (h * nameShare), 0.0f) + 6.0f;
+    const float right = h * 2.0f + 18.0f + look().trackedWidth (flavour::product, look().font (h * nameShare), 0.0f) + 6.0f;
     return { 0, 0, juce::roundToInt (right), brandH };
 }
 
@@ -907,9 +931,9 @@ void MainComponent::paint (juce::Graphics& g)
             mark->drawWithin (g, juce::Rectangle<float> (h + 6.0f, 4.0f, h - 8.0f, h - 8.0f), juce::RectanglePlacement::centred, 1.0f);
         // The name high, the byline under it, its right edge under the name's last word.
         const auto name = look().font (h * nameShare), by = look().font (h * 0.25f);
-        const float x = h * 2.0f + 18.0f, nameW = look().trackedWidth (flavour::name, name, 0.0f);
+        const float x = h * 2.0f + 18.0f, nameW = look().trackedWidth (flavour::product, name, 0.0f);
         g.setColour (brandHover ? juce::Colours::white : look().tx);
-        look().drawTracked (g, flavour::name,{ x, b.getY() + 5.0f, nameW + 4.0f, h * 0.5f }, name, 0.0f, juce::Justification::centredLeft);
+        look().drawTracked (g, flavour::product,{ x, b.getY() + 5.0f, nameW + 4.0f, h * 0.5f }, name, 0.0f, juce::Justification::centredLeft);
         g.setColour (brandHover ? look().violet.brighter (0.3f) : look().violet);
         look().drawTracked (g, "by Darwin's Cat", { x, b.getY() + h * 0.54f, nameW, h * 0.36f }, by, 0.0f, juce::Justification::centredRight);
 
