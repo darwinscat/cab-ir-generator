@@ -1,0 +1,27 @@
+name = "1x12 PORTED: SM57+RIBBON"
+style = "Typical"
+cabir = 1
+box = "1x12-open"
+back = "ported"
+horn = false
+horn_db = 0
+blend = 0.350
+align = true
+invert = false
+
+[mic.a]
+on = true
+model = "sm57"
+x = -0.150
+y = -0.150
+distance = 0.038
+angle = 0.0
+
+[mic.b]
+on = true
+model = "ribbon"
+x = -0.825
+y = -0.275
+distance = 0.090
+angle = 0.0
+shift = 0.025

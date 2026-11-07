@@ -1,0 +1,27 @@
+name = "2x12 HALF: SM57+RIBBON"
+style = "Typical"
+cabir = 1
+box = "2x12-open"
+back = "half"
+horn = false
+horn_db = 0
+blend = 0.200
+align = true
+invert = false
+
+[mic.a]
+on = true
+model = "sm57"
+x = 0.000
+y = 0.300
+distance = 0.018
+angle = 0.0
+
+[mic.b]
+on = true
+model = "ribbon"
+x = -0.825
+y = 0.275
+distance = 0.054
+angle = 0.0
+shift = 0.375

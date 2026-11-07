@@ -1,0 +1,117 @@
+# THE TYPICAL CABINETS the guitar's page names, one per construction: a box, its back — each box with its own, and the
+# others it is built with too — by how it is built, never by a maker's model. No box of the guitar's has a horn: off on
+# every one. A box by its size where the size is one box's; the two 2x12s by the table's names, the tall one named
+# here as well, the size alone naming neither. Mics are not here: tools/cabpack spreads them as the presets' are
+# (synth/PairSpread.h), the guitar's DEFAULT's SM57 and B the ribbon.
+
+# 4x12: sealed, or its back half open
+[[cab]]
+id = "4x12-closed"
+box = "4x12"
+back = "closed"
+horn = "off"
+
+[[cab]]
+id = "4x12-half"
+box = "4x12"
+back = "half"
+horn = "off"
+
+# 2x12, the tall one: half closed, sealed, open
+[[cab]]
+id = "2x12-vertical-half"
+box = "2x12-vertical"
+back = "half"
+horn = "off"
+name = "2x12 VERTICAL HALF: SM57+RIBBON"
+
+[[cab]]
+id = "2x12-vertical-closed"
+box = "2x12-vertical"
+back = "closed"
+horn = "off"
+name = "2x12 VERTICAL CLOSED: SM57+RIBBON"
+
+[[cab]]
+id = "2x12-vertical-open"
+box = "2x12-vertical"
+back = "open"
+horn = "off"
+name = "2x12 VERTICAL OPEN: SM57+RIBBON"
+
+# 2x12, the wide one: open, sealed, half closed
+[[cab]]
+id = "2x12-open"
+box = "2x12-open"
+back = "open"
+horn = "off"
+
+[[cab]]
+id = "2x12-closed"
+box = "2x12-open"
+back = "closed"
+horn = "off"
+
+[[cab]]
+id = "2x12-half"
+box = "2x12-open"
+back = "half"
+horn = "off"
+
+# 1x12: open, sealed, half closed, ported
+[[cab]]
+id = "1x12-open"
+box = "1x12"
+back = "open"
+horn = "off"
+
+[[cab]]
+id = "1x12-closed"
+box = "1x12"
+back = "closed"
+horn = "off"
+
+[[cab]]
+id = "1x12-half"
+box = "1x12"
+back = "half"
+horn = "off"
+
+[[cab]]
+id = "1x12-ported"
+box = "1x12"
+back = "ported"
+horn = "off"
+
+# 4x10: open, half closed
+[[cab]]
+id = "4x10-open"
+box = "4x10"
+back = "open"
+horn = "off"
+
+[[cab]]
+id = "4x10-half"
+box = "4x10"
+back = "half"
+horn = "off"
+
+# 2x10: open, sealed
+[[cab]]
+id = "2x10-open"
+box = "2x10"
+back = "open"
+horn = "off"
+
+[[cab]]
+id = "2x10-closed"
+box = "2x10"
+back = "closed"
+horn = "off"
+
+# 1x10: open
+[[cab]]
+id = "1x10-open"
+box = "1x10"
+back = "open"
+horn = "off"
