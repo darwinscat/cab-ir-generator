@@ -103,6 +103,7 @@ public:
         float shiftMs = 0.0f;   // B moved in time against A, ms, later positive (TIME)
         int speaker = -1;   // the box's speaker as the player turned it — an index of the catalog's speakers — or -1, its own
         bool wall = false;  // the wall behind the box, the guitar's switch (WALL)
+        bool cone = false;  // the speakers' cone as the catalog's variant has it (the guitar's PAPER, SPEAKER clicked)
     };
 
     struct Cab
@@ -143,6 +144,9 @@ public:
         std::vector<int> backRow;
         // WALL under BACK, the switch for a wall behind the box (the guitar's): false, none (the bass's).
         bool wallSwitch = false;
+        // The speakers' other cone, its table's "speaker-<name>-<variant>" sections — SPEAKER itself the switch, lit
+        // where it is on (the guitar's "paper"); empty, none.
+        ui::String coneVariant;
     };
 
     static const Catalog& bassCatalog()
@@ -278,7 +282,8 @@ public:
         const auto spot = [&s] (const Mic& m)
         { return Spot { (float) m.x, (float) m.y, (float) m.distance, s.horn, ui::String (m.model), (float) m.angle, (float) s.hornDb }; };
         return { indexOf (ui::String (s.box)), { spot (s.a), spot (s.b), (float) s.blend, s.align, s.invert, s.a.on, s.b.on, s.back,
-                                                   (float) s.shiftMs, catalog().speakers.indexOf (ui::String (s.speaker)), s.wall } };
+                                                   (float) s.shiftMs, catalog().speakers.indexOf (ui::String (s.speaker)), s.wall,
+                                                   ! s.cone.empty() } };
     }
 
     /** A STATE AS A LINE READS IT: its box's size, its back where turned from the box's own, and the mics heard —
@@ -292,7 +297,7 @@ public:
         const auto box = at < 0 ? ui::String (s.box)
                        : wordOf (at) + (s.back >= 0 && s.back != ownBack (at) ? " " + ui::String (backWords[s.back]) : ui::String())
                              + (speaker >= 0 && speaker != ownSpeaker (at) ? " " + catalog().speakerWords[speaker] : ui::String())
-                             + (s.wall ? " WALL" : "");
+                             + (s.wall ? " WALL" : "") + (s.cone.empty() ? ui::String() : " " + ui::String (s.cone).toUpperCase());
         return box + ui::String::fromUTF8 (" \xc2\xb7 ")
              + (s.a.on ? word (s.a) : ui::String()) + (s.a.on && s.b.on ? "+" : "") + (s.b.on ? word (s.b) : ui::String());
     }
@@ -306,6 +311,8 @@ public:
         if (su.speaker >= 0 && su.speaker < catalog().speakers.size())
             s.speaker = catalog().speakers[su.speaker].toStdString();
         s.wall = su.wall;
+        if (su.cone && ! catalog().coneVariant.isEmpty())
+            s.cone = catalog().coneVariant.toStdString();
         s.horn = su.a.horn;
         s.hornDb = su.a.hornDb;
         s.a = mic (su.a, su.aOn);
@@ -523,7 +530,7 @@ private:
 
     /** WHAT A CLICK AT A POINT WORKS — the one thing both the hand's light and its press go by (hotAt), so what is lit is
         what a click does. */
-    enum class Part { none, download, downloadFormat, back, speaker, wall, cab, cabHorn, horn, distance, place, micRow, angle, shift, mic, close, reset, find,
+    enum class Part { none, download, downloadFormat, back, speaker, speakerCone, wall, cab, cabHorn, horn, distance, place, micRow, angle, shift, mic, close, reset, find,
                       align, invert, blend };
     struct Hot
     {
@@ -892,7 +899,9 @@ private:
             // ...the wall behind it, where the catalog has the switch...
             if (chosen >= 0 && catalog().wallSwitch && wallArea().expanded (4.0f, 2.0f).contains (p))
                 return { Part::wall };
-            // ...and its speaker, where it has a row of them.
+            // ...and its speaker, where it has a row of them — SPEAKER itself the cone's switch, where there is a variant.
+            if (chosen >= 0 && hasSpeakers() && catalog().coneVariant.isNotEmpty() && speakerWordArea().expanded (4.0f, 2.0f).contains (p))
+                return { Part::speakerCone };
             if (chosen >= 0 && hasSpeakers())
                 for (int i = 0; i < catalog().speakers.size(); ++i)
                     if (speakerCell (i).expanded (speakerGap / 2, 2.0f).contains (p))
@@ -975,6 +984,12 @@ private:
             // The back: kept as turned, its own one too, so every box after comes with it.
             case Part::back:
                 setup_.back = backAt (h.i);
+                send();
+                return;
+
+            // The speakers' other cone, on and off; kept from box to box as the speaker is.
+            case Part::speakerCone:
+                setup_.cone = ! setup_.cone;
                 send();
                 return;
 
@@ -1196,7 +1211,8 @@ private:
         // Under it the speakers, where the catalog has them: SPEAKER, then their words, the box's own dotted as its back is.
         if (chosen >= 0 && hasSpeakers())
         {
-            g.setColour (ui::look().txFaint);
+            // SPEAKER, the cone's switch where the catalog has a variant: orange with it on, lit under the hand.
+            g.setColour (setup_.cone ? ui::look().orange : isHot (Part::speakerCone) ? ui::look().tx : ui::look().txFaint);
             ui::look().drawTracked (g, "SPEAKER", speakerWordArea(), font, 0.08f, ui::Justification::centredLeft);
             for (int i = 0; i < catalog().speakers.size(); ++i)
             {

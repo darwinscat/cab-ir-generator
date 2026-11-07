@@ -24,6 +24,8 @@ std::string toToml (const State& s)
         (void) root.insert ("speaker", t::Value (s.speaker));
     if (s.wall)
         (void) root.insert ("wall", t::Value (true));
+    if (! s.cone.empty())
+        (void) root.insert ("cone", t::Value (s.cone));
     (void) root.insert ("horn", t::Value (s.horn));
     (void) root.insert ("horn_db", t::Value ((std::int64_t) std::lround (s.hornDb)));
     (void) root.insert ("blend", decimal (s.blend, 3));
@@ -73,6 +75,7 @@ std::optional<State> fromToml (std::string_view text)
         in.optional ("back", back);
         in.optional ("speaker", s.speaker);
         in.optional ("wall", s.wall);
+        in.optional ("cone", s.cone);
         in.optional ("horn", s.horn);
         in.optional ("horn_db", hornDb, { -12, 0 });
         in.optional ("blend", s.blend, { 0.0, 1.0 });

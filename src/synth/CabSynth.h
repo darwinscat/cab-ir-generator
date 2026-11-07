@@ -303,6 +303,11 @@ struct Cab
     // A second section over it (woofer_lowpass_second = Hz/Q): a guitar's cone, flat to its knee and falling off a cliff
     // past it, which one second-order section cannot draw. 0, none — the bass's.
     double wooferLp2 = 0, wooferQ2 = 0.707;
+    // The paper's way past its breakup (cone_decouple_floor, the guitar's PAPER cone): what of the cone lets go keeps
+    // `floor` of its motion, but scattered — each patch late by its own 0..floorJitterMs (fixed per patch, no draw) —
+    // and falling off at the knee (floorHz, cone_floor_lowpass_hz, the woofer's lowpass by default). Not a piston's: it
+    // does not sum in step at a far mic, nor cancel in step at a near one. 0, none — the bass's.
+    double floor = 0, floorJitterMs = 0.3, floorHz = 0;
     std::vector<std::vector<Mode>> modes;   // per driver
     std::vector<double> sens;               // per driver, linear
     // box
@@ -373,6 +378,9 @@ inline Cab build (const Section& s)
 
     c.wooferLp = num (s, "woofer_lowpass_hz", 5000);
     c.wooferQ = num (s, "woofer_envelope_Q", 0.707);
+    c.floor = num (s, "cone_decouple_floor", 0);
+    c.floorJitterMs = num (s, "cone_floor_jitter_ms", 0.3);
+    c.floorHz = num (s, "cone_floor_lowpass_hz", 0) > 0 ? num (s, "cone_floor_lowpass_hz", 0) : c.wooferLp;
     if (const auto second = nums (str (s, "woofer_lowpass_second")); second.size() >= 2)
     {
         c.wooferLp2 = second[0];
@@ -617,6 +625,17 @@ inline std::vector<double> render (const Cab& c, size_t n, size_t threads = 0)
     // The four edges of the baffle, each a weak inverted source fed by the first cone, at the edge's nearest point.
     const Xy edges[4] { { -c.bw / 2, t.y }, { c.bw / 2, t.y }, { t.x, -c.bh / 2 }, { t.x, c.bh / 2 } };
 
+    // The paper's scatter, once: each patch's own lateness, from its place alone (a hash, not the seeded draws).
+    std::vector<std::vector<double>> floorTau (patches.size());
+    if (c.floor > 0)
+        for (size_t d = 0; d < patches.size(); ++d)
+            for (size_t i = 0; i < patches[d].size(); ++i)
+            {
+                uint32_t h = (uint32_t) (d * 7919u + i * 104729u + 1u);
+                h ^= h >> 16; h *= 0x7feb352du; h ^= h >> 15; h *= 0x846ca68bu; h ^= h >> 16;
+                floorTau[d].push_back ((double) h / 4294967296.0 * c.floorJitterMs * 1e-3);
+            }
+
     // Each mode's shape at each patch, once: a position weighs a mode, it does not move it.
     std::vector<std::vector<std::vector<double>>> shape (patches.size());
     for (size_t d = 0; d < patches.size(); ++d)
@@ -730,6 +749,9 @@ inline std::vector<double> render (const Cab& c, size_t n, size_t threads = 0)
                 const double let = p.rho * f / c.decoupleHz;
                 // The modes ride on what the cone carries there: above its breakup they are most of what it does.
                 cd v = 1.0 / (1 + let * let);
+                if (c.floor > 0)   // the paper's: what let go keeps a share of its motion, scattered in time
+                    v += c.floor / (1 + (f / c.floorHz) * (f / c.floorHz)) * (let * let / (1 + let * let))
+                       * std::polar (1.0, -2 * pi * f * floorTau[d][pi_]);
                 for (size_t m = 0; m < res.size(); ++m)
                     v += res[m] * shape[d][m][pi_];
                 v *= held;
@@ -899,6 +921,8 @@ struct Spot
     int back = -1;      // -1 the table's; 0 closed, 1 ported, 2 open (Back)
     std::string speaker;   // a "speaker-<name>" section laid over the cabinet's own speaker, or empty for its own
     bool wall = false;     // the wall behind the box the table places (back_wall_m), the guitar's switch: off, none
+    std::string cone;      // a variant of the speaker's cone, its "speaker-<name>-<cone>" section laid over it (the guitar's
+                           // "paper"), or empty for the speaker as it is
 };
 
 /** THE BOX'S BACK, turned: closed, the cone on the air inside alone; ported, the port tuned as the table tunes it —
@@ -916,6 +940,9 @@ inline Cab cabAt (const Table& table, const std::string& cab, const Spot& spot, 
     auto s = resolve (table, cab + " cap");
     if (! spot.speaker.empty())
         for (auto& [k, v] : resolve (table, "speaker-" + spot.speaker))
+            s[k] = v;
+    if (! spot.cone.empty())   // the speaker's cone as its variant has it: the box's own speaker's (speaker_name) or the one laid over
+        for (auto& [k, v] : resolve (table, "speaker-" + (spot.speaker.empty() ? str (s, "speaker_name") : spot.speaker) + "-" + spot.cone))
             s[k] = v;
     if (! spot.mic.empty())
         for (auto& [k, v] : resolve (table, "mic-" + spot.mic))
@@ -1043,6 +1070,7 @@ public:
         bSpot.back = p.a.back;
         bSpot.speaker = p.a.speaker;
         bSpot.wall = p.a.wall;
+        bSpot.cone = p.a.cone;
         auto ca = cabAt (table, cab, p.a, rate), cb = cabAt (table, cab, bSpot, rate);
         const double da = firstArrival (ca), db = firstArrival (cb), first = std::min (da, db);
         ca.refDelay = p.align ? da : first;
@@ -1098,7 +1126,7 @@ private:
         char text[256];
         std::snprintf (text, sizeof text, "|%.6f|%.6f|%.6f|%d|%.4f|%.4f|%d|%.12g|%zu|%.0f|", s.x, s.y, s.distance, s.horn ? 1 : 0,
                        s.angle, s.hornDb, s.back, refDelay, n, rate);
-        return cab + "|" + s.mic + "|" + s.speaker + (s.wall ? "|wall" : "|") + text;
+        return cab + "|" + s.mic + "|" + s.speaker + (s.wall ? "|wall|" : "||") + s.cone + text;
     }
 
     static const std::vector<double>& irOf (Kept& kept, const std::string& key, const Cab& c, size_t n)
@@ -1136,6 +1164,7 @@ inline Pair pairOf (const State& s)
         p.back = s.back;
         p.speaker = s.speaker;
         p.wall = s.wall;
+        p.cone = s.cone;
         return p;
     };
     Pair pair { spot (s.a), spot (s.b), s.blend, s.align, s.invert, s.shiftMs / 1000.0 };

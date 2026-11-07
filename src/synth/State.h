@@ -35,6 +35,7 @@ struct State
     int back = -1;
     std::string speaker;
     bool wall = false;   // the wall behind the box, the guitar's: heard where the back lets sound out
+    std::string cone;    // the speaker's cone as a variant of it has it (the guitar's "paper"), empty as it is
     bool horn = true;
     double hornDb = 0;
     Mic a { true, "", -0.3, 0, 0.05, 0 }, b { false, "u87", 0.4, 0, 0.25, 0 };   // A a little left of the cap, B right of it
