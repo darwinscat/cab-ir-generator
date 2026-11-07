@@ -15,6 +15,8 @@ All notable changes to **Orbit Bass Cab Builder** and **Orbit Guitar Cab Builder
   half-closed back (HALF), a wall behind an open box (WALL), the mic up to a metre and a half off (ROOM at one metre).
   Its own name, icon, settings, presets folder and page, darwinscat.com/felitronics/orbit-guitar-cab-builder. The bass's
   app sounds exactly as it did.
+- **The guitar's presets**: 160 in eight styles, Blues, Classic Rock, Hard Rock, Metal, Modern Metal, Punk, Indie and
+  Clean, twenty each, every box, speaker, back and room among them; and 17 typical cabinets, one per construction.
 - **The plugins**, VST3, AU and CLAP, for both: the same window in your DAW, the track played through the cabinet,
   mono or stereo, with no latency. The DAW's project keeps A/B/C/D with their histories and the window's size, and the
   cabinet plays with the window closed. HEAR, FIND, the presets (the app's own, from the same folder) and DOWNLOAD IR
