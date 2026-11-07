@@ -9,7 +9,7 @@
 <style>
 @font-face { font-family: Michroma; src: url(Michroma-web.woff2) format('woff2'); }
 html, body { margin: 0; background: #111119; }
-canvas { display: block; width: 906px; height: 492px; touch-action: none; }
+canvas { display: block; width: 960px; height: 446px; touch-action: none; }
 #format { position: absolute; display: none; background: #15151f; border: 1px solid #ff8a3d; border-radius: 4px; padding: 6px;
           font: 13px sans-serif; color: #ece9f6; }
 </style></head>
@@ -23,7 +23,7 @@ canvas { display: block; width: 906px; height: 492px; touch-action: none; }
 import createCabir from './cabir.mjs';
 import { PanelCanvas } from './cabir-panel.mjs';
 
-const W = 906, H = 492, scale = Math.max (2, Math.ceil (devicePixelRatio));
+const W = 960, H = 446, scale = Math.max (2, Math.ceil (devicePixelRatio));
 await document.fonts.load ('20px Michroma');
 const m = await createCabir ();
 const call = (name, ret, types, args) => m.ccall (name, ret, types, args);

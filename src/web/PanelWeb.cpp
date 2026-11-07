@@ -4,7 +4,7 @@
 // THE PANEL FOR A PAGE: the app's own panel (src/panel/Panel.h), drawn into a buffer of drawing calls a canvas plays
 // (src/web/cabir-panel.mjs plays them as the app's JUCE does), the hand's moves handed in, what it asks handed out.
 //
-//   cabir_panel_size (w, h)                    its size in the panel's units (906 x 492 the app's, no foot)
+//   cabir_panel_size (w, h)                    its size in the panel's units (960 x 446 the app's, no foot)
 //   cabir_panel_options (find, download, def, close)   which buttons it offers — 1 each for the app's: 1, 1, 0, 0
 //   cabir_panel_show (toml)                    what plays: the state, as the synthesis takes it
 //   cabir_panel_response (now, before, comb)   the band's curves, cabir_points() floats each; null for none
