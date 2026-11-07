@@ -167,9 +167,8 @@ public:
         // Where the response's line reddens with a pit, dB — the bass's 3; the guitar's 5, its speakers' own dips deeper
         // (the owner, 07.11). The table says the same (pit_red_db, synth::pitRedOf) for FIND and the tools.
         float pitRedDb = 3.0f;
-        // Its instrument's name, big and outlined at the response's top left, so it reads at a glance which builder this
-        // is (the owner, 07.11).
-        ui::String instrumentWord = "BASS";
+        // Its name as a watermark across the response, so it reads at a glance which builder this is (the owner, 07.11).
+        ui::String instrumentWord = "BASS CAB";
     };
 
     static const Catalog& bassCatalog()
@@ -2356,18 +2355,18 @@ private:
         return responseArea().toFloat().withTrimmedLeft (36.0f).withTrimmedRight (12.0f).withTrimmedTop (9.0f).withTrimmedBottom (20.0f);
     }
 
-    /** THE INSTRUMENT'S NAME across the response, a watermark — BASS, GUITAR, big, solid and pale, under the curve, the
-        comb's colours and the grid — so the two builders are never taken one for the other (the owner, 07.11); paler
-        still while the hand is over the response, the curve read there. */
+    /** THE INSTRUMENT'S NAME across the response, a watermark — BASS CAB, GUITAR CAB, big, solid and pale, under the curve,
+        the comb's colours and the grid — so the two builders are never taken one for the other (the owner, 07.11);
+        brighter while the hand is over the response. */
     void paintInstrument (ui::Graphics& g, ui::Rectangle<float> plot) const
     {
         const float e = responseFade * responseFade * (3.0f - 2.0f * responseFade);   // eased in and out
-        g.setColour (ui::look().violet.withAlpha (instrumentAlpha * (1.0f - 0.65f * e)));
+        g.setColour (ui::look().violet.withAlpha (instrumentAlpha + (instrumentAlphaOver - instrumentAlpha) * e));
         ui::look().drawTracked (g, catalog().instrumentWord, plot, ui::look().font (instrumentSize), 0.08f, ui::Justification::centred);
     }
-    static constexpr float instrumentSize = 102.0f, instrumentAlpha = 0.13f;
+    static constexpr float instrumentSize = 102.0f, instrumentAlpha = 0.09f, instrumentAlphaOver = 0.16f;
 
-    /** The hand over the response, and the watermark's fade toward it: 0 none .. 1 whole, a quarter of a second. */
+    /** The hand over the response, and the watermark brightening toward it: 0 none .. 1 whole, a quarter of a second. */
     bool overResponse = false;
     float responseFade = 0.0f;
     static constexpr float responseFadeSeconds = 0.25f;
