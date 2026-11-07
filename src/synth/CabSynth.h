@@ -1155,6 +1155,15 @@ inline double pitRedOf (const Table& table, const std::string& cab)
     return num (resolve (table, cab + " cap"), "pit_red_db", 3.0);
 }
 
+/** WHERE A PAIR'S COMB REDDENS FROM combTopHz UP, dB: the table's comb_top_red_db — the guitar's 6, up there a comb a
+    tone of its own, the second mic's phase colour (the owner, 07.11) — else 3, as under it, where a comb thins the low
+    notes. The panel's line, FIND and the presets' tools judge a comb by it. */
+constexpr double combTopHz = 2000.0;
+inline double combTopRedOf (const Table& table, const std::string& cab)
+{
+    return num (resolve (table, cab + " cap"), "comb_top_red_db", 3.0);
+}
+
 /** When the first sound reaches the mic: the nearest patch of the nearest cone, s. */
 inline double firstArrival (const Cab& c)
 {
@@ -1381,7 +1390,7 @@ public:
     struct Judged { double score = -1e30, shiftMs = 0; };   // -1e30: not judged
 
     BSearch (const Table& t, const State& s, size_t size = 1 << 13)
-        : table (t), state (s), n (size)
+        : table (t), state (s), n (size), topSlack (combTopRedOf (t, s.box) - 3.0)
     {
         both = s;
         both.a.on = both.b.on = true;
@@ -1483,7 +1492,9 @@ public:
                 double e = 1e-30;
                 for (size_t k = lo; k <= hi; ++k)
                     e += std::norm (a[k] + b[k] * std::polar (1.0, -2 * pi * (double) k * bin * tau));
-                sum += std::min (10 * std::log10 (e / apart[i]), 0.0) * (hzOf[i] <= 2000.0 ? 1.0 : 0.8);
+                // From combTopHz up a comb counts only past what the table lets it cancel there (combTopRedOf).
+                const double cancel = 10 * std::log10 (e / apart[i]);
+                sum += hzOf[i] <= combTopHz ? std::min (cancel, 0.0) : std::min (cancel + topSlack, 0.0) * 0.8;
             }
             if (sum > bestSum + 1e-9 || (std::abs (sum - bestSum) < 1e-9 && std::abs (tau) < std::abs (bestShift)))
             {
@@ -1500,6 +1511,7 @@ private:
     const Table& table;
     State state, both;
     size_t n;
+    double topSlack;   // dB a comb may cancel from combTopHz up past the 3 under it: the guitar's 3, the bass's none
     Pair pair;
     Cab ca;
     double da = 0;

@@ -12,6 +12,10 @@ tail_fade_ms = 15
 # Where the panel's line reddens with a pit, and FIND and the presets' tools judge one: 5 dB, the speakers' own dips
 # running deeper than a bass's (the owner, 07.11; the panel's catalog says the same, GuitarCatalog.h).
 pit_red_db = 5
+# Where a pair's comb reddens from 2 kHz up: 6 dB — up there a comb is a tone of its own, the classic second mic's phase
+# colour, not a fault; under 2 kHz 3, as the bass's, where it thins the low notes (the owner, 07.11; the panel's catalog
+# says the same, GuitarCatalog.h).
+comb_top_red_db = 6
 cone_fixed_mass_fraction = 0.4
 mode_spacing_jitter_fraction = 0.3
 mode_axisymmetric_share = 0.8

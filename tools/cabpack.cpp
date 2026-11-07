@@ -152,7 +152,7 @@ namespace
         it falls into and its two mics cancelling there — and, with two mics heard, where they meet (synth::combOf). */
     struct Curve { std::vector<float> db, bad, comb; };
 
-    Curve curveOf (const synth::PairParts& parts, double rate, double pitRed)
+    Curve curveOf (const synth::PairParts& parts, double rate, double pitRed, double combTopRed)
     {
         Curve c;
         c.db = synth::responseOf (synth::as24Bit (parts.mix), rate);
@@ -162,8 +162,8 @@ namespace
         if (! parts.a.empty())
         {
             c.comb = synth::combOf (parts.a, parts.b, rate);
-            for (size_t i = 0; i < c.bad.size() && i < c.comb.size(); ++i)
-                c.bad[i] = std::max (c.bad[i], -c.comb[i]);
+            for (size_t i = 0; i < c.bad.size() && i < c.comb.size(); ++i)   // from 2 kHz up as the table lets a comb cancel
+                c.bad[i] = std::max (c.bad[i], -c.comb[i] - (synth::responseHz ((int) i) >= synth::combTopHz ? (float) (combTopRed - 3.0) : 0.0f));
         }
         return c;
     }
@@ -318,9 +318,22 @@ namespace
         out += "<line x1=\"" + f (x) + "\" y1=\"" + f (at - 4) + "\" x2=\"" + f (x + 12) + "\" y2=\"" + f (at - 4)
              + "\" stroke=\"#3fae6a\" stroke-width=\"2\"/><line x1=\"" + f (x + 12) + "\" y1=\"" + f (at - 4) + "\" x2=\"" + f (x + 24)
              + "\" y2=\"" + f (at - 4) + "\" stroke=\"#d5455a\" stroke-width=\"2\"/>\n";
-        said ({ "The line: the cabinet's response at 48 kHz, levelled to its own 100 Hz to 5 kHz.",
-                bands ? "Green is fine; red falls 3 dB or more into a pit, or the two mics cancel there."
-                      : "Green is fine; red falls 3 dB or more into a pit." });
+        // The bass's 3 dB for both; the guitar's own where it reddens later (its catalog's pitRedDb, combTopRedDb).
+        if (std::abs (Panel::catalog().pitRedDb - 3.0f) < 0.01f && std::abs (Panel::catalog().combTopRedDb - 3.0f) < 0.01f)
+            said ({ "The line: the cabinet's response at 48 kHz, levelled to its own 100 Hz to 5 kHz.",
+                    bands ? "Green is fine; red falls 3 dB or more into a pit, or the two mics cancel there."
+                          : "Green is fine; red falls 3 dB or more into a pit." });
+        else
+        {
+            const auto pit = "Green is fine; red falls " + std::to_string ((int) std::lround (Panel::catalog().pitRedDb)) + " dB or more into a pit";
+            const auto comb = "or the two mics cancel 3 dB there, " + std::to_string ((int) std::lround (Panel::catalog().combTopRedDb))
+                            + " dB from 2 kHz up.";
+            const auto pitLine = bands ? pit + "," : pit + ".";
+            if (bands)
+                said ({ "The line: the cabinet's response at 48 kHz, levelled to its own 100 Hz to 5 kHz.", pitLine.c_str(), comb.c_str() });
+            else
+                said ({ "The line: the cabinet's response at 48 kHz, levelled to its own 100 Hz to 5 kHz.", pitLine.c_str() });
+        }
         if (bands)
         {
             out += "<rect x=\"" + f (x) + "\" y=\"" + f (at - 10) + "\" width=\"12\" height=\"12\" fill=\"#3fae6a\" fill-opacity=\"0.45\"/><rect x=\""
@@ -592,7 +605,7 @@ int main (int argc, char** argv)
                 const auto parts = synth::PairRenderer {}.render (table, it.state.box, synth::pairOf (it.state), r.n, r.hz);
                 const auto& ir = parts.mix;
                 if (r.drawn)
-                    curves.push_back (curveOf (parts, r.hz, synth::pitRedOf (table, it.state.box)));
+                    curves.push_back (curveOf (parts, r.hz, synth::pitRedOf (table, it.state.box), synth::combTopRedOf (table, it.state.box)));
                 // What each WAV says of itself (synth::WavMeta): its name, the link that opens it on the page, its preset.
                 synth::WavMeta meta;
                 meta.name = it.name;

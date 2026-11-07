@@ -44,6 +44,7 @@ inline const Panel::Catalog& guitarCatalog()
       30.0f, 0.30f,   // the mic as far as the bass's, 30 cm, ROOM there too — no room round the box (the owner, 07.11)
       {}, {},         // no ROOM row
       5.0f,     // the line reddens with a pit from 5 dB (the table's pit_red_db, the same)
+      6.0f,     // ...and with a comb from 2 kHz up at 6 dB (comb_top_red_db, the same)
       "GUITAR CAB" };   // the watermark across the response
     return guitar;
 }
