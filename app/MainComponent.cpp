@@ -395,7 +395,8 @@ int MainComponent::writeStills (const juce::File& folder, float scale)
 
     // Each box of the pile alone, as the pile draws it unchosen, for a page's list of sizes (the owner, 05.11): one scale
     // for all, so each stands as big as itself against the others — 420 px a metre, about three and a half times the
-    // pile's — on nothing, its tolex opaque; box-<size>.png (at `scale`) and box-<size>.svg in boxes/.
+    // pile's — on nothing, its tolex opaque; box-<size>.png (at `scale`) and box-<size>.svg in boxes/ — or, where two
+    // boxes of the pile share a size (the guitar's two 2x12s), box-<its table name>, so neither writes over the other.
     const auto boxes = folder.getChildFile ("boxes");
     if (! boxes.createDirectory())
         return failed + 1;
@@ -406,17 +407,22 @@ int MainComponent::writeStills (const juce::File& folder, float scale)
             const int i = Panel::indexOf (name);
             const auto& c = CabPicker::cabs()[(size_t) i];
             const float w = c.w * perMetre, h = c.h * perMetre;
+            int sharing = 0;
+            for (const auto& col : Panel::pile())
+                for (const auto& other : col)
+                    sharing += CabPicker::wordOf (Panel::indexOf (other)) == CabPicker::wordOf (i) ? 1 : 0;
+            const juce::String stem = "box-" + juce::String (sharing > 1 ? name.toRawUTF8() : CabPicker::wordOf (i).toRawUTF8());
             juce::Image image (juce::Image::ARGB, juce::roundToInt ((w + 2.0f * margin) * scale), juce::roundToInt ((h + 2.0f * margin) * scale), true);
             {
                 juce::Graphics g (image);
                 g.addTransform (juce::AffineTransform::scale (scale));
                 CabPicker::paintBox (g, i, { margin, margin, w, h });
             }
-            save (boxes.getChildFile ("box-" + CabPicker::wordOf (i) + ".png"), image);
+            save (boxes.getChildFile (stem + ".png"), image);
 
             // ...and as SVG beside it, at the same 420 px a metre: crisp at any size, lighter on a page.
             const auto svg = CabPicker::boxSvg (i, w + 2.0f * margin, h + 2.0f * margin, { margin, margin, w, h });
-            const auto file = boxes.getChildFile ("box-" + CabPicker::wordOf (i) + ".svg");
+            const auto file = boxes.getChildFile (stem + ".svg");
             file.deleteFile();
             juce::FileOutputStream out (file);
             if (! out.openedOk() || ! out.write (svg.data(), svg.size()))
