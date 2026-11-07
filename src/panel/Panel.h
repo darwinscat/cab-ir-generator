@@ -1979,15 +1979,26 @@ private:
     static constexpr Place places[] { { "CAP", 0.0f, 0.05f, 0.0f }, { "EDGE", 0.8f, 0.04f, 0.0f }, { "OFF", 0.5f, 0.05f, 35.0f } };
     static constexpr int placeCount = 3;
     static Place placeAt (int i) { return places[i]; }
+    /** Where a place puts mic `m` across the speaker, in radii — on the mic's own side, on the axis the side away from the
+        other mic while that one is on; a dark B where taking it up would stand it first (takeUp). */
+    ui::Point<float> placeSpot (int m, const Place& p) const
+    {
+        float x = mic (m).x;
+        if (m == 1 && ! heard (1) && std::hypot (setup_.b.x - setup_.a.x, setup_.b.y - setup_.a.y) < 0.4f)
+            x = ui::jmin (1.05f, setup_.a.x + 0.7f);
+        float side = x > 0.0f ? 1.0f : -1.0f;
+        if (std::abs (x) <= 0.05f)
+            side = mic (1 - m).x > 0.0f && heard (1 - m) ? -1.0f : 1.0f;
+        return { side * p.r, 0.0f };
+    }
+
     void putAt (int m, const Place& p)
     {
         takeUp (m);
+        const auto at = placeSpot (m, p);
         auto& sp = mic (m);
-        float side = sp.x > 0.0f ? 1.0f : -1.0f;
-        if (std::abs (sp.x) <= 0.05f)   // on the axis: the side away from the other mic, while that one is on
-            side = mic (1 - m).x > 0.0f && heard (1 - m) ? -1.0f : 1.0f;
-        sp.x = side * p.r;
-        sp.y = 0.0f;
+        sp.x = at.x;
+        sp.y = at.y;
         sp.distance = p.distance;
         sp.angle = p.angle;
         send();
@@ -2228,6 +2239,17 @@ private:
 
             // The hand's mic: its distance and its angle out beside it.
             paintHandles (g);
+
+            // A place under the hand (CAP, EDGE, OFF): where it would put its mic, a dot ringed in the mic's colour (the
+            // owner, 07.11).
+            if (hot.part == Part::place)
+            {
+                const auto to = placeSpot (hot.m, placeAt (hot.i));
+                const auto at = o + ui::Point<float> (to.x * R, -to.y * R);
+                g.setColour (colourOf (hot.m));
+                g.fillEllipse (ui::Rectangle<float> (7.0f, 7.0f).withCentre (at));
+                g.drawEllipse (ui::Rectangle<float> (16.0f, 16.0f).withCentre (at), 1.4f);
+            }
         }
 
         paintFind (g);
