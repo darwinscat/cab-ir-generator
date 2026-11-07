@@ -39,7 +39,7 @@ namespace
     }
 
     /** The product's page on the site, where every link the app offers leads (the owner, 05.11: none to GitHub). */
-    const juce::String productUrl = "https://darwinscat.com/felitronics/cab-ir-generator?utm_source=cab-ir-generator&utm_medium=app";
+    const juce::String productUrl = "https://darwinscat.com/felitronics/bass-cab-ir-generator?utm_source=cab-ir-generator&utm_medium=app";
 
     /** THE RIFFS THE APP CARRIES: Oleh's bass, played DI — the preamp already in it, so it goes straight into the cabinet —
         each a seamless loop (mono, 48 kHz, 24-bit FLAC), in the menu's order. The first plays until another is picked. */

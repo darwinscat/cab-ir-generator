@@ -7,7 +7,7 @@
 // and the server never sees which cabinet (the owner, 05.11) — opening the live panel on exactly that cabinet. The same
 // link is in every WAV the generator writes (synth::WavMeta), beside its preset's TOML.
 //
-//   https://darwinscat.com/felitronics/cab-ir-generator#cab=1&box=8x10&back=closed&horn=-6
+//   https://darwinscat.com/felitronics/bass-cab-ir-generator#cab=1&box=8x10&back=closed&horn=-6
 //       &a=md421,-0.3,0,5,0&b=u47,-0.65,0,12,0&blend=0.35&align=1&invert=0&shift=0
 //
 // cab — the link's own version, 1, first, so an older link still reads when the cabinet grows (an unknown key is passed
@@ -28,7 +28,9 @@
 namespace cabir
 {
 
-inline constexpr const char* pageAddress = "https://darwinscat.com/felitronics/cab-ir-generator";
+// The bass's page (the site moved it 07.11, the guitar's to come at /felitronics/guitar-cab-ir-generator; the old address
+// answers with a permanent redirect that keeps the #cab= part, so the WAVs already out still open).
+inline constexpr const char* pageAddress = "https://darwinscat.com/felitronics/bass-cab-ir-generator";
 
 namespace link
 {
