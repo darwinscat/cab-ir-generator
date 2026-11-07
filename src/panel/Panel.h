@@ -77,13 +77,15 @@ public:
             disarmDefault();
         timerCallback();
         stepMicZoom (dt);
+        stepBackZoom (dt);
         stepHandles (dt);
     }
 
     /** True while something moves on its own: a host ticks it then, and need not otherwise. */
     bool wantsFrames() const
     {
-        return ! downloadArea().isEmpty() || searchFade > 0.0f || defaultArmed || zoomMoving() || (handlesOf >= 0 && ! handHolds);
+        return ! downloadArea().isEmpty() || searchFade > 0.0f || defaultArmed || zoomMoving() || backZoomMoving()
+            || (handlesOf >= 0 && ! handHolds);
     }
 
     /** The size it is drawn for — small enough to open over a cabin's face too. */
@@ -504,6 +506,8 @@ public:
             zoomM = hot.m;
             zoomI = hot.i;
         }
+        if (backHot() >= 0)   // the cell it grows, as the hand comes on it
+            backZoomI = backHot();
         keepHandles (e.position);
         if (hot != was)
             repaint();
@@ -686,6 +690,27 @@ private:
     float searchFade = 0.0f;
     double searchEnded = 0;            // the host's clock when it was done; -1 until the tick after
 
+    /** A BACK'S CELL UNDER THE HAND (the owner, 07.11): the whole of it grown, the box cut through and its word, as a mic's
+        name grows its glyph but less — a third larger, over about a tenth of a second, and back as fast; WALL's too. */
+    static constexpr float backZoomBy = 0.35f, backZoomSeconds = 0.12f;
+    float backZoom = 0.0f;               // 0 none .. 1 whole
+    int backZoomI = -1;                  // the cell it shows — backs() for WALL — kept while it shrinks back
+    int backHot() const { return chosen < 0 ? -1 : hot.part == Part::back ? hot.i : hot.part == Part::wall ? backs() : -1; }
+    float backZoomTo() const { return backHot() >= 0 ? 1.0f : 0.0f; }
+    bool backZoomMoving() const { return backZoom < backZoomTo() || backZoom > backZoomTo(); }
+    int backZoomed() const { const int i = backHot() >= 0 ? backHot() : backZoomI; return backZoom > 0.0f ? i : -1; }
+
+    void stepBackZoom (double dt)
+    {
+        if (backHot() >= 0)
+            backZoomI = backHot();
+        if (! backZoomMoving())
+            return;
+        const float to = backZoomTo(), by = (float) (dt / backZoomSeconds);
+        backZoom = to > backZoom ? ui::jmin (to, backZoom + by) : ui::jmax (to, backZoom - by);
+        repaint();
+    }
+
     /** A MIC'S NAME UNDER THE HAND (the owner, 07.11): its glyph grown big beside it, left of the name — A's past its column,
         B's before its words — opaque, no box round it, growing in over about a sixth of a second and fading out as fast. */
     static constexpr float micZoomH = 120.0f, micZoomSeconds = 0.15f;
@@ -824,7 +849,7 @@ private:
         no BACK before them, and the words a size under the reading one, a size over it under the hand (the owner, 07.11);
         WALL, the guitar's, a fifth cell, narrower, after them. */
     static constexpr float backCellW = 88.0f, backGap = 10.0f, wallCellW = 22.0f;
-    static constexpr float backWordSize = 12.0f, backWordSizeOver = 15.0f, wallLetterSize = 10.0f, wallLetterSizeOver = 13.0f;
+    static constexpr float backWordSize = 12.0f, wallLetterSize = 10.0f;
 
     static float backRowW()
     {
@@ -889,8 +914,8 @@ private:
         narrowing in to the magnet, the top and the bottom, and at the right the back — whole (CLOSED); whole, the port's
         tube in from the baffle under the speaker (PORTED); gone but for a lip at the top, the sound out of it (OPEN); its
         upper half, the sound out of the lower (HALF, the guitar's). Its speaker and its port by its height, so a wide cell
-        keeps their shape and leaves its room for a word; `speaker` false, the speaker left out (a word over the whole cell). */
-    static void paintBack (ui::Graphics& g, int kind, ui::Rectangle<float> b, ui::Colour colour, bool speaker = true)
+        keeps their shape and leaves its room for a word. */
+    static void paintBack (ui::Graphics& g, int kind, ui::Rectangle<float> b, ui::Colour colour)
     {
         const float x0 = b.getX(), x1 = b.getRight(), y0 = b.getY(), y1 = b.getBottom(), h = b.getHeight();
         const float w = ui::jmin (b.getWidth(), 1.6f * h);
@@ -930,8 +955,6 @@ private:
             g.strokePath (out, ui::PathStrokeType (line));
         }
 
-        if (! speaker)
-            return;
         const float cy = kind == 1 ? y0 + 0.40f * h : b.getCentreY(), half = 0.27f * h;
         ui::Path cone;
         cone.startNewSubPath (x0, cy - half);
@@ -1434,46 +1457,38 @@ private:
         }
 
         // Over the pile the chosen box's back, a cell each: the box cut through, its word inside it, the one it stands at
-        // in the block's orange line — under the hand its word grown over the whole cell, the speaker in it left out.
+        // in the block's orange line; WALL after them. The one under the hand drawn last, grown (backZoomed).
         if (chosen >= 0)
         {
+            const int zi = backZoomed();
             for (int i = 0; i < backs(); ++i)
             {
-                const int kind = backAt (i);
-                const bool on = kind == backOf (chosen, setup_), over = isHot (Part::back, -1, i);
-                const auto cell = backCell (i).reduced (2.0f);
-                paintBack (g, kind, cell, on ? ui::look().orange : ui::look().violet.withAlpha (over ? 0.95f : 0.6f), ! over);
-                g.setColour (on ? ui::look().orange : over ? ui::look().tx : ui::look().txDim);
-                const float speaker = 0.32f * ui::jmin (cell.getWidth(), 1.6f * cell.getHeight());   // the speaker's depth in it
-                drawFitted (g, backWords[kind], over ? cell.reduced (5.0f, 0.0f) : cell.withTrimmedLeft (speaker + 6.0f).withTrimmedRight (3.0f),
-                            over ? backWordSizeOver : backWordSize);
+                if (i != zi)
+                    paintBackCell (g, i, backCell (i).reduced (2.0f), 1.0f);
                 // The box's own back, a dot before its cell: where DEFAULT goes back to.
-                if (kind == ownBack (chosen))
+                if (backAt (i) == ownBack (chosen))
                 {
                     g.setColour (ui::look().txDim);
-                    g.fillEllipse (ui::Rectangle<float> (4.0f, 4.0f).withCentre ({ backCell (i).getX() - 0.5f * backGap, cell.getCentreY() }));
+                    g.fillEllipse (ui::Rectangle<float> (4.0f, 4.0f).withCentre ({ backCell (i).getX() - 0.5f * backGap, backCell (i).getCentreY() }));
                 }
             }
-        }
-
-        // WALL, the fifth cell, where the catalog has it: the wall itself, an upright rectangle, its letters down it one
-        // under another (the owner, 07.11) — orange on, dim off, faint with the back closed, nothing gets out there; under
-        // the hand the wall a little taller and its letters bigger.
-        if (chosen >= 0 && catalog().wallSwitch)
-        {
-            const bool over = isHot (Part::wall), closed = backOf (chosen, setup_) == 0;
-            const auto ink = setup_.wall ? (closed ? ui::look().orange.withAlpha (0.45f) : ui::look().orange)
-                                         : over ? ui::look().tx : closed ? ui::look().txFaint : ui::look().txDim;
-            const auto cell = over ? wallArea().expanded (1.0f, 4.0f) : wallArea().reduced (1.0f, 0.0f);
-            g.setColour (setup_.wall ? ink : ui::look().violet.withAlpha (over ? 0.95f : 0.6f));
-            g.drawRoundedRectangle (cell, 2.0f, setup_.wall ? 1.5f : 1.2f);
-            g.setColour (ink);
-            const float pitch = (cell.getHeight() - 4.0f) / 4.0f;
-            const auto letters = ui::look().font (over ? wallLetterSizeOver : wallLetterSize);
-            for (int i = 0; i < 4; ++i)
-                ui::look().drawTracked (g, std::string (1, "WALL"[i]),
-                                        { cell.getX(), cell.getY() + 2.0f + (float) i * pitch, cell.getWidth(), pitch }, letters, 0.0f,
-                                        ui::Justification::centred);
+            if (catalog().wallSwitch && zi != backs())
+                paintWallCell (g, wallArea().reduced (1.0f, 0.0f), 1.0f);
+            if (zi >= 0)
+            {
+                const float e = backZoom * backZoom * (3.0f - 2.0f * backZoom), k = 1.0f + backZoomBy * e;   // eased in and out
+                const auto at = zi < backs() ? backCell (zi).reduced (2.0f) : wallArea().reduced (1.0f, 0.0f);
+                auto big = at.withSizeKeepingCentre (k * at.getWidth(), k * at.getHeight());
+                const float right = (float) leftW + 0.5f * gutter - 1.0f;
+                big = big.translated (ui::jmax (0.0f, 1.0f - big.getX()) - ui::jmax (0.0f, big.getRight() - right),
+                                      ui::jmax (0.0f, 1.0f - big.getY()));
+                g.setColour (ui::look().panel);   // the cells under it hidden, no box of its own
+                g.fillRoundedRectangle (big.expanded (4.0f, 3.0f), 4.0f);
+                if (zi < backs())
+                    paintBackCell (g, zi, big, k);
+                else
+                    paintWallCell (g, big, k);
+            }
         }
 
         // ...and under them the room, where the catalog has rooms: ROOM, then OFF and theirs, the one round the box lit.
@@ -1494,6 +1509,36 @@ private:
                 ui::look().drawTracked (g, roomWord (i), cell, font, 0.06f, ui::Justification::centred);
             }
         }
+    }
+
+    /** A back's cell in `cell`, its word `k` times its size: the box cut through, the word inside it — orange where the
+        box stands at it, brighter under the hand. */
+    void paintBackCell (ui::Graphics& g, int i, ui::Rectangle<float> cell, float k) const
+    {
+        const int kind = backAt (i);
+        const bool on = kind == backOf (chosen, setup_), over = isHot (Part::back, -1, i);
+        paintBack (g, kind, cell, on ? ui::look().orange : ui::look().violet.withAlpha (over ? 0.95f : 0.6f));
+        g.setColour (on ? ui::look().orange : over ? ui::look().tx : ui::look().txDim);
+        const float speaker = 0.32f * ui::jmin (cell.getWidth(), 1.6f * cell.getHeight());   // the speaker's depth in it
+        drawFitted (g, backWords[kind], cell.withTrimmedLeft (speaker + 6.0f * k).withTrimmedRight (3.0f * k), k * backWordSize);
+    }
+
+    /** WALL in `cell`, the guitar's: the wall itself, an upright rectangle, its letters down it one under another (the
+        owner, 07.11), `k` times their size — orange on, dim off, faint with the back closed, nothing gets out there. */
+    void paintWallCell (ui::Graphics& g, ui::Rectangle<float> cell, float k) const
+    {
+        const bool over = isHot (Part::wall), closed = backOf (chosen, setup_) == 0;
+        const auto ink = setup_.wall ? (closed ? ui::look().orange.withAlpha (0.45f) : ui::look().orange)
+                                     : over ? ui::look().tx : closed ? ui::look().txFaint : ui::look().txDim;
+        g.setColour (setup_.wall ? ink : ui::look().violet.withAlpha (over ? 0.95f : 0.6f));
+        g.drawRoundedRectangle (cell, 2.0f, setup_.wall ? 1.5f : 1.2f);
+        g.setColour (ink);
+        const float pitch = (cell.getHeight() - 4.0f * k) / 4.0f;
+        const auto letters = ui::look().font (k * wallLetterSize);
+        for (int i = 0; i < 4; ++i)
+            ui::look().drawTracked (g, std::string (1, "WALL"[i]),
+                                    { cell.getX(), cell.getY() + 2.0f * k + (float) i * pitch, cell.getWidth(), pitch }, letters, 0.0f,
+                                    ui::Justification::centred);
     }
 
 public:
