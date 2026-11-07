@@ -804,12 +804,12 @@ inline std::vector<double> render (const Cab& c, size_t n, size_t threads = 0)
     }
     // What a room's images bring a mic: each off its walls (sqrt(1 - absorption), 1 kHz to 4 kHz from the low to the high)
     // and the floor, a piston beaming `ka` toward the mic from where it stands — behind it, the box's shadow.
-    const auto roomHeard = [&] (const std::vector<RoomImage>& images, double ka, double f) {
+    const auto roomHeard = [&] (const std::vector<RoomImage>& ims, double ka, double f) {
         const double k = 2 * pi * f / c0, up = std::clamp (std::log2 (f / 1000) / 2, 0.0, 1.0);
         const double wall = std::sqrt (1 - std::clamp (c.roomAlpha + (c.roomAlphaHigh - c.roomAlpha) * up, 0.0, 0.99));
         const double shadow = 1 / std::sqrt (1 + (k * aBox) * (k * aBox));
         cd at = 0.0;
-        for (const auto& im : images)
+        for (const auto& im : ims)
         {
             double r, dx, dy, dz;
             pathTo (im.x, im.y, im.z, r, dx, dy, dz);

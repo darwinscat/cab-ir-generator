@@ -493,6 +493,11 @@ public:
     {
         const auto was = hot;
         hot = hotAt (e.position);
+        if (hot.part == Part::micRow)   // the mic it grows big, as the hand comes on it — not a tick later
+        {
+            zoomM = hot.m;
+            zoomI = hot.i;
+        }
         if (hot != was)
             repaint();
     }
@@ -636,26 +641,28 @@ private:
 
     void paintMicZoom (ui::Graphics& g) const
     {
-        if (micZoom <= 0.0f || chosen < 0 || zoomM < 0 || zoomI < 0 || zoomI >= mics().size())
+        // The one under the hand; the one it left while that fades.
+        const int zm = hot.part == Part::micRow ? hot.m : zoomM, zi = hot.part == Part::micRow ? hot.i : zoomI;
+        if (micZoom <= 0.0f || chosen < 0 || zm < 0 || zi < 0 || zi >= mics().size())
             return;
         const float e = micZoom * micZoom * (3.0f - 2.0f * micZoom);   // eased in and out
-        const auto row = micRow (zoomM, zoomI).toFloat();
+        const auto row = micRow (zm, zi).toFloat();
         const float h = 12.0f + (micZoomH - 12.0f) * e, w = h * 36.0f / 96.0f;   // the glyphs' own 36 x 96
         // Its backdrop clear of the words: A's out past its column's left edge, B's before the longest of its names.
         float longest = 0.0f;
         for (const auto& word : micWords())
             longest = ui::jmax (longest, ui::look().trackedWidth (word, ui::look().font (13.0f), 0.06f));
-        const float right = zoomM == 0 ? row.getX() - 10.0f : row.getRight() - 12.0f - 8.0f - longest - 12.0f;
+        const float right = zm == 0 ? row.getX() - 10.0f : row.getRight() - 12.0f - 8.0f - longest - 12.0f;
         const float top = ui::jlimit (6.0f, (float) bodyH() - 6.0f - h, row.getCentreY() - 0.5f * h);
         const ui::Rectangle<float> box (right - w, top, w, h);
         g.setColour (ui::look().panel2.withMultipliedAlpha (e));
         g.fillRoundedRectangle (box.expanded (8.0f, 6.0f), 6.0f);
         g.setColour (ui::look().hair.withMultipliedAlpha (e));
         g.drawRoundedRectangle (box.expanded (8.0f, 6.0f), 6.0f, 1.0f);
-        const auto& sp = mic (zoomM);
+        const auto& sp = mic (zm);
         const auto heardBy = sp.mic.isNotEmpty() ? sp.mic : cabs()[(size_t) chosen].mic;
-        const auto tint = mics()[zoomI] == heardBy ? colourOf (zoomM) : ui::look().tx;
-        paintMicGlyph (g, mics()[zoomI], box, tint.withMultipliedAlpha (e), 0.0f, {});
+        const auto tint = mics()[zi] == heardBy ? colourOf (zm) : ui::look().tx;
+        paintMicGlyph (g, mics()[zi], box, tint.withMultipliedAlpha (e), 0.0f, {});
     }
 
     void timerCallback()
