@@ -1614,12 +1614,40 @@ private:
         return { sc.getX() + 18.0f, blendRow().toFloat().getCentreY() - 3.0f, sc.getWidth() - 36.0f, 6.0f };
     }
 
+    /** FIND, under A's angle, its column's width — level with B's TIME (the owner, 07.11): orange, the panel's one call to
+        act, its words on two lines where one is too narrow for them at the reading size. */
     ui::Rectangle<int> findArea() const
     {
         if (onFind == nullptr)
             return {};
-        const auto row = blendRow();
-        return { column (0).getX(), row.getY() + 2, wordW ("FIND") + 14, row.getHeight() - 4 };
+        // Two lines tall always; where the column is short (the bass's seven mics) nearer the angle, and down into the top
+        // of BLEND's row, above its words.
+        const auto c = column (0);
+        const int h = 2 * rowH + 4, under = ui::roundToInt (angleTrack (0).getBottom());
+        const int top = ui::jmax (under + 4, ui::jmin (under + 12, blendRow().getY() + 6 - h));
+        return { c.getX() + 4, top, c.getWidth() - 8, h };
+    }
+
+    void paintFind (ui::Graphics& g) const
+    {
+        const auto r = findArea();
+        if (r.isEmpty())
+            return;
+        const auto b = r.toFloat().reduced (0.5f);
+        const auto font = ui::look().font (13.0f);
+        const auto ink = searching || isHot (Part::find) ? ui::look().orange.brighter (0.3f) : ui::look().orange;
+        g.setColour (ui::look().panel2);
+        g.fillRoundedRectangle (b, 4.0f);
+        g.setColour (ink);
+        g.drawRoundedRectangle (b, 4.0f, searching ? 1.6f : 1.2f);
+        if (ui::look().trackedWidth ("FIND BEST POSITION", font, 0.06f) + 14.0f <= b.getWidth())
+            ui::look().drawTracked (g, "FIND BEST POSITION", b, font, 0.06f, ui::Justification::centred);
+        else
+        {
+            const auto lines = b.withSizeKeepingCentre (b.getWidth(), 2.0f * (float) rowH);
+            ui::look().drawTracked (g, "FIND BEST", lines.withHeight ((float) rowH), font, 0.06f, ui::Justification::centred);
+            ui::look().drawTracked (g, "POSITION", lines.withTrimmedTop ((float) rowH), font, 0.06f, ui::Justification::centred);
+        }
     }
 
     ui::Rectangle<float> blendWordArea() const
@@ -1904,7 +1932,7 @@ private:
             ui::look().drawTracked (g, "ALIGN", alignArea().toFloat(), font, 0.06f, ui::Justification::centredLeft);
             g.setColour (toggle (bothHeard() && setup_.invert, Part::invert));
             ui::look().drawTracked (g, ui::String::fromUTF8 ("\xc3\x98"), invertArea().toFloat(), font, 0.0f, ui::Justification::centred);
-            paintButton (g, "FIND", findArea(), searching, isHot (Part::find));
+            paintFind (g);
             paintButton (g, defaultArmed ? "SURE?" : "DEFAULT", defaultArea(), defaultArmed, isHot (Part::reset));
             paintButton (g, "CLOSE", closeArea(), false, isHot (Part::close));
         }
