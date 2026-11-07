@@ -31,43 +31,6 @@ back_wall_m = 0.4
 back_wall_reflection = 0.8
 open_back_cavity_share = 0.4
 
-# THE ROOM ROUND THE BOX (ROOM's row; none, OFF): its size across, from the wall behind the box to the one behind the
-# mic, and up; the box's back off its wall and its middle off the room's; what the walls take in up to 1 kHz and from
-# 4 kHz. Sabine's time follows from these — and with it how long the IR has to be (length_ms) to hold the tail.
-# A booth: small and soft, its walls close — the box boxed in, 0.12 s.
-[room-booth]
-room_width_m = 1.8
-room_length_m = 2.2
-room_height_m = 2.3
-room_back_m = 0.3
-room_side_m = 0.2
-room_absorption = 0.45
-room_absorption_high = 0.65
-length_ms = 150
-tail_fade_ms = 30
-# A tracking room: treated, a few metres each way, 0.45 s.
-[room-studio]
-room_width_m = 5.5
-room_length_m = 7
-room_height_m = 3.2
-room_back_m = 1.2
-room_side_m = 0.6
-room_absorption = 0.28
-room_absorption_high = 0.4
-length_ms = 250
-tail_fade_ms = 40
-# A live room: big and hard, the walls far, 0.8 s at the bottom and 0.5 at the top.
-[room-live]
-room_width_m = 7
-room_length_m = 9
-room_height_m = 4
-room_back_m = 1.5
-room_side_m = 1
-room_absorption = 0.2
-room_absorption_high = 0.3
-length_ms = 400
-tail_fade_ms = 60
-
 # A GUITAR SPEAKER'S CHARACTER — its paper's breakup (the modes, their Q, how loud against the piston), its knee and
 # the cliff past it (woofer_lowpass_hz under woofer_lowpass_second), the surround's dip and the presence its breakup
 # builds (body_eq), its resonance (ts: Fs, Qts, Vas in litres).

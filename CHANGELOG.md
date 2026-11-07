@@ -12,22 +12,17 @@ All notable changes to **Orbit Bass Cab Builder** and **Orbit Guitar Cab Builder
 - **Orbit Guitar Cab Builder**, a second app from the same code, on the guitar's own table: seven boxes (4x12 closed,
   a tall half-closed 2x12, open 2x12, 1x12, 4x10, 2x10 and 1x10), six mics with the E906 among them, a row of six
   speakers under the back (MID, BRIGHT, DARK, SCOOP, FLAT, SNAP) and a paper cone for each (SPEAKER clicked), a
-  half-closed back (HALF), a wall behind an open box (WALL), the mic up to a metre and a half off (ROOM at one metre).
+  half-closed back (HALF) and a wall behind an open box (WALL).
   Its own name, icon, settings, presets folder and page, darwinscat.com/felitronics/orbit-guitar-cab-builder. The bass's
   app sounds exactly as it did.
 - **The guitar's presets**: 160 in eight styles, Blues, Classic Rock, Hard Rock, Metal, Modern Metal, Punk, Indie and
-  Clean, twenty each, every box, speaker, back and room among them; and 17 typical cabinets, one per construction.
+  Clean, twenty each, every box, speaker and back among them; and 17 typical cabinets, one per construction.
 - **The plugins**, VST3, AU and CLAP, for both: the same window in your DAW, the track played through the cabinet,
   mono or stereo, with no latency. The DAW's project keeps A/B/C/D with their histories and the window's size, and the
   cabinet plays with the window closed. HEAR, FIND, the presets (the app's own, from the same folder) and DOWNLOAD IR
   are there; the sample player is the app's alone.
-- **ROOM, the guitar's**: a row under the speakers, OFF, BOOTH, STUDIO and LIVE. The room's walls and ceiling send
-  back every speaker's sound to two bounces (the open back's too), each speaker beaming as it does and the box
-  shadowing what goes behind it, and its tail follows, as long and as loud as the room's size and absorption make it —
-  so a mic a metre off hears the room and one at the cap hardly does. WALL puts the box by the room's back wall. The IR
-  grows to hold the tail: 150, 250 and 400 ms. OFF sounds as before.
 - **The page's module plays the guitar too**: cabir_catalog ("guitar") turns its panel, its links and what its WAVs
-  say to the guitar's; cabir_download_note takes the state, so its line says how long a room makes the IR; the build
+  say to the guitar's; cabir_download_note takes the state, so its line says how long the state's IR is; the build
   puts both tables beside the module (cabinets.txt, cabinets-guitar.txt), and demo.html?guitar shows it.
 - **INPUT in the apps**: an audio interface played live through the cabinet, no DAW needed. It is the first item of
   the sample menu, silent until PLAY (Space), so a laptop's own mic by its speakers never howls; AUDIO picks the input

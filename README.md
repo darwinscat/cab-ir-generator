@@ -8,7 +8,7 @@ Bass cabinet impulse responses, synthesized: a box of each size, its back closed
 horn switched in and out, and up to two mics placed on the speaker — kind, spot, distance, angle and
 blend — rendered to a 48 kHz IR while you move them, with the response and where two mics comb drawn
 as you go. **Orbit Guitar Cab Builder** is the same on a guitar's cabinets: seven boxes, six speakers and six mics
-of its own, and a room round the box: a booth, a studio or a live room.
+of its own.
 
 <p align="center"><img src="docs/app.png" alt="The app: the boxes, the speaker with two mics on it, and the response" width="880"></p>
 
