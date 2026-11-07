@@ -19,6 +19,9 @@
 //                                              — and 5, DOWNLOAD IR's ▾ (cabir_panel_download_format): the page's format menu,
 //                                              anchored at cabir_panel_format_rect () (x, y, w, h, ints)
 //   cabir_panel_download_format (show)         DOWNLOAD IR's ▾ beside it, or none (the default)
+//   cabir_panel_rect (name)                    where a page's hint goes, as the panel stands now: "cabinet" (the boxes),
+//                                              "mic-a" (A's glyph on the speaker; the speaker while A is off), "download"
+//                                              — x, y, w, h (ints, the panel's units); null for another name or none shown
 //   cabir_panel_download_note (text)           the line under the button: what the next download will be (UTF-8; "" none)
 //   cabir_glyph_svg (mic)                      a mic's glyph as SVG, its black for the canvas to recolour
 //   cabir_label (toml)                         a state as a line reads it, the app's words: "4x10 PORTED · MD421+U47" (UTF-8)
@@ -143,6 +146,7 @@ namespace
         Event last;
         std::vector<float> now, before, comb;
         int formatRect[4] {};
+        int hintRect[4] {};
 
         PanelSession()
         {
@@ -267,6 +271,19 @@ CABIR_EXPORT const int* cabir_panel_format_rect()
     s.formatRect[2] = r.getWidth();
     s.formatRect[3] = r.getHeight();
     return s.formatRect;
+}
+
+CABIR_EXPORT const int* cabir_panel_rect (const char* name)
+{
+    auto& s = session();
+    const auto r = s.panel.hintRect (ui::String (name != nullptr ? name : "")).toNearestInt();
+    if (r.isEmpty())
+        return nullptr;
+    s.hintRect[0] = r.getX();
+    s.hintRect[1] = r.getY();
+    s.hintRect[2] = r.getWidth();
+    s.hintRect[3] = r.getHeight();
+    return s.hintRect;
 }
 
 CABIR_EXPORT void cabir_panel_download_note (const char* text)

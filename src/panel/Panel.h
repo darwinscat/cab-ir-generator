@@ -370,6 +370,48 @@ public:
     /** Where the ▾ is, so a host anchors its menu there; empty where there is none. */
     ui::Rectangle<int> formatButton() const { return downloadFormatArea(); }
 
+    /** WHERE A HOST'S HINT GOES (the site's rings over its live panel), in the panel's units, as it stands now: "cabinet",
+        the boxes a click picks one in; "mic-a", mic A's glyph on the speaker as it leans — the speaker itself while A is
+        not heard; "download", DOWNLOAD IR. Empty for another name, or for what the panel does not show. */
+    ui::Rectangle<float> hintRect (const ui::String& name) const
+    {
+        if (name == "cabinet")
+        {
+            float x0 = 1e9f, y0 = 1e9f, x1 = -1e9f, y1 = -1e9f;
+            for (const auto& column : pile())
+                for (const auto& box : column)
+                    if (const int i = indexOf (box); i >= 0)
+                    {
+                        const auto r = boxOf (i);
+                        x0 = ui::jmin (x0, r.getX()); y0 = ui::jmin (y0, r.getY());
+                        x1 = ui::jmax (x1, r.getRight()); y1 = ui::jmax (y1, r.getBottom());
+                    }
+            return x1 > x0 ? ui::Rectangle<float> { x0, y0, x1 - x0, y1 - y0 } : ui::Rectangle<float> {};
+        }
+        if (name == "mic-a" && chosen >= 0)
+        {
+            const auto o = coneCentre();
+            const float R = radius();
+            if (! heard (0))
+                return { o.x - R, o.y - R, 2.0f * R, 2.0f * R };
+            const auto gl = glyphOf (mic (0), o, R, 1.0f);
+            const float c = std::cos (gl.lean), sn = std::sin (gl.lean);
+            float x0 = 1e9f, y0 = 1e9f, x1 = -1e9f, y1 = -1e9f;
+            const auto& g = gl.box;
+            for (const auto& u : { ui::Point<float> (g.getX(), g.getY()), ui::Point<float> (g.getRight(), g.getY()),
+                                   ui::Point<float> (g.getX(), g.getBottom()), ui::Point<float> (g.getRight(), g.getBottom()) })
+            {
+                const auto d = u - gl.at;   // as drawn: the upright glyph turned by its lean about its capsule
+                const float x = gl.at.x + c * d.x - sn * d.y, y = gl.at.y + sn * d.x + c * d.y;
+                x0 = ui::jmin (x0, x); y0 = ui::jmin (y0, y); x1 = ui::jmax (x1, x); y1 = ui::jmax (y1, y);
+            }
+            return { x0, y0, x1 - x0, y1 - y0 };
+        }
+        if (name == "download")
+            return downloadArea().toFloat();
+        return {};
+    }
+
     /** DEFAULT as a button in the foot — or not, where the host offers it another way (the app's preset menu). With
         neither DEFAULT nor CLOSE the foot's row goes, and the panel is footRowH shorter. */
     bool showDefault = true;
