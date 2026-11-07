@@ -393,6 +393,16 @@ int MainComponent::writeStills (const juce::File& folder, float scale)
     shown (found);
     write ("panel-find@2x.png");
 
+    // The whole window as the app opens on its DEFAULT — its header, the panel, its strip, 960 x 540 — twice the stills'
+    // scale, 3840 x 2160 at their 2x: a page's 16:9 picture, larger than a screen holds the window (the owner, 07.11).
+    {
+        MainComponent main;   // the app's own, on the stills' run's settings: the default, the first riff
+        const auto ir = renderer.render (table, first.box, synth::pairOf (first), (size_t) 1 << 14);
+        main.picker.showResponse (synth::responseOf (synth::as24Bit (ir.mix), 48000.0), {},
+                                  ir.a.empty() ? std::vector<float>() : synth::combOf (ir.a, ir.b));
+        save (folder.getChildFile ("window-default@4x.png"), main.createComponentSnapshot (main.getLocalBounds(), true, 2.0f * scale));
+    }
+
     // Each box of the pile alone, as the pile draws it unchosen, for a page's list of sizes (the owner, 05.11): one scale
     // for all, so each stands as big as itself against the others — 420 px a metre, about three and a half times the
     // pile's — on nothing, its tolex opaque; box-<size>.png (at `scale`) and box-<size>.svg in boxes/ — or, where two
