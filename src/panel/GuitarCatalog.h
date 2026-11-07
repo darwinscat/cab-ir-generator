@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of Cab IR Generator — see LICENSE.
+// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of Orbit Bass Cab Builder and Orbit Guitar Cab Builder — see LICENSE.
 
 #pragma once
 
@@ -29,8 +29,8 @@ inline const Panel::Catalog& guitarCatalog()
         { "2x10-open",   0, 0.60f, 0.46f, { P (-0.14f, 0), P (0.14f, 0) }, 0.105f, false, {}, false, {}, "sm57", false, "snap" },
         { "1x10-open",   0, 0.46f, 0.40f, { P (0, 0) }, 0.105f, false, {}, false, {}, "sm57", false, "snap" },
       },
-      // The small on the big, the way a backline stands.
-      { { "4x12-closed", "1x10-open" }, { "2x12-vertical" }, { "2x12-open", "2x10-open" }, { "4x10-open", "1x12-open" } },
+      // The small on the big, the way a backline stands — the 1x10 on the tall 2x12 (the owner, 07.11).
+      { { "4x12-closed" }, { "2x12-vertical", "1x10-open" }, { "2x12-open", "2x10-open" }, { "4x10-open", "1x12-open" } },
       { "sm57", "e906", "md421", "re20", "u87", "ribbon" },
       { "SM57", "E906", "MD421", "RE20", "U87", "RIBB" },
       { "4x12-closed" },
@@ -41,7 +41,12 @@ inline const Panel::Catalog& guitarCatalog()
       { 0, 3, 2, 1 },
       true,
       "paper",
-      150.0f, 1.0f };
+      30.0f, 0.30f,   // the mic as far as the bass's, 30 cm, ROOM there too — no room round the box (the owner, 07.11)
+      {}, {},         // no ROOM row
+      5.0f,     // the line reddens with a pit from 5 dB (the table's pit_red_db, the same)
+      6.0f,     // ...and with a comb from 2 kHz up at 6 dB (comb_top_red_db, the same)
+      "GUITAR CAB",     // the watermark across the response
+      helpText::guitar };   // what its "?" say (data/guitar/help.txt)
     return guitar;
 }
 

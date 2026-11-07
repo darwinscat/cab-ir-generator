@@ -1,24 +1,64 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 # Changelog
 
-All notable changes to **Cab IR Generator** are documented here. The format follows
+All notable changes to **Orbit Bass Cab Builder** and **Orbit Guitar Cab Builder** (Cab IR Generator up to
+0.1.5) are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-11-08 — two builders, their plugins, and a window in 16:9
+
 ### Added
-- **Guitar Cab IR Generator**, a second app from the same code, on the guitar's own table: seven boxes (4x12 closed,
+- **Two downloads a platform, one for each builder**, each with its app and its plugins:
+  OrbitBassCabBuilder-0.2.0-macOS.pkg and OrbitGuitarCabBuilder-0.2.0-macOS.pkg (the app, VST3, AU and CLAP; signed and
+  notarized, Apple silicon and Intel), -Windows-x64.exe and -Windows-arm64.exe (the app, VST3 and CLAP), and
+  -Linux-x86_64.tar.gz and -Linux-arm64.tar.gz (the same, with how to install them).
+- **The guitar's TOP 12**: a dozen of rock, metal and punk, bright and dense, most of them on the 4x12 — a preset folder
+  of its own.
+- **A "?" on the response**: the hand on it opens what a comb is, why it matters on this instrument and how the builder
+  treats it; a click keeps it open, a tap does on a touch screen.
+- **BYPASS A, B, A+B** in the strip: one mic taken out, or both.
+- **The builder's name across the response**, BASS CAB or GUITAR CAB, pale, brighter under the hand — the two are never
+  taken one for the other.
+- **Orbit Guitar Cab Builder**, a second app from the same code, on the guitar's own table: seven boxes (4x12 closed,
   a tall half-closed 2x12, open 2x12, 1x12, 4x10, 2x10 and 1x10), six mics with the E906 among them, a row of six
   speakers under the back (MID, BRIGHT, DARK, SCOOP, FLAT, SNAP) and a paper cone for each (SPEAKER clicked), a
-  half-closed back (HALF), a wall behind an open box (WALL), the mic up to a metre and a half off (ROOM at one metre).
-  Its own name, icon, settings, presets folder and page, darwinscat.com/felitronics/guitar-cab-ir-generator. The bass's
+  half-closed back (HALF) and a wall behind an open box (WALL).
+  Its own name, icon, settings, presets folder and page, darwinscat.com/felitronics/orbit-guitar-cab-builder. The bass's
   app sounds exactly as it did.
+- **The guitar's presets**: 160 in eight styles, Blues, Classic Rock, Hard Rock, Metal, Modern Metal, Punk, Indie and
+  Clean, twenty each, every box, speaker and back among them; and 17 typical cabinets, one per construction.
+- **The plugins**, VST3, AU and CLAP, for both: the same window in your DAW, the track played through the cabinet,
+  mono or stereo, with no latency. The DAW's project keeps A/B/C/D with their histories and the window's size, and the
+  cabinet plays with the window closed. HEAR, FIND, the presets (the app's own, from the same folder) and DOWNLOAD IR
+  are there; the sample player is the app's alone.
+- **The page's module plays the guitar too**: cabir_catalog ("guitar") turns its panel, its links and what its WAVs
+  say to the guitar's; cabir_download_note takes the state, so its line says how long the state's IR is; the build
+  puts both tables beside the module (cabinets.txt, cabinets-guitar.txt), and demo.html?guitar shows it.
+- **INPUT in the apps**: an audio interface played live through the cabinet, no DAW needed. It is the first item of
+  the sample menu, silent until PLAY (Space), so a laptop's own mic by its speakers never howls; AUDIO picks the input
+  device and its channel, the first one open heard. macOS asks for the microphone the first time it is picked.
 
 ### Changed
-- **The page's new address**, darwinscat.com/felitronics/bass-cab-ir-generator: the app's links, DOWNLOAD IR's WAVs
+- **The window in 16:9**, 960 x 540: the boxes at the left, the speaker and the two mics' columns at the right, the
+  response across under them. The backs are pictures, a word under the one the hand is on; CAP, EDGE or OFF under the
+  hand shows the dot where it would put its mic; a mic's distance and angle stay out while the hand goes to them.
+- **On the guitar a comb from 2 kHz up is a tone, not a fault**: the line turns red there only past 6 dB, below 2 kHz
+  past 3 dB as before, and FIND BEST POSITION judges the same. Some metal, modern metal and hard rock presets keep a
+  light comb in the top on purpose. The bass is unchanged.
+- **The guitar's line reddens with a pit from 5 dB**: its speakers' own dips run deeper than a bass's.
+- **The names: Orbit Bass Cab Builder** (Cab IR Generator until now) **and Orbit Guitar Cab Builder** — the apps, their
+  windows, the version window, the WAVs they write and the IR packs. A first run under the new name copies the
+  workspace, the settings and your own presets from where the old name kept them; nothing is moved or deleted.
+- **The page's new address**, darwinscat.com/felitronics/orbit-bass-cab-builder: the app's links, DOWNLOAD IR's WAVs
   (their comment, the link that opens the cabinet live), the page's own downloads and the IR packs' WAVs and
-  index.html all name it. The old address leads there, the cabinet in the link kept, so the WAVs already out still open.
+  index.html all name it. The old addresses lead there, the cabinet in the link kept, so the WAVs already out still open.
+
+### Fixed
+- A click on a mic, or on its distance and angle, no longer reaches the horn's steps under it.
+- A link or a state naming a mic the builder has not opens the default cabinet instead of an empty one.
 
 ## [0.1.5] — 2026-11-06 — DOWNLOAD IR in the format a loader takes
 

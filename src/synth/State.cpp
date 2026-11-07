@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of Cab IR Generator — see LICENSE.
+// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of Orbit Bass Cab Builder and Orbit Guitar Cab Builder — see LICENSE.
 
 #include "State.h"
 
@@ -26,6 +26,8 @@ std::string toToml (const State& s)
         (void) root.insert ("wall", t::Value (true));
     if (! s.cone.empty())
         (void) root.insert ("cone", t::Value (s.cone));
+    if (! s.room.empty())
+        (void) root.insert ("room", t::Value (s.room));
     (void) root.insert ("horn", t::Value (s.horn));
     (void) root.insert ("horn_db", t::Value ((std::int64_t) std::lround (s.hornDb)));
     (void) root.insert ("blend", decimal (s.blend, 3));
@@ -76,6 +78,7 @@ std::optional<State> fromToml (std::string_view text)
         in.optional ("speaker", s.speaker);
         in.optional ("wall", s.wall);
         in.optional ("cone", s.cone);
+        in.optional ("room", s.room);
         in.optional ("horn", s.horn);
         in.optional ("horn_db", hornDb, { -12, 0 });
         in.optional ("blend", s.blend, { 0.0, 1.0 });
@@ -87,7 +90,7 @@ std::optional<State> fromToml (std::string_view text)
             m.optional ("model", out.model);
             m.optional ("x", out.x, { -1.5, 1.5 });
             m.optional ("y", out.y, { -1.5, 1.5 });
-            m.optional ("distance", out.distance, { 0.001, 2.0 });   // the guitar's room mic goes to 1.5 m
+            m.optional ("distance", out.distance, { 0.001, 2.0 });   // wide: a state kept when the guitar's mic went to 1.5 m still reads (the panel clamps it)
             m.optional ("angle", out.angle, { 0.0, 90.0 });
         };
         in.table ("mic", t::Need::Optional, [&] (t::Reader& mics)

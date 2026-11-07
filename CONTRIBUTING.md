@@ -1,6 +1,6 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 
-# Contributing to Cab IR Generator
+# Contributing to Orbit Bass Cab Builder and Orbit Guitar Cab Builder
 
 **Short version: issues yes, code no.**
 
@@ -15,7 +15,7 @@ it, you are credited in `CHANGELOG.md`.
 Pull requests containing code are closed unmerged, regardless of how good the change is. This is
 a standing policy, not a verdict on your patch.
 
-**Why.** Cab IR Generator is AGPL-3.0-or-later and the copyright is held solely by its authors, Oleh
+**Why.** This code is AGPL-3.0-or-later and the copyright is held solely by its authors, Oleh
 Tsymaienko and Alisa Lafoks (Darwin's Cat). A merged contribution leaves its author holding
 copyright on those lines permanently. From that moment the project can no longer change its own
 licensing terms — dual-licensing, granting an exception, shipping it inside something else —
@@ -37,7 +37,7 @@ a diff.
 
 ## What this policy does NOT do
 
-It takes away none of the freedoms the AGPL grants you. You may use Cab IR Generator, study it, modify
+It takes away none of the freedoms the AGPL grants you. You may use it, study it, modify
 it, and distribute your own modified version under the same licence. Forking is expressly fine.
 This is only about what gets merged *here*.
 
@@ -46,5 +46,5 @@ This is only about what gets merged *here*.
 Third-party dependencies keep their own licences and are unaffected by the policy above. New ones
 must be AGPL-compatible (BSD / MIT / Apache-2.0 / MPL-2.0).
 
-The Cab IR Generator and Darwin's Cat names and logos are trademarks and are *not* covered by the code
+The Orbit Bass Cab Builder, Orbit Guitar Cab Builder and Darwin's Cat names and logos are trademarks and are *not* covered by the code
 licence.

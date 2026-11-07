@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of Cab IR Generator — see LICENSE.
+// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of Orbit Bass Cab Builder and Orbit Guitar Cab Builder — see LICENSE.
 
 #pragma once
 
@@ -36,6 +36,7 @@ struct State
     std::string speaker;
     bool wall = false;   // the wall behind the box, the guitar's: heard where the back lets sound out
     std::string cone;    // the speaker's cone as a variant of it has it (the guitar's "paper"), empty as it is
+    std::string room;    // the room round the box by the table's name ("room-<name>", the guitar's), empty for none
     bool horn = true;
     double hornDb = 0;
     Mic a { true, "", -0.3, 0, 0.05, 0 }, b { false, "u87", 0.4, 0, 0.25, 0 };   // A a little left of the cap, B right of it

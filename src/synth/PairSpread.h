@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of Cab IR Generator — see LICENSE.
+// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of Orbit Bass Cab Builder and Orbit Guitar Cab Builder — see LICENSE.
 
 #pragma once
 
@@ -9,7 +9,8 @@
 // Judged as the panel draws a cabinet: the pit, how far the heard response (a sixth of an octave, as the band draws it)
 // falls under its own third of an octave either side, 40 Hz to 8 kHz — a dip a player hears, which no comb shows, 3 dB at
 // most, where the line starts to redden (the owner, 05.11) — and with two mics where they meet (synth::combOf, 30 Hz to
-// 12 kHz), its worst point green above -3 dB.
+// 12 kHz), its worst point green above -3 dB; from 2 kHz up past what the table lets a comb cancel there, the guitar's 6
+// (synth::combTopRedOf, the owner, 07.11).
 // A single mic with a pit moves as FIND moves one (synth::MicSearch): about where it stands, the nearest place without
 // one. A pair, in two steps (the owner, 05.11): first A alone, the same way, if A by itself has a pit — B rarely fills
 // one — then B: its mics, A's place, the blend and the clock kept, B tried across the speaker at least half a radius from
@@ -33,6 +34,7 @@ namespace cabir::synth::green
 constexpr double apartRadii = 0.5;   // B at least this far across from A
 constexpr double greenDb = -3.0;     // a worst point above this: the band green
 constexpr double pitDb = 3.0;        // the response at most this far under its neighbours: where the panel's line reddens
+                                     // (the bass's; a table's own, synth::pitRedOf — the guitar's 5 — where it says one)
 
 /** How far the response falls under its own third of an octave either side, 40 Hz to 8 kHz, at its worst. */
 inline double pitOf (const std::vector<double>& db)
@@ -41,8 +43,10 @@ inline double pitOf (const std::vector<double>& db)
     return pits.empty() ? 0.0 : *std::max_element (pits.begin(), pits.end());
 }
 
-/** Both, from a pair's two spectra with B turned by `tau` s: the worst comb point and the pit. */
-inline std::pair<double, double> judge (const std::vector<cd>& a, const std::vector<cd>& b, std::vector<cd>& sum, double tau)
+/** Both, from a pair's two spectra with B turned by `tau` s: the worst comb point — from combTopHz up `topSlack` dB
+    kinder, what the table lets a comb cancel there past the 3 under it — and the pit. */
+inline std::pair<double, double> judge (const std::vector<cd>& a, const std::vector<cd>& b, std::vector<cd>& sum, double tau,
+                                        double topSlack = 0.0)
 {
     constexpr double rate = 48000.0;
     const size_t n = a.size();
@@ -55,25 +59,31 @@ inline std::pair<double, double> judge (const std::vector<cd>& a, const std::vec
     {
         const double hz = synth::responseHz (i);
         worst = std::min (worst, 10.0 * std::log10 (synth::detail::powerAt (sum, rate, hz, narrow)
-                                                    / (synth::detail::powerAt (a, rate, hz, narrow) + synth::detail::powerAt (b, rate, hz, narrow))));
+                                                    / (synth::detail::powerAt (a, rate, hz, narrow) + synth::detail::powerAt (b, rate, hz, narrow)))
+                                     + (hz >= synth::combTopHz ? topSlack : 0.0));
         heard[(size_t) i] = 10.0 * std::log10 (synth::detail::powerAt (sum, rate, hz, sixth));
     }
     return { worst, pitOf (heard) };
 }
 
 /** The narrower of the two margins: how far inside both bounds a pair stands (negative: outside one). */
-inline double margin (double worst, double pit) { return std::min (worst - greenDb, pitDb - pit); }
+inline double margin (double worst, double pit, double pitLimit = pitDb) { return std::min (worst - greenDb, pitLimit - pit); }
 
-inline bool passes (double worst, double pit) { return worst >= greenDb && pit <= pitDb; }
+inline bool passes (double worst, double pit, double pitLimit = pitDb) { return worst >= greenDb && pit <= pitLimit; }
 
-/** The pair as the panel draws it, on the app's own path: the worst comb point and the pit of what is heard. */
+/** The pair as the panel draws it, on the app's own path: the worst comb point — from combTopHz up as the table lets a
+    comb cancel there (combTopRedOf) — and the pit of what is heard. */
 inline std::pair<double, double> judgeOf (const synth::Table& table, const State& s)
 {
     const auto parts = synth::PairRenderer {}.render (table, s.box, synth::pairOf (s));
     const auto comb = synth::combOf (parts.a, parts.b);
     const auto heard = synth::responseOf (synth::as24Bit (parts.mix), 48000.0);
-    return { comb.empty() ? 0.0 : (double) *std::min_element (comb.begin(), comb.end()),
-             pitOf (std::vector<double> (heard.begin(), heard.end())) };
+    const double topSlack = synth::combTopRedOf (table, s.box) - 3.0;
+    double worst = 0.0;
+    for (size_t i = 0; i < comb.size(); ++i)
+        worst = i == 0 ? (double) comb[0] + (synth::responseHz (0) >= synth::combTopHz ? topSlack : 0.0)
+                       : std::min (worst, (double) comb[i] + (synth::responseHz ((int) i) >= synth::combTopHz ? topSlack : 0.0));
+    return { worst, pitOf (std::vector<double> (heard.begin(), heard.end())) };
 }
 
 struct Found { double x, y, distance, shiftMs, worst, pit, blend; };
@@ -91,9 +101,10 @@ inline Found spread (const synth::Table& table, const State& s, bool wide)
             if (s.blend + by >= 0.15 && s.blend + by <= 0.85)
                 blends.push_back (s.blend + by);
     // A margin past a dB is margin enough: then the least change of blend, the smaller shift, the nearer place.
-    const auto better = [&s] (const Found& c, const Found& best)
+    const double red = synth::pitRedOf (table, s.box), topSlack = synth::combTopRedOf (table, s.box) - 3.0;
+    const auto better = [&s, red] (const Found& c, const Found& best)
     {
-        const double mc = std::min (1.0, margin (c.worst, c.pit)), mb = std::min (1.0, margin (best.worst, best.pit));
+        const double mc = std::min (1.0, margin (c.worst, c.pit, red)), mb = std::min (1.0, margin (best.worst, best.pit, red));
         if (mc > mb + 0.05) return true;
         if (mc < mb - 0.05) return false;
         const double bc = std::abs (c.blend - s.blend), bb_ = std::abs (best.blend - s.blend);
@@ -124,7 +135,7 @@ inline Found spread (const synth::Table& table, const State& s, bool wide)
             for (size_t i = 0; i < b.size(); ++i) bb[i] = b[i] * k;
             for (const double ms : shiftsMs)
             {
-                const auto [worst, pit] = judge (a, bb, sum, ms * 1e-3);
+                const auto [worst, pit] = judge (a, bb, sum, ms * 1e-3, topSlack);
                 const Found c { p.x, p.y, p.distance, ms, worst, pit, blend };
                 if (better (c, best)) best = c;
             }
@@ -181,14 +192,15 @@ struct SpreadB { Found found; std::pair<double, double> after; };
 
 inline SpreadB spreadB (const synth::Table& table, const State& s)
 {
+    const double red = synth::pitRedOf (table, s.box);
     SpreadB out { spread (table, s, false), {} };
     out.after = judgeOf (table, withB (s, out.found));
-    if (! passes (out.after.first, out.after.second))
+    if (! passes (out.after.first, out.after.second, red))
     {
         // Wider: B's distance further either way, B's share of the blend a little less.
         const auto wider = spread (table, s, true);
         const auto there = judgeOf (table, withB (s, wider));
-        if (margin (there.first, there.second) > margin (out.after.first, out.after.second))
+        if (margin (there.first, there.second, red) > margin (out.after.first, out.after.second, red))
             out = { wider, there };
     }
     return out;

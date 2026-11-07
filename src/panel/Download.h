@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of Cab IR Generator — see LICENSE.
+// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of Orbit Bass Cab Builder and Orbit Guitar Cab Builder — see LICENSE.
 
 #pragma once
 
@@ -18,7 +18,7 @@ namespace cabir
 
 struct DownloadFormat
 {
-    int rate = 48000, bits = 24, samples = 0;   // samples: 0, the whole IR (100 ms)
+    int rate = 48000, bits = 24, samples = 0;   // samples: 0, the whole IR (100 ms, a room's longer)
 
     bool usual() const { return rate == 48000 && bits == 24 && samples == 0; }
 
@@ -38,12 +38,18 @@ inline std::vector<unsigned char> downloadWav (const synth::Table& table, const 
     return synth::wavPcm (synth::shortened (ir, (size_t) f.samples), f.rate, f.bits, &meta);
 }
 
+/** How long the whole IR of `s` is, ms: its table's length_ms — a room's own where one is round the box (the guitar's). */
+inline int wholeMs (const synth::Table& table, const State& s)
+{
+    return (int) std::lround (synth::cabAt (table, s.box, synth::pairOf (s).a).lengthMs);
+}
+
 /** What a download in `f` will be, the line under the button: "44.1 kHz, 16 bit, 1024 samples", "48 kHz, 24 bit, 100 ms" — plain
-    words and commas (the owner, 06.11: no exotic symbols in the text). */
-inline std::string formatNote (const DownloadFormat& f)
+    words and commas (the owner, 06.11: no exotic symbols in the text); the whole IR `fullMs` long. */
+inline std::string formatNote (const DownloadFormat& f, int fullMs = 100)
 {
     return std::string (f.rate == 44100 ? "44.1" : f.rate == 96000 ? "96" : "48") + " kHz, " + std::to_string (f.bits) + " bit, "
-         + (f.samples > 0 ? std::to_string (f.samples) + " samples" : std::string ("100 ms"));
+         + (f.samples > 0 ? std::to_string (f.samples) + " samples" : std::to_string (fullMs) + " ms");
 }
 
 /** A download's file name, without ".wav": the cabinet as its line says it, the dots gone — "8x10 MD421+RE20" — and the

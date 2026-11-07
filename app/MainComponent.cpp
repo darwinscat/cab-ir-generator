@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of Cab IR Generator — see LICENSE.
+// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of Orbit Bass Cab Builder and Orbit Guitar Cab Builder — see LICENSE.
 
 #include "MainComponent.h"
 #include "Flavour.h"
 
 #include <BinaryData.h>
-#include <RiffData.h>
+#if ! CABIR_PLUGIN
+ #include <RiffData.h>
+#endif
 #include <felitronics/appkit/AudioSettingsPanel.h>
 #include <felitronics/appkit/BrandAssets.h>
 #include <felitronics/toml/Toml.h>
@@ -40,26 +42,39 @@ namespace
     }
 
     /** The product's page on the site, where every link the app offers leads (the owner, 05.11: none to GitHub). */
-    const juce::String productUrl = juce::String (flavour::page) + "?utm_source=" + flavour::utmSource + "&utm_medium=app";
+    const juce::String productUrl = juce::String (flavour::page) + "?utm_source=" + flavour::utmSource
+                                  + "&utm_medium=" + (flavour::plugin ? "plugin" : "app");
 
-    // The riffs the app carries (Flavour.h).
+    // The riffs the app carries (Flavour.h); a plugin carries none, the track plays through it.
     using flavour::riffs;
     using flavour::numRiffs;
     const juce::String riffKey = "riff:";   // the setting's prefix for one of these, else a file's path
+    const juce::String inputKey = "input:"; // ...or the setting for the live input
 
     const char* riffBytes (int i, int& size)
     {
+#if ! CABIR_PLUGIN
         for (int r = 0; r < RiffData::namedResourceListSize; ++r)
             if (juce::String (RiffData::originalFilenames[r]) == riffs[i].file)
                 return RiffData::getNamedResource (RiffData::namedResourceList[r], size);
+#endif
+        juce::ignoreUnused (i);
         size = 0;
         return nullptr;
     }
 
+    /** The cabinet table, once: what the download's note reads the IR's length from. */
+    const synth::Table& cabinetTable()
+    {
+        static const auto table = synth::parseTable (std::string (BinaryData::cabinets_txt, (size_t) BinaryData::cabinets_txtSize));
+        return table;
+    }
+
     juce::PropertiesFile::Options storage()
     {
+        // A plugin's settings apart from the app's, so neither writes over what the other kept.
         juce::PropertiesFile::Options o;
-        o.applicationName     = flavour::product;
+        o.applicationName     = flavour::plugin ? juce::String (flavour::product) + " Plugin" : juce::String (flavour::product);
         o.filenameSuffix      = ".settings";
         o.folderName          = "Darwin's Cat";
         o.osxLibrarySubFolder = "Application Support";
@@ -97,10 +112,11 @@ namespace
     }
 }
 
-MainComponent::MainComponent()
-    : checker ({ .ownerRepo = "darwinscat/cab-ir-generator", .productName = flavour::product, .currentVersion = CABIR_VERSION,
+MainComponent::MainComponent (Session* host)
+    : session (host),
+      checker ({ .ownerRepo = "darwinscat/cab-ir-generator", .productName = flavour::product, .currentVersion = CABIR_VERSION,
                  .settings = [this] { return properties.getUserSettings(); } }),
-      badge (checker, about(), "Standalone"),
+      badge (checker, about(), host != nullptr ? host->format() : juce::String ("Standalone")),
       history (felitronics::appkit::CompareHistory::Mode::PerRegister,
                [this]
                {
@@ -116,6 +132,11 @@ MainComponent::MainComponent()
                felitronics::appkit::CompareHistory::Config {})
 {
     properties.setStorageParameters (storage());
+    if (session == nullptr)
+    {
+        carryFormerName();
+        engine = std::make_unique<Engine>();
+    }
     mark = markOf();
     cat = catOf();
 
@@ -133,19 +154,21 @@ MainComponent::MainComponent()
     badge.setBrandTypeface (felitronics::appkit::brand::wordmarkTypeface());
     addChildComponent (badge);   // never shown: the strip draws the version, the badge holds the window it opens
 
-    // The workspace the last run left — A/B/C/D and the one that plays — else a 4x10 with its own mic at its cap.
-    history.onHistoryChanged = [this] { repaint (header()); };
-    const auto workspace = juce::parseXML (properties.getUserSettings()->getValue ("workspace"));
-    if (workspace == nullptr || ! history.fromTree (juce::ValueTree::fromXml (*workspace)))
-    {
-        show (defaultState());
-        history.reset();
-    }
+    // The workspace the last run left — A/B/C/D and the one that plays — else the instrument's default; a plugin's from
+    // its session, the host's project.
+    history.onHistoryChanged = [this] { repaint (header()); keepSession(); };
+    loadWorkspace (session != nullptr ? session->workspace() : properties.getUserSettings()->getValue ("workspace"));
+    if (session != nullptr)
+        session->addChangeListener (this);
 
     // The output the last run used, else the system's.
-    const auto audio = juce::parseXML (properties.getUserSettings()->getValue ("audio"));
-    engine.devices.initialise (0, 2, audio.get(), true);
-    engine.devices.addAudioCallback (&engine);
+    if (engine != nullptr)
+    {
+        const auto audio = juce::parseXML (properties.getUserSettings()->getValue ("audio"));
+        engine->devices.initialise (0, 2, audio.get(), true);
+        engine->devices.addAudioCallback (engine.get());
+        engine->devices.addChangeListener (this);
+    }
 
     // DOWNLOAD IR's format the last run chose, else 48 kHz, 24 bit, the whole IR.
     {
@@ -156,19 +179,24 @@ MainComponent::MainComponent()
             if (DownloadFormat::offered (r, b, n))
                 format = { r, b, n };
         }
-        picker.setDownloadNote (juce::String::fromUTF8 (formatNote (format).c_str()));
+        noteDownload();
     }
 
-    // The sample the last run played — a riff of ours or a file — else the first riff.
-    const auto last = properties.getUserSettings()->getValue ("sample");
-    int riff = 0;
-    for (int i = 0; i < numRiffs; ++i)
-        if (last == riffKey + riffs[i].file)
-            riff = i;
-    if (! last.startsWith (riffKey) && juce::File::isAbsolutePath (last) && juce::File (last).existsAsFile())
-        loadSample (juce::File (last));
-    if (! engine.hasSample())
-        loadRiff (riff);
+    // The sample the last run played — a riff of ours, a file, or the live input (silent until played) — else the first riff.
+    if (engine != nullptr)
+    {
+        const auto last = properties.getUserSettings()->getValue ("sample");
+        if (last == inputKey)
+            useInput();
+        int riff = 0;
+        for (int i = 0; i < numRiffs; ++i)
+            if (last == riffKey + riffs[i].file)
+                riff = i;
+        if (! last.startsWith (riffKey) && juce::File::isAbsolutePath (last) && juce::File (last).existsAsFile())
+            loadSample (juce::File (last));
+        if (! engine->hasSample())
+            loadRiff (riff);
+    }
 
     setSize (CabPicker::panelW, headerH + CabPicker::panelH - CabPicker::footRowH + stripH);
     setWantsKeyboardFocus (true);
@@ -179,10 +207,67 @@ MainComponent::~MainComponent()
 {
     alive.reset();
     worker.removeAllJobs (true, 2000);
-    if (const auto xml = engine.devices.createStateXml())
-        properties.getUserSettings()->setValue ("audio", xml->toString());
-    properties.getUserSettings()->setValue ("workspace", history.toTree().toXmlString());
+    if (session != nullptr)
+    {
+        // The window closed, the plugin plays on: the pair, whatever BYPASS had taken out, and the workspace as it was left.
+        session->removeChangeListener (this);
+        offA = offB = false;
+        playHeard();
+        keepSession();
+    }
+    else
+    {
+        engine->devices.removeChangeListener (this);
+        if (const auto xml = engine->devices.createStateXml())
+            properties.getUserSettings()->setValue ("audio", xml->toString());
+        properties.getUserSettings()->setValue ("workspace", history.toTree().toXmlString());
+    }
     properties.saveIfNeeded();
+}
+
+void MainComponent::carryFormerName()
+{
+    // THE NAME IT HAD BEFORE (Flavour.h's `formerly`; the owner renamed the apps 07.11): on the first run under the new one
+    // its settings — the workspace, the window, the output, the sample — and the player's own presets come along, copied,
+    // the old files left where they were.
+    auto& now = *properties.getUserSettings();
+    auto before = storage();
+    before.applicationName = flavour::formerly;
+    if (! now.getFile().existsAsFile() && before.getDefaultFile().existsAsFile())
+    {
+        juce::PropertiesFile old (before);
+        now.addAllPropertiesFrom (old);
+        now.saveIfNeeded();
+    }
+    const auto folder = presetFolder();
+    const auto former = folder.getParentDirectory().getParentDirectory().getChildFile (flavour::formerly).getChildFile ("Presets");
+    if (! folder.exists() && former.isDirectory() && folder.createDirectory())
+        for (const auto& f : former.findChildFiles (juce::File::findFiles, false, "*.toml"))
+            f.copyFileTo (folder.getChildFile (f.getFileName()));
+}
+
+void MainComponent::loadWorkspace (const juce::String& xml)
+{
+    const auto workspace = juce::parseXML (xml);
+    if (workspace == nullptr || ! history.fromTree (juce::ValueTree::fromXml (*workspace)))
+    {
+        show (defaultState());
+        history.reset();
+    }
+}
+
+void MainComponent::keepSession()
+{
+    if (session != nullptr)
+        session->keepWorkspace (history.toTree().toXmlString(), toToml (state));
+}
+
+void MainComponent::changeListenerCallback (juce::ChangeBroadcaster* from)
+{
+    if (session != nullptr && from == session)
+        loadWorkspace (session->workspace());
+    else
+        repaint (strip());   // the app's audio device changed: the input the strip names
 }
 
 void MainComponent::render (const State& s, bool live)
@@ -216,7 +301,7 @@ void MainComponent::render (const State& s, bool live)
             irA = std::move (ir.a);
             irB = std::move (ir.b);
             playHeard();
-            repaint (strip());   // HEAR's A and B, lit with two mics heard
+            repaint (strip());   // BYPASS's A and B, live with two mics heard
             if (! live)
             {
                 keptWav = std::move (bytes);
@@ -282,11 +367,16 @@ int MainComponent::writeStills (const juce::File& folder, float scale)
     shown (first);
     write ("panel-default@2x.png");
 
-    // A pair that combs: B out in the room, on a clock of its own.
+    // A pair that combs: B heard, out in the room, on a clock of its own, the two even — its zebra plain (the owner, 07.11).
     auto combing = first;
+    combing.b.on = true;   // the guitar's first has B dark
     combing.b.x = 0.4;
+    combing.b.y = 0.0;
     combing.b.distance = 0.30;
     combing.align = false;
+    combing.invert = false;
+    combing.shiftMs = 0.0;
+    combing.blend = 0.5;
     shown (combing);
     write ("panel-comb@2x.png");
 
@@ -308,9 +398,31 @@ int MainComponent::writeStills (const juce::File& folder, float scale)
     shown (found);
     write ("panel-find@2x.png");
 
+    // The whole window as the app opens on its DEFAULT — its header, the panel, its strip, 960 x 540 — twice the stills'
+    // scale, 3840 x 2160 at their 2x: a page's 16:9 picture, larger than a screen holds the window (the owner, 07.11);
+    // and the same with the pair that combs, its zebra across the response.
+    {
+        MainComponent main;   // the app's own, on the stills' run's settings: the default, the first riff
+        const auto window = [&] (const State& s, const char* name)
+        {
+            auto ir = renderer.render (table, s.box, synth::pairOf (s), (size_t) 1 << 14);
+            const auto [cab, setup] = CabPicker::setupOf (s);
+            main.picker.show (cab, setup);
+            main.picker.showResponse (synth::responseOf (synth::as24Bit (ir.mix), 48000.0), {},
+                                      ir.a.empty() ? std::vector<float>() : synth::combOf (ir.a, ir.b));
+            main.irMix = std::move (ir.mix);   // BYPASS's A and B live with two mics heard
+            main.irA = std::move (ir.a);
+            main.irB = std::move (ir.b);
+            save (folder.getChildFile (name), main.createComponentSnapshot (main.getLocalBounds(), true, 2.0f * scale));
+        };
+        window (first, "window-default@4x.png");
+        window (combing, "window-comb@4x.png");
+    }
+
     // Each box of the pile alone, as the pile draws it unchosen, for a page's list of sizes (the owner, 05.11): one scale
     // for all, so each stands as big as itself against the others — 420 px a metre, about three and a half times the
-    // pile's — on nothing, its tolex opaque; box-<size>.png (at `scale`) and box-<size>.svg in boxes/.
+    // pile's — on nothing, its tolex opaque; box-<size>.png (at `scale`) and box-<size>.svg in boxes/ — or, where two
+    // boxes of the pile share a size (the guitar's two 2x12s), box-<its table name>, so neither writes over the other.
     const auto boxes = folder.getChildFile ("boxes");
     if (! boxes.createDirectory())
         return failed + 1;
@@ -321,17 +433,22 @@ int MainComponent::writeStills (const juce::File& folder, float scale)
             const int i = Panel::indexOf (name);
             const auto& c = CabPicker::cabs()[(size_t) i];
             const float w = c.w * perMetre, h = c.h * perMetre;
+            int sharing = 0;
+            for (const auto& col : Panel::pile())
+                for (const auto& other : col)
+                    sharing += CabPicker::wordOf (Panel::indexOf (other)) == CabPicker::wordOf (i) ? 1 : 0;
+            const juce::String stem = "box-" + juce::String (sharing > 1 ? name.toRawUTF8() : CabPicker::wordOf (i).toRawUTF8());
             juce::Image image (juce::Image::ARGB, juce::roundToInt ((w + 2.0f * margin) * scale), juce::roundToInt ((h + 2.0f * margin) * scale), true);
             {
                 juce::Graphics g (image);
                 g.addTransform (juce::AffineTransform::scale (scale));
                 CabPicker::paintBox (g, i, { margin, margin, w, h });
             }
-            save (boxes.getChildFile ("box-" + CabPicker::wordOf (i) + ".png"), image);
+            save (boxes.getChildFile (stem + ".png"), image);
 
             // ...and as SVG beside it, at the same 420 px a metre: crisp at any size, lighter on a page.
             const auto svg = CabPicker::boxSvg (i, w + 2.0f * margin, h + 2.0f * margin, { margin, margin, w, h });
-            const auto file = boxes.getChildFile ("box-" + CabPicker::wordOf (i) + ".svg");
+            const auto file = boxes.getChildFile (stem + ".svg");
             file.deleteFile();
             juce::FileOutputStream out (file);
             if (! out.openedOk() || ! out.write (svg.data(), svg.size()))
@@ -367,6 +484,7 @@ void MainComponent::keep (const State& s)
 {
     const bool bTakenUp = ! state.b.on && s.b.on;
     state = s;
+    noteDownload();
     render (s, false);
     repaint (header());
     if (bTakenUp)
@@ -416,6 +534,7 @@ void MainComponent::findPlace (const State& s, bool thorough)
 void MainComponent::show (const State& s)
 {
     state = s;
+    noteDownload();
     const auto [cab, setup] = CabPicker::setupOf (s);
     picker.show (cab, setup);
     render (s, false);
@@ -599,31 +718,49 @@ void MainComponent::savePreset()
 
 void MainComponent::loadSample (const juce::File& file)
 {
-    const bool wasPlaying = engine.isPlaying();
-    if (! engine.loadSample (file))
+    if (engine == nullptr)
+        return;
+    const bool wasPlaying = engine->isPlaying();
+    if (! engine->loadSample (file))
         return;
     properties.getUserSettings()->setValue ("sample", file.getFullPathName());
     riffNow = -1;
-    engine.play (wasPlaying);
+    engine->play (wasPlaying);
     repaint (strip());
 }
 
 void MainComponent::loadRiff (int i)
 {
+    if (engine == nullptr)
+        return;
     int size = 0;
     const char* data = riffBytes (i, size);
-    const bool wasPlaying = engine.isPlaying();
-    if (data == nullptr || ! engine.loadSample (data, (size_t) size, riffs[i].title))
+    const bool wasPlaying = engine->isPlaying();
+    if (data == nullptr || ! engine->loadSample (data, (size_t) size, riffs[i].title))
         return;
     properties.getUserSettings()->setValue ("sample", riffKey + riffs[i].file);
     riffNow = i;
-    engine.play (wasPlaying);
+    engine->play (wasPlaying);
+    repaint (strip());
+}
+
+void MainComponent::useInput()
+{
+    if (engine == nullptr)
+        return;
+    engine->useInput();   // silent until PLAY: a laptop's own mic beside its speakers would howl
+    properties.getUserSettings()->setValue ("sample", inputKey);
+    riffNow = -1;
     repaint (strip());
 }
 
 void MainComponent::showSamples()
 {
+    // The live input first, the instrument through the cabinet as through an amp's (the owner, 07.11); then our riffs.
     juce::PopupMenu menu;
+    constexpr int inputId = 2000;
+    menu.addItem (inputId, "INPUT (AUDIO INTERFACE)", true, engine->usingInput());
+    menu.addSeparator();
     for (int i = 0; i < numRiffs; ++i)
         menu.addItem (i + 1, riffs[i].title, true, i == riffNow);
     menu.addSeparator();
@@ -632,7 +769,9 @@ void MainComponent::showSamples()
     menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this).withTargetScreenArea (localAreaToGlobal (sampleArea())),
                         [this] (int id)
                         {
-                            if (id == fileId)
+                            if (id == inputId)
+                                useInput();
+                            else if (id == fileId)
                                 openSample();
                             else if (id >= 1 && id <= numRiffs)
                                 loadRiff (id - 1);
@@ -655,11 +794,12 @@ void MainComponent::filesDropped (const juce::StringArray& files, int, int)
 
 void MainComponent::showAudio()
 {
+    // The output, and the input INPUT plays: a device and its channels, the first one open heard.
     felitronics::appkit::AudioSettingsPanel::Options o;
     o.minInputs = 0;
-    o.maxInputs = 0;
-    auto panel = std::make_unique<felitronics::appkit::AudioSettingsPanel> (engine.devices, o);
-    panel->setSize (460, 260);
+    o.maxInputs = 2;
+    auto panel = std::make_unique<felitronics::appkit::AudioSettingsPanel> (engine->devices, o);
+    panel->setSize (460, 380);
     juce::CallOutBox::launchAsynchronously (std::move (panel), audioArea().translated (0, 0), this);
 }
 
@@ -712,7 +852,8 @@ void MainComponent::showFormats()
     for (const int b : { 24, 16 })
         menu.addItem (juce::String (b) + " bit", true, format.bits == b, [this, b] { format.bits = b; formatChosen(); });
     menu.addSectionHeader ("LENGTH");
-    menu.addItem ("FULL (100 ms)", true, format.samples == 0, [this] { format.samples = 0; formatChosen(); });
+    menu.addItem ("FULL (" + juce::String (wholeMs (cabinetTable(), state)) + " ms)", true, format.samples == 0,
+                  [this] { format.samples = 0; formatChosen(); });
     for (const int n : { 2048, 1024, 512 })
         menu.addItem (juce::String (n) + " samples (" + juce::String (juce::roundToInt (1000.0 * n / format.rate)) + " ms)", true,
                       format.samples == n, [this, n] { format.samples = n; formatChosen(); });
@@ -722,13 +863,19 @@ void MainComponent::showFormats()
 void MainComponent::formatChosen()
 {
     properties.getUserSettings()->setValue ("downloadFormat", juce::String (format.rate) + " " + juce::String (format.bits) + " " + juce::String (format.samples));
-    picker.setDownloadNote (juce::String::fromUTF8 (formatNote (format).c_str()));
+    noteDownload();
+}
+
+void MainComponent::noteDownload()
+{
+    // The whole IR as long as the cabinet's: a room's tail makes it longer (the guitar's).
+    picker.setDownloadNote (juce::String::fromUTF8 (formatNote (format, wholeMs (cabinetTable(), state)).c_str()));
 }
 
 void MainComponent::timerCallback()
 {
     history.tick();
-    engine.flush();
+    sound().flush();
 }
 
 void MainComponent::mouseMove (const juce::MouseEvent& e)
@@ -757,9 +904,9 @@ bool MainComponent::keyPressed (const juce::KeyPress& key)
     if (key == juce::KeyPress ('z', command | juce::ModifierKeys::shiftModifier, 0) || key == juce::KeyPress ('y', command, 0))
         return history.redo(), true;
     // SPACE plays and stops the sample; the arrows step through the presets, as ◀ ▶ do (the owner, 05.11).
-    if (key == juce::KeyPress::spaceKey && engine.hasSample())
+    if (key == juce::KeyPress::spaceKey && engine != nullptr && engine->hasSample())
     {
-        engine.play (! engine.isPlaying());
+        engine->play (! engine->isPlaying());
         repaint (strip());
         return true;
     }
@@ -772,20 +919,21 @@ bool MainComponent::keyPressed (const juce::KeyPress& key)
 
 // ---------------------------------------------------------------- the header
 // One row: the brand — the cat, the mark, the name with the byline under its last word, as the family's headers carry
-// them — then the preset, then UNDO, REDO and A/B/C/D (the owner, 05.11).
+// them — then the preset, then UNDO, REDO and A/B/C/D (the owner, 05.11); A/B/C/D and the gaps between close, so the
+// preset has room for a long name beside the guitar's longer one (the owner, 07.11).
 juce::Rectangle<int> MainComponent::brandRow() const   { return header(); }
 juce::Rectangle<int> MainComponent::registerArea (int i) const
 {
     const auto b = brandRow();
-    return { b.getRight() - 10 - (4 - i) * 34 + 4, b.getCentreY() - 15, 30, 30 };
+    return { b.getRight() - 6 - (4 - i) * 28 + 2, b.getCentreY() - 13, 26, 26 };
 }
-juce::Rectangle<int> MainComponent::redoArea() const   { return registerArea (0).translated (-46, 0); }
-juce::Rectangle<int> MainComponent::undoArea() const   { return redoArea().translated (-36, 0); }
+juce::Rectangle<int> MainComponent::redoArea() const   { return registerArea (0).withY (brandRow().getCentreY() - 15).withHeight (30).withWidth (30).translated (-34, 0); }
+juce::Rectangle<int> MainComponent::undoArea() const   { return redoArea().translated (-32, 0); }
 juce::Rectangle<int> MainComponent::prevArea() const
 {
-    return { brandLink().getRight() + 14, brandRow().getCentreY() - 15, 30, 30 };
+    return { brandLink().getRight() + 10, brandRow().getCentreY() - 15, 30, 30 };
 }
-juce::Rectangle<int> MainComponent::nextArea() const   { return prevArea().withX (undoArea().getX() - 18 - 30); }
+juce::Rectangle<int> MainComponent::nextArea() const   { return prevArea().withX (undoArea().getX() - 10 - 30); }
 juce::Rectangle<int> MainComponent::presetArea() const
 {
     return { prevArea().getRight() + 6, prevArea().getY(), nextArea().getX() - 6 - prevArea().getRight() - 6, prevArea().getHeight() };
@@ -803,18 +951,26 @@ juce::Rectangle<int> MainComponent::playArea() const    { return openArea().tran
 juce::Rectangle<int> MainComponent::sampleArea() const  { return playArea().translated (78, 0).withWidth (300); }
 juce::Rectangle<int> MainComponent::audioArea() const   { return versionArea().translated (-82, 0).withWidth (74); }
 
-juce::Rectangle<int> MainComponent::hearArea (int i) const   // after the sample, a button a word
+juce::Rectangle<int> MainComponent::bypassWordArea() const   // after the sample, BYPASS; a plugin's first in the strip
 {
-    int x = sampleArea().getRight() + 16;
+    const int x = engine != nullptr ? sampleArea().getRight() + 16 : openArea().getX();
+    return sampleArea().withX (x).withWidth (juce::roundToInt (look().trackedWidth ("BYPASS", look().font (13.0f), 0.08f)) + 4);
+}
+
+juce::Rectangle<int> MainComponent::hearArea (int i) const   // ...then A, B, A+B, a button a word
+{
+    int x = bypassWordArea().getRight() + 8;
     for (int k = 0; k < i; ++k)
-        x += juce::roundToInt (look().trackedWidth (hearWords[k], look().font (13.0f), 0.06f)) + 22 + 4;
-    return sampleArea().withX (x).withWidth (juce::roundToInt (look().trackedWidth (hearWords[i], look().font (13.0f), 0.06f)) + 22);
+        x += juce::roundToInt (look().trackedWidth (bypassWords[k], look().font (13.0f), 0.06f)) + 22 + 4;
+    return sampleArea().withX (x).withWidth (juce::roundToInt (look().trackedWidth (bypassWords[i], look().font (13.0f), 0.06f)) + 22);
 }
 
 MainComponent::Hear MainComponent::hearing() const
 {
+    if (offA && offB)
+        return Hear::bypass;
     const bool parts = ! irA.empty() && ! irB.empty();
-    return (hear == Hear::a || hear == Hear::b) && ! parts ? Hear::pair : hear;
+    return ! parts ? Hear::pair : offA ? Hear::b : offB ? Hear::a : Hear::pair;
 }
 
 void MainComponent::playHeard()
@@ -822,8 +978,8 @@ void MainComponent::playHeard()
     const auto now = hearing();
     const auto& ir = now == Hear::a ? irA : now == Hear::b ? irB : irMix;
     if (! ir.empty())
-        engine.setIr (ir, 48000.0);
-    engine.setBypass (now == Hear::bypass);
+        sound().setIr (ir, 48000.0);
+    sound().setBypass (now == Hear::bypass);
 }
 juce::Rectangle<int> MainComponent::versionArea() const { return strip().reduced (8, 5).removeFromRight (70); }
 
@@ -859,7 +1015,7 @@ void MainComponent::paint (juce::Graphics& g)
         const auto name = look().font (h * nameShare), by = look().font (h * 0.25f);
         const float x = h * 2.0f + 18.0f, nameW = look().trackedWidth (flavour::product, name, 0.0f);
         g.setColour (brandHover ? juce::Colours::white : look().tx);
-        look().drawTracked (g, flavour::product, { x, b.getY() + 5.0f, nameW + 4.0f, h * 0.5f }, name, 0.0f, juce::Justification::centredLeft);
+        look().drawTracked (g, flavour::product,{ x, b.getY() + 5.0f, nameW + 4.0f, h * 0.5f }, name, 0.0f, juce::Justification::centredLeft);
         g.setColour (brandHover ? look().violet.brighter (0.3f) : look().violet);
         look().drawTracked (g, "by Darwin's Cat", { x, b.getY() + h * 0.54f, nameW, h * 0.36f }, by, 0.0f, juce::Justification::centredRight);
 
@@ -915,8 +1071,18 @@ void MainComponent::paint (juce::Graphics& g)
         g.setColour (look().txFaint);
         g.drawRoundedRectangle (pr, 4.0f, 1.0f);
         g.setColour (presetName.isEmpty() ? look().txFaint : edited ? look().txDim : look().tx);
-        look().drawTracked (g, (presetName.isEmpty() ? juce::String ("PRESETS") : presetName.toUpperCase()) + (edited && presetName.isNotEmpty() ? " *" : ""),
-                            pr.reduced (10.0f, 0.0f), font, 0.06f, juce::Justification::centredLeft);
+        // The name as it fits before the ▾: whole; else without its style (the menu says it), "2X12 INVASION"; else cut.
+        const juce::String mark = edited && presetName.isNotEmpty() ? " *" : "";
+        juce::String shown = presetName.isEmpty() ? juce::String ("PRESETS") : presetName.toUpperCase();
+        const float room = pr.getWidth() - 20.0f - 16.0f;
+        const auto fits = [&] (const juce::String& t) { return look().trackedWidth (t + mark, font, 0.06f) <= room; };
+        if (! fits (shown))
+            for (const char* by : { ": ", "\xc2\xb7 " })
+                if (shown.contains (juce::String::fromUTF8 (by)))
+                    shown = shown.fromFirstOccurrenceOf (juce::String::fromUTF8 (by), false, false).trim();
+        while (shown.length() > 1 && ! fits (shown))
+            shown = shown.dropLastCharacters (shown.endsWith ("...") ? 4 : 1).trimEnd() + "...";
+        look().drawTracked (g, shown + mark, pr.reduced (10.0f, 0.0f), font, 0.06f, juce::Justification::centredLeft);
         look().drawTracked (g, juce::String::fromUTF8 ("\xe2\x96\xbe"), pr.reduced (10.0f, 0.0f), font, 0.0f, juce::Justification::centredRight);
         button (juce::String::fromUTF8 ("\xe2\x97\x80"), prevArea(), false);
         button (juce::String::fromUTF8 ("\xe2\x96\xb6"), nextArea(), false);
@@ -926,23 +1092,36 @@ void MainComponent::paint (juce::Graphics& g)
     g.setColour (look().hair);
     g.fillRect (s.withHeight (1));
 
-    button ("OPEN", openArea(), false);
-    if (engine.hasSample())
-        button (engine.isPlaying() ? "STOP" : "PLAY", playArea(), engine.isPlaying());
-    button ("AUDIO", audioArea(), false);
-    for (int i = 0; i < 4; ++i)   // HEAR: the one playing lit; A and B dim with one mic heard
-        button (hearWords[i], hearArea (i), (int) hearing() == i, i == 0 || i == 3 || (! irA.empty() && ! irB.empty()));
+    {   // BYPASS: each mic out lit, A+B with both; A and B dim with one mic heard
+        const bool parts = ! irA.empty() && ! irB.empty();
+        g.setColour (look().txFaint);
+        look().drawTracked (g, "BYPASS", bypassWordArea().toFloat(), font, 0.08f, juce::Justification::centredLeft);
+        button (bypassWords[0], hearArea (0), offA && parts, parts);
+        button (bypassWords[1], hearArea (1), offB && parts, parts);
+        button (bypassWords[2], hearArea (2), offA && offB);
+    }
 
-    // The sample: a box like the preset's, its menu the riffs we carry and a file of the player's own.
-    const auto sa = sampleArea().toFloat().reduced (0.5f);
-    g.setColour (look().panel2);
-    g.fillRoundedRectangle (sa, 4.0f);
-    g.setColour (look().txFaint);
-    g.drawRoundedRectangle (sa, 4.0f, 1.0f);
-    g.setColour (engine.hasSample() ? look().tx : look().txFaint);
-    look().drawTracked (g, engine.hasSample() ? engine.sampleName().toUpperCase() : juce::String ("DROP A ") + flavour::sampleWord + " SAMPLE ON THE WINDOW",
-                        sa.reduced (10.0f, 0.0f), font, 0.06f, juce::Justification::centredLeft);
-    look().drawTracked (g, juce::String::fromUTF8 ("\xe2\x96\xbe"), sa.reduced (10.0f, 0.0f), font, 0.0f, juce::Justification::centredRight);
+    if (engine != nullptr)   // the app's player; a plugin's track plays through it, set in the host
+    {
+        button ("OPEN", openArea(), false);
+        if (engine->hasSample())
+            button (engine->isPlaying() ? "STOP" : "PLAY", playArea(), engine->isPlaying());
+        button ("AUDIO", audioArea(), false);
+
+        // The sample: a box like the preset's, its menu the riffs we carry and a file of the player's own.
+        const auto sa = sampleArea().toFloat().reduced (0.5f);
+        g.setColour (look().panel2);
+        g.fillRoundedRectangle (sa, 4.0f);
+        g.setColour (look().txFaint);
+        g.drawRoundedRectangle (sa, 4.0f, 1.0f);
+        g.setColour (engine->hasSample() ? look().tx : look().txFaint);
+        const auto source = engine->usingInput() ? "INPUT: " + (engine->inputName().isNotEmpty() ? engine->inputName().toUpperCase() : juce::String ("NONE, SEE AUDIO"))
+                          : engine->hasSample()  ? engine->sampleName().toUpperCase()
+                                                 : juce::String ("DROP A ") + flavour::sampleWord + " SAMPLE ON THE WINDOW";
+        look().drawTracked (g, source,
+                            sa.reduced (10.0f, 0.0f), font, 0.06f, juce::Justification::centredLeft);
+        look().drawTracked (g, juce::String::fromUTF8 ("\xe2\x96\xbe"), sa.reduced (10.0f, 0.0f), font, 0.0f, juce::Justification::centredRight);
+    }
 
     g.setColour (checker.updateAvailable() ? look().orange : look().txDim);
     look().drawTracked (g, "V" + checker.currentVersion(), versionArea().toFloat(), font, 0.06f, juce::Justification::centredRight);
@@ -985,22 +1164,27 @@ void MainComponent::mouseDown (const juce::MouseEvent& e)
             history.switchTo (reg);
         repaint (header());
     }
-    else if (openArea().contains (p))
+    else if (engine != nullptr && openArea().contains (p))
         openSample();
-    else if (sampleArea().contains (p))
+    else if (engine != nullptr && sampleArea().contains (p))
         showSamples();
-    else if (playArea().contains (p) && engine.hasSample())
+    else if (engine != nullptr && playArea().contains (p) && engine->hasSample())
     {
-        engine.play (! engine.isPlaying());
+        engine->play (! engine->isPlaying());
         repaint (strip());
     }
-    else if (audioArea().contains (p))
+    else if (engine != nullptr && audioArea().contains (p))
         showAudio();
-    else if (const int h = [&] { for (int i = 0; i < 4; ++i) if (hearArea (i).contains (p)) return i; return -1; }(); h >= 0)
+    else if (const int h = [&] { for (int i = 0; i < 3; ++i) if (hearArea (i).contains (p)) return i; return -1; }(); h >= 0)
     {
-        if ((h == 1 || h == 2) && (irA.empty() || irB.empty()))
-            return;   // A or B with one mic heard: nothing to pick
-        hear = (Hear) h;
+        if (h < 2 && (irA.empty() || irB.empty()))
+            return;   // A or B with one mic heard: nothing to take out
+        if (h == 0)
+            offA = ! offA;
+        else if (h == 1)
+            offB = ! offB;
+        else
+            offA = offB = ! (offA && offB);   // both out, or both back
         playHeard();
         repaint (strip());
     }

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of Cab IR Generator — see LICENSE.
+// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of Orbit Bass Cab Builder and Orbit Guitar Cab Builder — see LICENSE.
 
 #pragma once
 
@@ -8,9 +8,10 @@
 
 #include <iterator>
 
-/** WHICH APP THIS IS: Cab IR Generator, the bass's — or, built with CABIR_GUITAR, the guitar's, the same app on its own
-    table, presets and riffs (data/guitar), under its own name, its settings and its presets apart. CMake builds it twice;
-    whatever else the two differ in is the panel's catalog (GuitarCatalog.h), handed in before the window opens. */
+/** WHICH APP THIS IS: Orbit Bass Cab Builder — or, built with CABIR_GUITAR, Orbit Guitar Cab Builder, the same app on its
+    own table, presets and riffs (data/guitar), under its own name, its settings and its presets apart (the names, the
+    owner's, 07.11). CMake builds it twice; whatever else the two differ in is the panel's catalog (GuitarCatalog.h),
+    handed in before the window opens. `formerly`: the name it had before, whose settings and presets a first run copies. */
 namespace cabir::app::flavour
 {
 
@@ -19,8 +20,9 @@ struct Riff { const char* file; const char* title; };
 
 #if CABIR_GUITAR
 inline constexpr bool guitar = true;
-inline constexpr const char* product = "Guitar Cab IR Generator";
-inline constexpr const char* page = "https://darwinscat.com/felitronics/guitar-cab-ir-generator";   // its own, on the site
+inline constexpr const char* product = "Orbit Guitar Cab Builder";
+inline constexpr const char* formerly = "Guitar Cab IR Generator";
+inline constexpr const char* page = guitarPageAddress;   // its own, on the site (Link.h)
 inline constexpr const char* utmSource = "guitar-cab-ir-generator";
 inline constexpr const char* sampleWord = "GUITAR";
 inline constexpr const char* samplePrompt = "A guitar sample";
@@ -43,7 +45,8 @@ inline State defaultState()
 }
 #else
 inline constexpr bool guitar = false;
-inline constexpr const char* product = "Cab IR Generator";
+inline constexpr const char* product = "Orbit Bass Cab Builder";
+inline constexpr const char* formerly = "Cab IR Generator";
 inline constexpr const char* page = pageAddress;   // the bass's (Link.h)
 inline constexpr const char* utmSource = "cab-ir-generator";
 inline constexpr const char* sampleWord = "BASS";
@@ -74,5 +77,13 @@ inline State defaultState()
 #endif
 
 inline constexpr int numRiffs = (int) std::size (riffs);
+
+/** WHAT IT RUNS AS: the app, or — built with CABIR_PLUGIN — a plugin, the same window in a host's under the same name, the
+    track played through it. Its presets are the app's, in the app's folder; its settings its own. */
+#if CABIR_PLUGIN
+inline constexpr bool plugin = true;
+#else
+inline constexpr bool plugin = false;
+#endif
 
 } // namespace cabir::app::flavour

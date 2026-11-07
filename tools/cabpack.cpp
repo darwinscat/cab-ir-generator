@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of Cab IR Generator — see LICENSE.
+// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of Orbit Bass Cab Builder and Orbit Guitar Cab Builder — see LICENSE.
 
 // THE IR PACKS a page offers for download, made again whenever the presets change — the same inputs, the same bytes.
 //
@@ -17,7 +17,10 @@
 // — each alone in responses/<file>.svg, all of them together in responses.svg — a click on one opening it there too.
 // And the same by size, size/8x10/ and so on: every cabinet of that size, of every style and the typical ones — a list,
 // index.tsv saying in its last column, `folder`, where each one's files are, and the size's own responses.svg.
+// The guitar's table (data/guitar/cabinets.txt) is known by its boxes: the panel's catalog is then the guitar's
+// (GuitarCatalog.h), its typical cabinets the guitar's DEFAULT's mics, an SM57 and B the ribbon, and named with a colon.
 
+#include <panel/GuitarCatalog.h>
 #include <panel/Link.h>
 #include <panel/Panel.h>
 #include <synth/CabSynth.h>
@@ -68,6 +71,50 @@ namespace
         return s;
     }
 
+    bool guitar = false;   // the table read is the guitar's (useCatalogOf)
+
+    /** What its words name: BASS and Orbit Bass Cab Builder, or the guitar's. */
+    const char* instrument() { return guitar ? "GUITAR" : "BASS"; }
+    const char* builder() { return guitar ? "Orbit Guitar Cab Builder" : "Orbit Bass Cab Builder"; }
+
+    /** A style's folder: its name lower-cased, a space a hyphen — "classic-rock", "top-12" (the site, 07.11). */
+    std::string folderOf (const std::string& style)
+    {
+        auto f = lower (style);
+        std::replace (f.begin(), f.end(), ' ', '-');
+        return f;
+    }
+
+    /** A box's size as its folder under size/ names it: the bass's the panel's word, "8x10"; the guitar's its box without
+        -open or -closed, "4x12", the tall 2x12 kept apart from the wide one as "2x12-vertical" (the site, 07.11). */
+    std::string sizeOf (const std::string& box)
+    {
+        if (! guitar)
+            return Panel::wordOf (Panel::indexOf (ui::String (box))).toStdString();
+        for (const char* end : { "-open", "-closed" })
+            if (const auto n = std::string (end).size(); box.size() > n && box.compare (box.size() - n, n, end) == 0)
+                return box.substr (0, box.size() - n);
+        return box;
+    }
+
+    /** ...and as a title writes it: "4x12", "2x12 VERTICAL". */
+    std::string sizeTitle (const std::string& size)
+    {
+        const auto dash = size.find ('-');
+        return dash == std::string::npos ? size : size.substr (0, dash) + " " + ui::String (size.substr (dash + 1)).toUpperCase().toStdString();
+    }
+
+    /** THE GUITAR'S TABLE, known by its boxes: every one of the guitar's catalog a "<box> cap" of it. Its catalog is then
+        the panel's (Panel::useCatalog), before anything reads a state — else the bass's stands, and calls them unknown. */
+    void useCatalogOf (const synth::Table& table)
+    {
+        const auto& cabs = guitarCatalog().cabs;
+        guitar = std::all_of (cabs.begin(), cabs.end(), [&table] (const Panel::Cab& c)
+        { return std::any_of (table.begin(), table.end(), [&c] (const auto& s) { return s.first == c.name.toStdString() + " cap"; }); });
+        if (guitar)
+            Panel::useCatalog (guitarCatalog());
+    }
+
     /** A box as the list names it: the panel's size word, or a table key. Empty for neither. */
     std::string boxOf (const synth::Table& table, const std::string& word)
     {
@@ -90,7 +137,7 @@ namespace
     {
         auto alone = s;
         alone.b.on = false;
-        if (synth::green::judgeOf (table, alone).second > synth::green::pitDb)
+        if (synth::green::judgeOf (table, alone).second > synth::pitRedOf (table, s.box))
             s.a = synth::green::smoothed (table, alone).a;
         s = synth::green::withB (s, synth::green::spreadB (table, s).found);
         if (const auto kept = fromToml (toToml (s)))
@@ -98,7 +145,7 @@ namespace
         return s;
     }
 
-    const char* backWord (int b) { return b == 0 ? "closed" : b == 1 ? "ported" : "open"; }
+    const char* backWord (int b) { return b == 0 ? "closed" : b == 1 ? "ported" : b == 3 ? "half" : "open"; }
 
     std::string hornWord (const State& s)
     {
@@ -114,7 +161,7 @@ namespace
     }
 
     /** The page's address, opening the generator on `s` (panel/Link.h) — as each WAV says it too. */
-    std::string linkTo (const State& s) { return std::string (pageAddress) + "#" + linkOf (s); }
+    std::string linkTo (const State& s) { return std::string (guitar ? guitarPageAddress : pageAddress) + "#" + linkOf (s); }
 
     std::string tsvLine (const Item& it)
     {
@@ -126,7 +173,7 @@ namespace
             if (! m.on) return std::string ("off\t\t\t\t");
             return m.model + "\t" + number (m.x, 3) + "\t" + number (m.y, 3) + "\t" + number (m.distance, 3) + "\t" + number (m.angle, 1);
         };
-        return it.file + "\t" + it.style + "\t" + it.name + "\t" + Panel::wordOf (at).toStdString() + "\t" + backWord (back) + "\t"
+        return it.file + "\t" + it.style + "\t" + it.name + "\t" + sizeOf (it.state.box) + "\t" + backWord (back) + "\t"
              + hornWord (s) + "\t" + mic (s.a) + "\t" + mic (s.b) + "\t" + number (s.blend, 3) + "\t" + (s.align ? "on" : "off") + "\t"
              + (s.invert ? "inverted" : "normal") + "\t" + number (s.shiftMs, 3) + "\t" + Panel::labelOf (s).toStdString() + "\t"
              + linkTo (s) + "\n";
@@ -136,16 +183,18 @@ namespace
         it falls into and its two mics cancelling there — and, with two mics heard, where they meet (synth::combOf). */
     struct Curve { std::vector<float> db, bad, comb; };
 
-    Curve curveOf (const synth::PairParts& parts, double rate)
+    Curve curveOf (const synth::PairParts& parts, double rate, double pitRed, double combTopRed)
     {
         Curve c;
         c.db = synth::responseOf (synth::as24Bit (parts.mix), rate);
         c.bad = synth::pitsOf (c.db);
+        for (auto& b : c.bad)   // a pit judged from where the table's line reddens (the guitar's 5 dB), as the panel does
+            b = std::max (0.0f, b - (float) (pitRed - 3.0));
         if (! parts.a.empty())
         {
             c.comb = synth::combOf (parts.a, parts.b, rate);
-            for (size_t i = 0; i < c.bad.size() && i < c.comb.size(); ++i)
-                c.bad[i] = std::max (c.bad[i], -c.comb[i]);
+            for (size_t i = 0; i < c.bad.size() && i < c.comb.size(); ++i)   // from 2 kHz up as the table lets a comb cancel
+                c.bad[i] = std::max (c.bad[i], -c.comb[i] - (synth::responseHz ((int) i) >= synth::combTopHz ? (float) (combTopRed - 3.0) : 0.0f));
         }
         return c;
     }
@@ -300,9 +349,22 @@ namespace
         out += "<line x1=\"" + f (x) + "\" y1=\"" + f (at - 4) + "\" x2=\"" + f (x + 12) + "\" y2=\"" + f (at - 4)
              + "\" stroke=\"#3fae6a\" stroke-width=\"2\"/><line x1=\"" + f (x + 12) + "\" y1=\"" + f (at - 4) + "\" x2=\"" + f (x + 24)
              + "\" y2=\"" + f (at - 4) + "\" stroke=\"#d5455a\" stroke-width=\"2\"/>\n";
-        said ({ "The line: the cabinet's response at 48 kHz, levelled to its own 100 Hz to 5 kHz.",
-                bands ? "Green is fine; red falls 3 dB or more into a pit, or the two mics cancel there."
-                      : "Green is fine; red falls 3 dB or more into a pit." });
+        // The bass's 3 dB for both; the guitar's own where it reddens later (its catalog's pitRedDb, combTopRedDb).
+        if (std::abs (Panel::catalog().pitRedDb - 3.0f) < 0.01f && std::abs (Panel::catalog().combTopRedDb - 3.0f) < 0.01f)
+            said ({ "The line: the cabinet's response at 48 kHz, levelled to its own 100 Hz to 5 kHz.",
+                    bands ? "Green is fine; red falls 3 dB or more into a pit, or the two mics cancel there."
+                          : "Green is fine; red falls 3 dB or more into a pit." });
+        else
+        {
+            const auto pit = "Green is fine; red falls " + std::to_string ((int) std::lround (Panel::catalog().pitRedDb)) + " dB or more into a pit";
+            const auto comb = "or the two mics cancel 3 dB there, " + std::to_string ((int) std::lround (Panel::catalog().combTopRedDb))
+                            + " dB from 2 kHz up.";
+            const auto pitLine = bands ? pit + "," : pit + ".";
+            if (bands)
+                said ({ "The line: the cabinet's response at 48 kHz, levelled to its own 100 Hz to 5 kHz.", pitLine.c_str(), comb.c_str() });
+            else
+                said ({ "The line: the cabinet's response at 48 kHz, levelled to its own 100 Hz to 5 kHz.", pitLine.c_str() });
+        }
         if (bands)
         {
             out += "<rect x=\"" + f (x) + "\" y=\"" + f (at - 10) + "\" width=\"12\" height=\"12\" fill=\"#3fae6a\" fill-opacity=\"0.45\"/><rect x=\""
@@ -321,7 +383,8 @@ namespace
     }
 
     /** RESPONSES.SVG: every cabinet of a folder (chartSvg), four across, under its title — "ROCK · 20 BASS CABINETS from
-        Darwin's Cat" (the owner, 06.11), the style upper-cased or the size as it is written — what made it, and what the
+        Darwin's Cat" (the owner, 06.11), "TOP 12 · 12 GUITAR CABINETS from Darwin's Cat" the guitar's, the style
+        upper-cased or the size as it is written — what made it, and what the
         line and the bands say, a click on one opening it on the page. Nothing read under 13 px. */
     std::string responsesSvg (const std::string& title, const std::vector<Item>& items, const std::vector<Curve>& curves)
     {
@@ -331,9 +394,9 @@ namespace
         const auto f = svgNumber;
         std::string out = svgOpen (columns * cellW, head + (float) rows * cellH + 8.0f);
         out += "<text x=\"20\" y=\"32\" fill=\"#ece9f6\" font-size=\"20\" font-weight=\"600\" letter-spacing=\"1.5\" " + svgFont + ">"
-             + escaped (title) + " \xc2\xb7 " + std::to_string (items.size()) + " BASS CABINETS from Darwin's Cat</text>\n";
-        out += "<text x=\"20\" y=\"56\" fill=\"#a6a2bd\" font-size=\"13\" " + svgFont + ">Made with Cab IR Generator " + CABIR_VERSION
-             + ". A click on one opens it in the generator.</text>\n";
+             + escaped (title) + " \xc2\xb7 " + std::to_string (items.size()) + " " + instrument() + " CABINETS from Darwin's Cat</text>\n";
+        out += "<text x=\"20\" y=\"56\" fill=\"#a6a2bd\" font-size=\"13\" " + svgFont + ">Made with " + builder() + " " + CABIR_VERSION
+             + ". A click on one opens it on the page.</text>\n";
         legendSvg (out, 20, 80, true, true);
         for (size_t i = 0; i < items.size() && i < curves.size(); ++i)
         {
@@ -403,7 +466,7 @@ namespace
         {
             const auto id = field (c, "id"), back = field (c, "back"), horn = field (c, "horn");
             const auto box = boxOf (table, field (c, "box"));
-            const std::map<std::string, int> backs { { "own", -1 }, { "closed", 0 }, { "ported", 1 }, { "open", 2 } };
+            const std::map<std::string, int> backs { { "own", -1 }, { "closed", 0 }, { "ported", 1 }, { "open", 2 }, { "half", 3 } };
             const std::map<std::string, double> horns { { "-12", -12.0 }, { "-6", -6.0 }, { "0", 0.0 } };
             if (id.empty() || box.empty() || backs.count (back) == 0 || (horn != "off" && horns.count (horn) == 0))
             {
@@ -418,6 +481,11 @@ namespace
             s.hornDb = s.horn ? horns.at (horn) : 0.0;
             s.a = { true, "md421", -0.3, 0.0, 0.05, 0.0 };
             s.b = { true, "u47", -0.65, 0.0, 0.12, 0.0 };
+            if (guitar)   // the guitar's DEFAULT (app/Flavour.h): an SM57 a little off its cap at 3 cm, B the ribbon a step back
+            {
+                s.a = { true, "sm57", -0.3, 0.0, 0.03, 0.0 };
+                s.b = { true, "ribbon", 0.4, 0.0, 0.10, 0.0 };
+            }
             s.blend = 0.35;
             s.align = true;
             typicals.push_back ({ id, field (c, "name"), s });
@@ -441,8 +509,9 @@ namespace
         {
             // A name of its own, or its size, back and horn said — the app's line alone names neither its own back nor the
             // horn, and two of the list would read alike in a preset menu.
+            // The guitar's no horn to name, and a colon for the dot (the owner: no such symbol in its text).
             std::string said = Panel::wordOf (Panel::indexOf (ui::String (s.box))).toStdString() + " " + ui::String (backWord (s.back >= 0 ? s.back : Panel::ownBack (Panel::indexOf (ui::String (s.box))))).toUpperCase().toStdString()
-                             + (s.horn ? " HORN " + hornWord (s) : std::string (" NO HORN")) + " \xc2\xb7 MD421+U47";
+                             + (guitar ? std::string (": SM57+RIBBON") : (s.horn ? " HORN " + hornWord (s) : std::string (" NO HORN")) + " \xc2\xb7 MD421+U47");
             t::Table head;
             (void) head.insert ("name", t::Value (ownName.empty() ? said : ownName));
             (void) head.insert ("style", t::Value (std::string ("Typical")));
@@ -457,7 +526,11 @@ namespace
 int main (int argc, char** argv)
 {
     if (argc == 4 && std::string (argv[1]) == "--typical")
-        return writeTypical (synth::readTable (argv[2]), argv[3]);
+    {
+        const auto table = synth::readTable (argv[2]);
+        useCatalogOf (table);
+        return writeTypical (table, argv[3]);
+    }
     if (argc != 5)
     {
         std::fprintf (stderr, "cabpack <cabinets.txt> <presets folder> <typical.toml> <out folder>\n"
@@ -465,6 +538,7 @@ int main (int argc, char** argv)
         return 2;
     }
     const auto table = synth::readTable (argv[1]);
+    useCatalogOf (table);
     std::map<std::string, std::vector<Item>> folders;   // by folder name, each in file order
 
     // The factory presets, a folder for each style.
@@ -477,7 +551,7 @@ int main (int argc, char** argv)
     for (const auto& p : presets)
     {
         if (auto it = presetAt (p))
-            folders[lower (it->style)].push_back (std::move (*it));
+            folders[folderOf (it->style)].push_back (std::move (*it));
         else
         {
             std::fprintf (stderr, "BAD  %s\n", p.string().c_str());
@@ -563,11 +637,11 @@ int main (int argc, char** argv)
                 const auto parts = synth::PairRenderer {}.render (table, it.state.box, synth::pairOf (it.state), r.n, r.hz);
                 const auto& ir = parts.mix;
                 if (r.drawn)
-                    curves.push_back (curveOf (parts, r.hz));
+                    curves.push_back (curveOf (parts, r.hz, synth::pitRedOf (table, it.state.box), synth::combTopRedOf (table, it.state.box)));
                 // What each WAV says of itself (synth::WavMeta): its name, the link that opens it on the page, its preset.
                 synth::WavMeta meta;
                 meta.name = it.name;
-                meta.software = "Cab IR Generator";   // no version (the owner, 06.11): a WAV's bytes change only with its sound — BUILD-INFO says the version
+                meta.software = builder();   // no version (the owner, 06.11): a WAV's bytes change only with its sound — BUILD-INFO says the version
                 meta.comment = linkTo (it.state);
                 meta.preset = it.text;
                 const auto wav = synth::wav24 (ir, (int) r.hz, &meta);
@@ -586,7 +660,7 @@ int main (int argc, char** argv)
     // live (the owner, 06.11: one store, the sizes pointing into it — a page's zip gathers them).
     std::map<std::string, std::vector<const Made*>> sizes;
     for (const auto& m : made)
-        sizes[Panel::wordOf (Panel::indexOf (ui::String (m.item->state.box))).toStdString()].push_back (&m);
+        sizes[sizeOf (m.item->state.box)].push_back (&m);
     for (const auto& [size, list] : sizes)
     {
         const auto folder = "size/" + size;
@@ -599,7 +673,7 @@ int main (int argc, char** argv)
             curves.push_back (m->curve);
             homes.push_back (m->folder);
         }
-        finish (folder, size, items, curves, &homes);
+        finish (folder, sizeTitle (size), items, curves, &homes);
     }
     std::printf ("%d IRs written, %d bad\n", written, bad);
     return bad == 0 ? 0 : 1;

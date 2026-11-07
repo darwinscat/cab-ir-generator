@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of Cab IR Generator — see LICENSE.
+// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of Orbit Bass Cab Builder and Orbit Guitar Cab Builder — see LICENSE.
 
 // ONE OF FIND'S WORKERS (demo.html): the page's module, the table once, then batches of places to judge for a state —
 // each place's score sent back as it is judged, for the map; the search itself stays in C++ (cabir_find_*).
@@ -13,8 +13,10 @@ onmessage = async ({ data }) =>
 {
     await ready;
     const m = module;
-    if (data.table !== undefined)
+    if (data.table !== undefined)   // the page's catalog first (its boxes, mics, speakers and rooms), then the table
     {
+        if (data.catalog !== undefined)
+            m.ccall ('cabir_catalog', 'number', ['string'], [data.catalog]);
         m.ccall ('cabir_table', 'number', ['string'], [data.table]);
         return;
     }

@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of Cab IR Generator — see LICENSE.
+// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of Orbit Bass Cab Builder and Orbit Guitar Cab Builder — see LICENSE.
 
 #pragma once
 
 #include <map>
 #include <string>
+#include <string_view>
 
 namespace cabir
 {
@@ -28,11 +29,37 @@ inline const std::map<std::string, const char*>& micSvgs()
     return svgs;
 }
 
-/** One mic's SVG, or null for a name it has none for. */
+/** One mic's SVG, or null for a name it has none for — and "<mic>-solid", its silhouette: every part whole, opaque and
+    black, the highlights too, so a glyph drawn over it in a colour hides what lies under it (the big one beside a mic's
+    name, the owner, 07.11). Made once each; the app's and the page's drawing take it by name as any other. */
 inline const char* micSvg (const std::string& name)
 {
-    const auto at = micSvgs().find (name);
-    return at != micSvgs().end() ? at->second : nullptr;
+    if (const auto at = micSvgs().find (name); at != micSvgs().end())
+        return at->second;
+    constexpr std::string_view solid = "-solid";
+    if (name.size() <= solid.size() || name.compare (name.size() - solid.size(), solid.size(), solid) != 0)
+        return nullptr;
+    static std::map<std::string, std::string> made;
+    if (const auto it = made.find (name); it != made.end())
+        return it->second.c_str();
+    const auto base = micSvgs().find (name.substr (0, name.size() - solid.size()));
+    if (base == micSvgs().end())
+        return nullptr;
+    std::string svg = base->second;
+    const auto whole = [&svg] (const std::string& attribute)   // attribute="0.4" -> attribute="1"
+    {
+        for (size_t at = 0; (at = svg.find (attribute + "=\"", at)) != std::string::npos;)
+        {
+            const size_t from = at + attribute.size() + 2, to = svg.find ('"', from);
+            svg.replace (from, to - from, "1");
+            at = from;
+        }
+    };
+    whole ("fill-opacity");
+    whole ("stroke-opacity");
+    for (size_t at = 0; (at = svg.find ("#ffffff", at)) != std::string::npos; at += 7)
+        svg.replace (at, 7, "#000000");
+    return (made[name] = std::move (svg)).c_str();
 }
 
 } // namespace cabir

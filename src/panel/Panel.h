@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of Cab IR Generator — see LICENSE.
+// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of Orbit Bass Cab Builder and Orbit Guitar Cab Builder — see LICENSE.
 
 #pragma once
 
@@ -8,6 +8,7 @@
 #include <array>
 #include "../synth/Response.h"
 #include "../synth/State.h"
+#include <panel/HelpText.h>   // made by the build from data/help.txt, data/guitar/help.txt
 
 #include <functional>
 #include <optional>
@@ -33,8 +34,10 @@ namespace cabir
     THE SPEAKER: the chosen box's first speaker, flat, its neighbours at its edge, its horn big in the corner on the horn's
     side — the speaker moved away from it — and beside it HORN's attenuator, OFF -12 -6 0; the mics in perspective on
     the speaker, each taken by any part of it, its capsule or its body, and dragged from where the hand took it across
-    the speaker and just past its rim — a click on the bare cone moves none (the owner, 05.11); their two columns either side, each its mic, its places (CAP,
-    EDGE, OFF and ROOM, one click each), distance and angle; BLEND, ALIGN and Ø under it, and two buttons: DEFAULT, the
+    the speaker and just past its rim — a click on the bare cone moves none (the owner, 05.11); the hand on a mic brings
+    its distance, a track beside it, and its angle, a knob on an arc over it — not there otherwise (the owner, 07.11);
+    their two columns either side, each its mic and its places (CAP, EDGE, OFF, one click each), B's ALIGN, Ø and TIME;
+    BLEND a track along the speaker's foot, the guitar's speakers a row of their curves over it; and two buttons: DEFAULT, the
     box's own mic back at its cap — SURE? at the first click, done at the second — and CLOSE. A mic's row clicked again
     while both are heard turns that mic off where it stands, its column dark, BLEND left where it is and not heard while
     one mic is (the owner, 04.11); a click in the dark column brings it back; the last one stays. While the hand moves,
@@ -69,17 +72,27 @@ public:
 
     void tick (double nowSeconds)
     {
+        const double dt = clock > 0.0 ? ui::jlimit (0.0, 0.05, nowSeconds - clock) : 0.0;   // a long pause counts one frame
         clock = nowSeconds;
         if (defaultArmed && clock >= armedUntil)
             disarmDefault();
         timerCallback();
+        stepMicZoom (dt);
+        stepBackZoom (dt);
+        stepHandles (dt);
+        stepResponseFade (dt);
+        stepHelp (dt);
     }
 
     /** True while something moves on its own: a host ticks it then, and need not otherwise. */
-    bool wantsFrames() const { return ! downloadArea().isEmpty() || searchFade > 0.0f || defaultArmed; }
+    bool wantsFrames() const
+    {
+        return ! downloadArea().isEmpty() || searchFade > 0.0f || defaultArmed || zoomMoving() || backZoomMoving()
+            || (handlesOf >= 0 && ! handHolds) || responseFading() || (helpOpen >= 0 && ! helpPinned && ! helpHeld);
+    }
 
     /** The size it is drawn for — small enough to open over a cabin's face too. */
-    static constexpr int panelW = 906, panelH = 518;
+    static constexpr int panelW = 960, panelH = 472;   // 960 x 540 the app's, its header and strip round it: 16:9 (the owner, 07.11)
 
     struct Spot
     {
@@ -104,6 +117,7 @@ public:
         int speaker = -1;   // the box's speaker as the player turned it — an index of the catalog's speakers — or -1, its own
         bool wall = false;  // the wall behind the box, the guitar's switch (WALL)
         bool cone = false;  // the speakers' cone as the catalog's variant has it (the guitar's PAPER, SPEAKER clicked)
+        int room = -1;      // the room round the box — an index of the catalog's rooms — or -1, none (ROOM's OFF)
     };
 
     struct Cab
@@ -149,6 +163,20 @@ public:
         ui::String coneVariant;
         // How far a mic goes and where ROOM puts it: the bass's 30 cm, the guitar's a metre and a half, ROOM at one.
         float farthestCm = 30.0f, roomM = 0.30f;
+        // The rooms round the box, as the table names them (its "room-<name>" sections), and as their row writes them after
+        // OFF — the guitar's; none, no row (the bass's).
+        ui::StringArray rooms, roomWords;
+        // Where the response's line reddens with a pit, dB — the bass's 3; the guitar's 5, its speakers' own dips deeper
+        // (the owner, 07.11). The table says the same (pit_red_db, synth::pitRedOf) for FIND and the tools.
+        float pitRedDb = 3.0f;
+        // Where its line reddens with a comb from 2 kHz up, dB — the bass's 3, as under it; the guitar's 6, a comb up there a
+        // tone of its own (the owner, 07.11). The table says the same (comb_top_red_db, synth::combTopRedOf).
+        float combTopRedDb = 3.0f;
+        // Its name as a watermark across the response, so it reads at a glance which builder this is (the owner, 07.11).
+        ui::String instrumentWord = "BASS CAB";
+        // What its "?" say, a section each (helpSpot): its help file's text, the bass's data/help.txt, the guitar's
+        // data/guitar/help.txt, baked in by the build.
+        const char* help = helpText::bass;
     };
 
     static const Catalog& bassCatalog()
@@ -285,7 +313,7 @@ public:
         { return Spot { (float) m.x, (float) m.y, (float) m.distance, s.horn, ui::String (m.model), (float) m.angle, (float) s.hornDb }; };
         return { indexOf (ui::String (s.box)), { spot (s.a), spot (s.b), (float) s.blend, s.align, s.invert, s.a.on, s.b.on, s.back,
                                                    (float) s.shiftMs, catalog().speakers.indexOf (ui::String (s.speaker)), s.wall,
-                                                   ! s.cone.empty() } };
+                                                   ! s.cone.empty(), catalog().rooms.indexOf (ui::String (s.room)) } };
     }
 
     /** A STATE AS A LINE READS IT: its box's size, its back where turned from the box's own, and the mics heard —
@@ -299,7 +327,9 @@ public:
         const auto box = at < 0 ? ui::String (s.box)
                        : wordOf (at) + (s.back >= 0 && s.back != ownBack (at) ? " " + ui::String (backWords[s.back]) : ui::String())
                              + (speaker >= 0 && speaker != ownSpeaker (at) ? " " + catalog().speakerWords[speaker] : ui::String())
-                             + (s.wall ? " WALL" : "") + (s.cone.empty() ? ui::String() : " " + ui::String (s.cone).toUpperCase());
+                             + (s.wall ? " WALL" : "") + (s.cone.empty() ? ui::String() : " " + ui::String (s.cone).toUpperCase())
+                             + (catalog().rooms.indexOf (ui::String (s.room)) >= 0
+                                    ? " " + catalog().roomWords[catalog().rooms.indexOf (ui::String (s.room))] : ui::String());
         return box + ui::String::fromUTF8 (" \xc2\xb7 ")
              + (s.a.on ? word (s.a) : ui::String()) + (s.a.on && s.b.on ? "+" : "") + (s.b.on ? word (s.b) : ui::String());
     }
@@ -315,6 +345,8 @@ public:
         s.wall = su.wall;
         if (su.cone && ! catalog().coneVariant.isEmpty())
             s.cone = catalog().coneVariant.toStdString();
+        if (su.room >= 0 && su.room < catalog().rooms.size())
+            s.room = catalog().rooms[su.room].toStdString();
         s.horn = su.a.horn;
         s.hornDb = su.a.hornDb;
         s.a = mic (su.a, su.aOn);
@@ -361,6 +393,57 @@ public:
     ui::String downloadNote;
     /** Where the ▾ is, so a host anchors its menu there; empty where there is none. */
     ui::Rectangle<int> formatButton() const { return downloadFormatArea(); }
+
+    /** WHERE A HOST'S HINT GOES (the site's rings over its live panel), in the panel's units, as it stands now: "cabinet",
+        the boxes a click picks one in; "mic-a", mic A's glyph on the speaker as it leans — the speaker itself while A is
+        not heard; "download", DOWNLOAD IR. Empty for another name, or for what the panel does not show. */
+    ui::Rectangle<float> hintRect (const ui::String& name) const
+    {
+        if (name == "cabinet")
+        {
+            float x0 = 1e9f, y0 = 1e9f, x1 = -1e9f, y1 = -1e9f;
+            for (const auto& column : pile())
+                for (const auto& box : column)
+                    if (const int i = indexOf (box); i >= 0)
+                    {
+                        const auto r = boxOf (i);
+                        x0 = ui::jmin (x0, r.getX()); y0 = ui::jmin (y0, r.getY());
+                        x1 = ui::jmax (x1, r.getRight()); y1 = ui::jmax (y1, r.getBottom());
+                    }
+            return x1 > x0 ? ui::Rectangle<float> { x0, y0, x1 - x0, y1 - y0 } : ui::Rectangle<float> {};
+        }
+        if (name == "mic-a" && chosen >= 0)
+        {
+            const auto o = coneCentre();
+            const float R = radius();
+            if (! heard (0))
+                return { o.x - R, o.y - R, 2.0f * R, 2.0f * R };
+            const auto gl = glyphOf (mic (0), o, R, 1.0f);
+            const float c = std::cos (gl.lean), sn = std::sin (gl.lean);
+            float x0 = 1e9f, y0 = 1e9f, x1 = -1e9f, y1 = -1e9f;
+            const auto& g = gl.box;
+            for (const auto& u : { ui::Point<float> (g.getX(), g.getY()), ui::Point<float> (g.getRight(), g.getY()),
+                                   ui::Point<float> (g.getX(), g.getBottom()), ui::Point<float> (g.getRight(), g.getBottom()) })
+            {
+                const auto d = u - gl.at;   // as drawn: the upright glyph turned by its lean about its capsule
+                const float x = gl.at.x + c * d.x - sn * d.y, y = gl.at.y + sn * d.x + c * d.y;
+                x0 = ui::jmin (x0, x); y0 = ui::jmin (y0, y); x1 = ui::jmax (x1, x); y1 = ui::jmax (y1, y);
+            }
+            return { x0, y0, x1 - x0, y1 - y0 };
+        }
+        if (name == "download")
+            return downloadArea().toFloat();
+        return {};
+    }
+
+    /** WHETHER A PRESS AT `p` WOULD START A DRAG, as the panel stands now: a mic on the speaker, its distance track or angle
+        knob while they are out, BLEND, B's TIME — so a touch screen's host knows, as the finger lands, that this touch is
+        the panel's and not a scroll of its page. A click's things (a box, a back, a word) are not drags. */
+    bool grabs (ui::Point<float> p) const
+    {
+        const auto part = hotAt (p).part;
+        return part == Part::mic || part == Part::distance || part == Part::angle || part == Part::blend || part == Part::shift;
+    }
 
     /** DEFAULT as a button in the foot — or not, where the host offers it another way (the app's preset menu). With
         neither DEFAULT nor CLOSE the foot's row goes, and the panel is footRowH shorter. */
@@ -413,9 +496,12 @@ public:
         responseBefore = std::move (before);
         responseComb = std::move (comb);
         responseBad = synth::pitsOf (responseNow);
+        for (auto& b : responseBad)   // a pit judged from where this catalog's line reddens: the guitar's 5 dB, the bass's 3
+            b = ui::jmax (0.0f, b - (catalog().pitRedDb - 3.0f));
         if (responseComb.size() == responseBad.size())
-            for (size_t i = 0; i < responseBad.size(); ++i)
-                responseBad[i] = ui::jmax (responseBad[i], -responseComb[i]);
+            for (size_t i = 0; i < responseBad.size(); ++i)   // from 2 kHz up as this catalog lets a comb cancel there
+                responseBad[i] = ui::jmax (responseBad[i], -responseComb[i]
+                                                             - (responseHz ((int) i) >= synth::combTopHz ? catalog().combTopRedDb - 3.0f : 0.0f));
         repaint (responseArea());
     }
 
@@ -429,12 +515,24 @@ public:
         g.fillRect (ui::Rectangle<float> (x, (float) (getHeight() - footHeight()), 1.0f, (float) footHeight()));
         paintSpeaker (g);
         paintResponse (g);
+        paintMicZoom (g);
+        paintHelp (g);
     }
 
     void mouseMove (const ui::MouseEvent& e)
     {
         const auto was = hot;
         hot = hotAt (e.position);
+        if (hot.part == Part::micRow)   // the mic it grows big, as the hand comes on it — not a tick later
+        {
+            zoomM = hot.m;
+            zoomI = hot.i;
+        }
+        if (backHot() >= 0)   // the cell it grows, as the hand comes on it
+            backZoomI = backHot();
+        overResponse = responseArea().toFloat().contains (e.position);
+        keepHandles (e.position);
+        keepHelp();
         if (hot != was)
             repaint();
     }
@@ -442,6 +540,12 @@ public:
     void mouseExit (const ui::MouseEvent&)
     {
         hot = {};
+        handlesOf = -1;
+        handHolds = false;
+        overResponse = false;
+        helpHeld = helpQuiet = false;
+        if (! helpPinned)
+            helpOpen = -1;
         repaint();
     }
 
@@ -449,7 +553,10 @@ public:
     {
         if (defaultArmed && ! defaultArea().contains (e.getPosition()))
             disarmDefault();   // a click anywhere else: DEFAULT's question withdrawn
-        press (hotAt (e.position), e);
+        const auto h = hotAt (e.position);
+        if (helpOpen >= 0 && h.part != Part::help && h.part != Part::helpBox)
+            closeHelp();       // ...and a "?"'s window closed, the click going on to what it is on
+        press (h, e);
     }
 
     void mouseDrag (const ui::MouseEvent& e)
@@ -475,7 +582,12 @@ public:
             m.distance = minCm * std::pow (maxCm() / minCm, ui::jlimit (0.0f, 1.0f, (t.getBottom() - e.position.y) / t.getHeight())) / 100.0f;
         }
         else if (drag == Drag::angle)
-            m.angle = maxAngle * along (angleTrack (dragMic), e.position.x);
+        {
+            // The knob round the capsule: straight up nought, out toward the mic's own side its lean.
+            const auto d = e.position - spotOf (dragMic);
+            const float deg = std::atan2 (leanSide (dragMic) * d.x, -d.y) * 180.0f / ui::MathConstants<float>::pi;
+            m.angle = ui::jlimit (0.0f, maxAngle, deg);
+        }
         else if (drag == Drag::shift)
         {
             const float v = (2.0f * along (timeTrack(), e.position.x) - 1.0f) * maxShiftMs;
@@ -516,13 +628,15 @@ public:
                 send();
         }
         hot = hotAt (e.position);
+        keepHandles (e.position);   // a mic tapped (a touch screen's, no hand hovering): its distance and angle come to it
+        keepHelp();
     }
 
 private:
     static constexpr float maxReach = 1.1f;    // how far from the cap the mic may go, in radii: just past the rim, in sight
     static constexpr float minCm = 1.0f, maxAngle = 60.0f;
     static float maxCm() { return catalog().farthestCm; }
-    static constexpr int leftW = 460, gutter = 14;   // the pile's half; the hair between the halves
+    static constexpr int leftW = 466, gutter = 14;   // the pile's half; the hair between the halves
     static constexpr int footH = footRowH, responseH = 208;  // the foot's row under it all; the response's band over it
     int footHeight() const { return onClose != nullptr || showDefault ? footH : 0; }
 
@@ -533,8 +647,8 @@ private:
 
     /** WHAT A CLICK AT A POINT WORKS — the one thing both the hand's light and its press go by (hotAt), so what is lit is
         what a click does. */
-    enum class Part { none, download, downloadFormat, back, speaker, speakerCone, wall, cab, cabHorn, horn, distance, place, micRow, angle, shift, mic, close, reset, find,
-                      align, invert, blend };
+    enum class Part { none, download, downloadFormat, back, speaker, speakerCone, wall, room, cab, cabHorn, horn, distance, place, micRow, angle, shift, mic, close, reset, find,
+                      align, invert, blend, help, helpBox };
     struct Hot
     {
         Part part = Part::none;
@@ -545,15 +659,287 @@ private:
 
     int chosen = -1;
     Hot hot;                          // under the hand while it moves with no button down
+    int handlesOf = -1;               // the mic whose distance and angle are out on the speaker (keepHandles); -1 none
     ui::Point<float> grabOffset;      // a mic taken: its capsule against the hand, kept while it drags
     bool micMoved = false;            // ...and moved since, or let go where it stood
     bool isHot (Part p, int m = -1, int i = -1) const { return hot == Hot { p, m, i }; }
+
+    /** A mic's distance and angle out on the speaker while the hand is on it, or on them — kept while it goes from the mic
+        to its track or its knob anywhere round the three (handlesZone), and a moment more once it is out of there, so a
+        hand on its way does not lose them (the owner, 07.11); another mic under the hand takes them. */
+    static constexpr float handlesLinger = 0.4f;   // s
+    bool handHolds = false;                         // the hand on the mic, its handles or round them
+    float handlesLeft = 0.0f;                       // ...else how long they stay, counted down by the tick
+
+    void keepHandles (ui::Point<float> p)
+    {
+        const int was = handlesOf;
+        if (hot.part == Part::mic || hot.part == Part::distance || hot.part == Part::angle)
+            handlesOf = hot.m;
+        handHolds = handlesOf >= 0 && heard (handlesOf) && (hot.part == Part::mic || hot.part == Part::distance
+                                                            || hot.part == Part::angle || handlesZone (handlesOf).contains (p));
+        if (handHolds)
+            handlesLeft = handlesLinger;
+        if (handlesOf != was)
+            repaint();
+    }
+
+    void stepHandles (double dt)
+    {
+        if (handlesOf < 0 || handHolds || drag != Drag::none)
+            return;
+        handlesLeft -= (float) dt;
+        if (handlesLeft <= 0.0f)
+        {
+            handlesOf = -1;
+            repaint();
+        }
+    }
+
+    /** Round a mic and its handles: a square about its capsule as far as its knob and a little past — its glyph, however
+        it leans, the arc and the knob in it — and its distance's track. */
+    ui::Rectangle<float> handlesZone (int m) const
+    {
+        const auto at = spotOf (m);
+        const float r = angleArcR (m) + 14.0f;
+        const auto t = distHandle (m).expanded (12.0f, 8.0f);
+        const float x0 = ui::jmin (at.x - r, t.getX()), y0 = ui::jmin (at.y - r, t.getY());
+        const float x1 = ui::jmax (at.x + r, t.getRight()), y1 = ui::jmax (at.y + r, t.getBottom());
+        return { x0, y0, x1 - x0, y1 - y0 };
+    }
+
+    /** ...the one shown: the hand's while it drags its track or knob, none while it moves a mic. */
+    int handlesShown() const
+    {
+        if (drag == Drag::distance || drag == Drag::angle)
+            return dragMic;
+        return drag == Drag::none && handlesOf >= 0 && heard (handlesOf) ? handlesOf : -1;
+    }
+
+    /** A "?" AND ITS WINDOW (the owner, 07.11): the hand on the "?" opens it, and it stays while the hand is on either, a
+        moment more once it is off them; a click keeps it open till a click anywhere else — a tap where no hand hovers, a
+        touch screen's, the same. What it says is its section of the catalog's help text, plain paragraphs. */
+    struct HelpSpot
+    {
+        const char* key;            // its section in the help text: [comb]
+        ui::Rectangle<int> mark;    // the "?"
+        ui::Rectangle<int> room;    // where its window opens: across it from the "?", up where it would run out
+    };
+    static constexpr int helpSpots = 1;
+    static constexpr int helpMarkSize = 18, helpPad = 14, helpLineH = 18, helpGap = 8;
+    static constexpr float helpLinger = 0.3f, helpTextSize = 13.0f;
+
+    HelpSpot helpSpot (int) const
+    {
+        const auto r = responseArea();   // the response's corner, over its +10: what the comb is
+        return { "comb", { r.getX() + 8, r.getY() + 3, helpMarkSize, helpMarkSize }, r };
+    }
+
+    int helpOpen = -1;          // the "?" whose window is out; -1 none
+    bool helpPinned = false;    // ...kept open by a click
+    bool helpHeld = false;      // the hand on the "?" or its window
+    float helpLeft = 0.0f;      // ...else how long it stays, counted down by the tick
+    bool helpQuiet = false;     // closed by a click on its "?": not opened again till the hand is off it
+
+    void keepHelp()
+    {
+        const int was = helpOpen;
+        const bool on = hot.part == Part::help || hot.part == Part::helpBox;
+        if (! on)
+            helpQuiet = false;
+        if (hot.part == Part::help && ! helpQuiet && helpOpen != hot.i)
+        {
+            helpOpen = hot.i;
+            helpPinned = false;
+        }
+        helpHeld = on && ! helpQuiet;
+        if (helpHeld)
+            helpLeft = helpLinger;
+        if (helpOpen != was)
+            repaint();
+    }
+
+    void closeHelp()
+    {
+        helpOpen = -1;
+        helpPinned = helpHeld = false;
+        repaint();
+    }
+
+    void stepHelp (double dt)
+    {
+        if (helpOpen < 0 || helpPinned || helpHeld)
+            return;
+        helpLeft -= (float) dt;
+        if (helpLeft <= 0.0f)
+            closeHelp();
+    }
+
+    /** The paragraphs of a help text's section: under its "[key]" to the next section, a blank line between two, the lines
+        of one joined; a line from "#" a note, left out. */
+    static std::vector<std::string> helpParagraphs (const char* text, const std::string& key)
+    {
+        std::vector<std::string> out;
+        if (text == nullptr)
+            return out;
+        const std::string all (text);
+        bool in = false, open = false;   // in its section; a paragraph begun
+        for (size_t from = 0; from <= all.size();)
+        {
+            const size_t end = all.find ('\n', from), to = end == std::string::npos ? all.size() : end;
+            std::string line = all.substr (from, to - from);
+            from = to + 1;
+            while (! line.empty() && (line.back() == '\r' || line.back() == ' ' || line.back() == '\t'))
+                line.pop_back();
+            line.erase (0, ui::jmin (line.size(), line.find_first_not_of (" \t")));
+            if (! line.empty() && line.front() == '#')
+                continue;
+            if (line.size() > 1 && line.front() == '[' && line.back() == ']')
+            {
+                in = line.substr (1, line.size() - 2) == key;
+                open = false;
+                continue;
+            }
+            if (! in)
+                continue;
+            if (line.empty())
+                open = false;
+            else if (open)
+                out.back() += " " + line;
+            else
+            {
+                out.push_back (line);
+                open = true;
+            }
+        }
+        return out;
+    }
+
+    /** A "?"'s text wrapped to `width` as the host measures it: a line each, an empty one between two paragraphs — kept,
+        as the hand's every move asks for its window. */
+    struct HelpWrap { std::string key; int width = 0; std::vector<std::string> lines; };
+    mutable HelpWrap helpWrap;
+
+    const std::vector<std::string>& helpLines (int i, int width) const
+    {
+        const std::string key = helpSpot (i).key;
+        if (helpWrap.key == key && helpWrap.width == width)
+            return helpWrap.lines;
+        helpWrap = { key, width, {} };
+        const auto font = ui::look().font (helpTextSize);
+        for (const auto& paragraph : helpParagraphs (catalog().help, key))
+        {
+            if (! helpWrap.lines.empty())
+                helpWrap.lines.emplace_back();
+            std::string line;
+            for (size_t from = 0; from < paragraph.size();)
+            {
+                const size_t end = paragraph.find (' ', from), to = end == std::string::npos ? paragraph.size() : end;
+                const std::string word = paragraph.substr (from, to - from);
+                from = to + 1;
+                if (word.empty())
+                    continue;
+                const std::string longer = line.empty() ? word : line + " " + word;
+                if (! line.empty() && ui::look().trackedWidth (longer, font, 0.0f) > (float) width)
+                {
+                    helpWrap.lines.push_back (line);
+                    line = word;
+                }
+                else
+                    line = longer;
+            }
+            if (! line.empty())
+                helpWrap.lines.push_back (line);
+        }
+        return helpWrap.lines;
+    }
+
+    /** Its window: from the "?" to its room's right, as high as its text; down from the "?", up as far as it must. */
+    ui::Rectangle<int> helpBox (int i) const
+    {
+        const auto s = helpSpot (i);
+        const int x = s.mark.getRight() + 8, w = s.room.getRight() - 12 - x;
+        int h = 2 * helpPad - 4;
+        for (const auto& line : helpLines (i, w - 2 * helpPad))
+            h += line.empty() ? helpGap : helpLineH;
+        const int y = ui::jmax (2, ui::jmin (s.mark.getY(), s.room.getBottom() - 3 - h));
+        return { x, y, w, h };
+    }
+
     int hoverCab() const { return hot.part == Part::cab || hot.part == Part::cabHorn ? hot.i : -1; }
     struct SearchDot { float x, y, score; };
     std::vector<SearchDot> searchDots;  // the search's map (showSearch), fading once it is done
     bool searching = false;
     float searchFade = 0.0f;
     double searchEnded = 0;            // the host's clock when it was done; -1 until the tick after
+
+    /** A BACK'S CELL UNDER THE HAND (the owner, 07.11): the whole of it grown, the box cut through and its word, as a mic's
+        name grows its glyph but less — 1.4 times, over about a tenth of a second, and back as fast; WALL's too. */
+    static constexpr float backZoomBy = 0.4f, backZoomSeconds = 0.12f;
+    float backZoom = 0.0f;               // 0 none .. 1 whole
+    int backZoomI = -1;                  // the cell it shows — backs() for WALL — kept while it shrinks back
+    int backHot() const { return chosen < 0 ? -1 : hot.part == Part::back ? hot.i : hot.part == Part::wall ? backs() : -1; }
+    float backZoomTo() const { return backHot() >= 0 ? 1.0f : 0.0f; }
+    bool backZoomMoving() const { return backZoom < backZoomTo() || backZoom > backZoomTo(); }
+    int backZoomed() const { const int i = backHot() >= 0 ? backHot() : backZoomI; return backZoom > 0.0f ? i : -1; }
+
+    void stepBackZoom (double dt)
+    {
+        if (backHot() >= 0)
+            backZoomI = backHot();
+        if (! backZoomMoving())
+            return;
+        const float to = backZoomTo(), by = (float) (dt / backZoomSeconds);
+        backZoom = to > backZoom ? ui::jmin (to, backZoom + by) : ui::jmax (to, backZoom - by);
+        repaint();
+    }
+
+    /** A MIC'S NAME UNDER THE HAND (the owner, 07.11): its glyph grown big beside it, left of the name — A's past its column,
+        B's before its words — opaque, no box round it, growing in over about a sixth of a second and fading out as fast. */
+    static constexpr float micZoomH = 120.0f, micZoomSeconds = 0.15f;
+    float micZoom = 0.0f;               // 0 none .. 1 whole
+    int zoomM = -1, zoomI = -1;          // the column and the mic it shows, kept while it fades
+    float micZoomTo() const { return hot.part == Part::micRow ? 1.0f : 0.0f; }
+    bool zoomMoving() const { return micZoom < micZoomTo() || micZoom > micZoomTo(); }
+
+    void stepMicZoom (double dt)
+    {
+        if (hot.part == Part::micRow)
+        {
+            zoomM = hot.m;
+            zoomI = hot.i;
+        }
+        const float to = micZoomTo(), by = (float) (dt / micZoomSeconds);
+        if (! zoomMoving())
+            return;
+        micZoom = to > micZoom ? ui::jmin (to, micZoom + by) : ui::jmax (to, micZoom - by);
+        repaint();
+    }
+
+    void paintMicZoom (ui::Graphics& g) const
+    {
+        // The one under the hand; the one it left while that fades.
+        const int zm = hot.part == Part::micRow ? hot.m : zoomM, zi = hot.part == Part::micRow ? hot.i : zoomI;
+        if (micZoom <= 0.0f || chosen < 0 || zm < 0 || zi < 0 || zi >= mics().size())
+            return;
+        const float e = micZoom * micZoom * (3.0f - 2.0f * micZoom);   // eased in and out
+        const auto row = micRow (zm, zi).toFloat();
+        const float h = 12.0f + (micZoomH - 12.0f) * e, w = h * 36.0f / 96.0f;   // the glyphs' own 36 x 96
+        // Its backdrop clear of the words: A's out past its column's left edge, B's before the longest of its names.
+        float longest = 0.0f;
+        for (const auto& word : micWords())
+            longest = ui::jmax (longest, ui::look().trackedWidth (word, ui::look().font (13.0f), 0.06f));
+        const float right = zm == 0 ? row.getX() - 10.0f : row.getRight() - 12.0f - 8.0f - longest - 12.0f;
+        const float top = ui::jlimit (6.0f, (float) bodyH() - 6.0f - h, row.getCentreY() - 0.5f * h);
+        const ui::Rectangle<float> box (right - w, top, w, h);
+        // No box round it: the mic itself opaque — its silhouette in the panel's colour first (MicSvgs.h's "-solid"), the
+        // glyph over it — so what lies under it does not show through (the owner, 07.11).
+        paintMicGlyph (g, mics()[zi] + "-solid", box, ui::look().panel.withMultipliedAlpha (e), 0.0f, {});
+        const auto& sp = mic (zm);
+        const auto heardBy = sp.mic.isNotEmpty() ? sp.mic : cabs()[(size_t) chosen].mic;
+        const auto tint = mics()[zi] == heardBy ? colourOf (zm) : ui::look().tx;
+        paintMicGlyph (g, mics()[zi], box, tint.withMultipliedAlpha (e), 0.0f, {});
+    }
 
     void timerCallback()
     {
@@ -613,11 +999,11 @@ private:
 
     // ---------------------------------------------------------------- the pile
     // Over it the chosen box's back, in the room the pile leaves there (the owner, 05.11); under it the box's size.
-    static constexpr int backTop = 6, backIconH = 40, backWordH = 16, nameH = footH;
-    static constexpr int pileTop = backTop + backIconH + 2 + backWordH + 6;
-    // ...and under the back, where the catalog offers speakers, their row: the pile a row lower.
+    static constexpr int backTop = 6, backIconH = 40, nameH = footH;
+    static constexpr int pileTop = backTop + backIconH + 6;
+    // ...and under the back, where the catalog offers rooms, their row: the pile a row lower.
     static constexpr int speakerRowH = 24;
-    static int pileTopNow() { return pileTop + (hasSpeakers() ? speakerRowH : 0); }
+    static int pileTopNow() { return pileTop + (hasRooms() ? speakerRowH : 0); }
 
     ui::Rectangle<int> pileArea() const { return { 0, pileTopNow(), leftW, bodyH() - pileTopNow() - 2 }; }
 
@@ -642,62 +1028,80 @@ private:
         return { d.getRight() + 4, d.getY(), 24, d.getHeight() };
     }
 
-    /** THE BACK over the pile, centred: BACK, then a cell each — the box cut through from the side (paintBack), its word
-        under it. */
-    static constexpr float backCellW = 84.0f, backCellGap = 18.0f, backLabelGap = 16.0f;
-    static float backGap() { return backs() > 3 ? 8.0f : backCellGap; }   // four cells closer, to stay in the half
+    /** THE BACK over the pile, centred: a picture each, the box cut through from the side (paintBack), no words — under
+        the hand it grows and its word comes under it, as a speaker's curve does (the owner, 07.11); WALL, the guitar's, a
+        fifth, narrower, after them. */
+    static constexpr float backCellW = 64.0f, backGap = 26.0f, wallCellW = 22.0f;     // a cell, the hand's
+    static constexpr float backIconW = 56.0f, backIconHigh = 34.0f, wallIconW = 12.0f;  // the picture in it
 
-    ui::Rectangle<float> backWordArea() const
+    static float backRowW()
     {
-        const float label = ui::look().trackedWidth ("BACK", ui::look().font (13.0f), 0.08f) + 4.0f;
-        const float total = label + backLabelGap + (float) backs() * backCellW + (float) (backs() - 1) * backGap();
-        return { 0.5f * ((float) leftW - total), (float) backTop, label, (float) backIconH };
-    }
-
-    /** WALL, the guitar's: in the back's label column, on its words' line, under BACK. */
-    ui::Rectangle<float> wallArea() const
-    {
-        const auto label = backWordArea();
-        return { label.getX(), (float) (backTop + backIconH + 2), label.getWidth(), (float) backWordH };
+        return (float) backs() * backCellW + (float) (backs() - 1) * backGap + (catalog().wallSwitch ? backGap + wallCellW : 0.0f);
     }
 
     ui::Rectangle<float> backCell (int i) const
     {
-        const float x = backWordArea().getRight() + backLabelGap + (float) i * (backCellW + backGap());
-        return { x, (float) backTop, backCellW, (float) (backIconH + 2 + backWordH) };
+        const float x = 0.5f * ((float) leftW - backRowW()) + (float) i * (backCellW + backGap);
+        return { x, (float) backTop, backCellW, (float) backIconH };
     }
 
-    /** THE SPEAKERS under the back, the guitar's: SPEAKER, then a word each, the row centred as the back's is. */
-    static constexpr float speakerGap = 12.0f;
+    /** WALL, the guitar's: the fifth cell, after the backs. */
+    ui::Rectangle<float> wallArea() const
+    {
+        return { backCell (backs() - 1).getRight() + backGap, (float) backTop, wallCellW, (float) backIconH };
+    }
 
-    ui::Rectangle<float> speakerWordArea() const
+    /** THE SPEAKERS, the guitar's: a row of their curves along the speaker's top, each grown with its word under it
+        while the hand is on it (the owner, 07.11) — the cone's switch after them where the catalog has a variant. */
+    static constexpr float speakerIconW = 24.0f, speakerIconH = 14.0f, speakerIconGap = 9.0f, speakerRowTop = 4.0f;
+    static constexpr int iconRowH = 24;   // the scene's top the row takes
+
+    static int speakerIcons() { return catalog().speakers.size() + (catalog().coneVariant.isNotEmpty() ? 1 : 0); }
+
+    /** Icon `i`, the cone's switch the last: -1 for it. */
+    ui::Rectangle<float> speakerCell (int i) const
+    {
+        const auto sc = scene();
+        const int n = speakerIcons(), k = i < 0 ? n - 1 : i;
+        const float total = (float) n * speakerIconW + (float) (n - 1) * speakerIconGap;
+        return { sc.getCentreX() - 0.5f * total + (float) k * (speakerIconW + speakerIconGap), sc.getY() + speakerRowTop + 2.0f,
+                 speakerIconW, speakerIconH };
+    }
+
+    /** THE ROOM under the back, the guitar's once (none now): ROOM, then OFF and a word a room. Cell -1 is OFF. */
+    static constexpr float speakerGap = 12.0f, backLabelGap = 16.0f;
+    static bool hasRooms() { return ! catalog().rooms.isEmpty(); }
+    ui::String roomWord (int i) const { return i < 0 ? ui::String ("OFF") : catalog().roomWords[i]; }
+
+    ui::Rectangle<float> roomWordArea() const
     {
         const auto font = ui::look().font (13.0f);
-        float total = ui::look().trackedWidth ("SPEAKER", font, 0.08f) + 4.0f + backLabelGap;
-        for (const auto& w : catalog().speakerWords)
-            total += ui::look().trackedWidth (w, font, 0.06f) + speakerGap;
+        float total = ui::look().trackedWidth ("ROOM", font, 0.08f) + 4.0f + backLabelGap;
+        for (int i = -1; i < catalog().rooms.size(); ++i)
+            total += ui::look().trackedWidth (roomWord (i), font, 0.06f) + speakerGap;
         total -= speakerGap;
-        return { 0.5f * ((float) leftW - total), (float) pileTop - 2.0f, ui::look().trackedWidth ("SPEAKER", font, 0.08f) + 4.0f,
+        return { 0.5f * ((float) leftW - total), (float) pileTop - 2.0f, ui::look().trackedWidth ("ROOM", font, 0.08f) + 4.0f,
                  (float) speakerRowH - 4.0f };
     }
 
-    ui::Rectangle<float> speakerCell (int i) const
+    ui::Rectangle<float> roomCell (int i) const
     {
         const auto font = ui::look().font (13.0f);
-        float x = speakerWordArea().getRight() + backLabelGap;
-        for (int k = 0; k < i; ++k)
-            x += ui::look().trackedWidth (catalog().speakerWords[k], font, 0.06f) + speakerGap;
-        return { x, speakerWordArea().getY(), ui::look().trackedWidth (catalog().speakerWords[i], font, 0.06f),
-                 speakerWordArea().getHeight() };
+        float x = roomWordArea().getRight() + backLabelGap;
+        for (int k = -1; k < i; ++k)
+            x += ui::look().trackedWidth (roomWord (k), font, 0.06f) + speakerGap;
+        return { x, roomWordArea().getY(), ui::look().trackedWidth (roomWord (i), font, 0.06f), roomWordArea().getHeight() };
     }
 
     /** A BOX CUT THROUGH FROM THE SIDE, as its back is: the baffle at the left with the speaker on it in profile, its cone
         narrowing in to the magnet, the top and the bottom, and at the right the back — whole (CLOSED); whole, the port's
         tube in from the baffle under the speaker (PORTED); gone but for a lip at the top, the sound out of it (OPEN); its
-        upper half, the sound out of the lower (HALF, the guitar's). */
+        upper half, the sound out of the lower (HALF, the guitar's). Its speaker and its port by its height, so a wide cell
+        keeps their shape and leaves its room for a word. */
     static void paintBack (ui::Graphics& g, int kind, ui::Rectangle<float> b, ui::Colour colour)
     {
-        const float x0 = b.getX(), x1 = b.getRight(), y0 = b.getY(), y1 = b.getBottom(), w = b.getWidth(), h = b.getHeight();
+        const float x0 = b.getX(), x1 = b.getRight(), y0 = b.getY(), y1 = b.getBottom(), h = b.getHeight();
+        const float w = ui::jmin (b.getWidth(), 1.6f * h);
         const float line = 1.2f, baffle = 1.8f;
         g.setColour (colour);
         g.drawLine (x0, y0, x1, y0, line);
@@ -718,7 +1122,7 @@ private:
         {
             g.drawLine (x1, y0, x1, y0 + 0.5f * h, line);
             ui::Path out;
-            out.addCentredArc (x1 - 1.0f, y0 + 0.78f * h, 5.0f, 5.0f, 0.0f, 0.5f * ui::MathConstants<float>::pi - 0.7f,
+            out.addCentredArc (x1 - 1.0f, y0 + 0.78f * h, 4.0f, 4.0f, 0.0f, 0.5f * ui::MathConstants<float>::pi - 0.7f,
                                0.5f * ui::MathConstants<float>::pi + 0.7f, true);
             g.strokePath (out, ui::PathStrokeType (line));
         }
@@ -728,7 +1132,7 @@ private:
         {
             g.drawLine (x1, y0, x1, y0 + 0.22f * h, line);
             ui::Path out;
-            for (const float r : { 5.0f, 10.0f })
+            for (const float r : { 4.0f, 7.5f })   // within the gap to the next cell
                 out.addCentredArc (x1 - 1.0f, y0 + 0.62f * h, r, r, 0.0f, 0.5f * ui::MathConstants<float>::pi - 0.7f,
                                    0.5f * ui::MathConstants<float>::pi + 0.7f, true);
             g.strokePath (out, ui::PathStrokeType (line));
@@ -742,6 +1146,49 @@ private:
         cone.lineTo (x0, cy + half);
         g.strokePath (cone, ui::PathStrokeType (line));
         g.fillRect (ui::Rectangle<float> (0.10f * w, 0.18f * h).withPosition (x0 + 0.22f * w, cy - 0.09f * h));
+    }
+
+    /** A SPEAKER'S CHARACTER AS ITS CURVE, the level across the band left to right (the owner, 07.11): MID a hump in the
+        middle, BRIGHT its top rising, DARK its top falling, SCOOP a dip, FLAT a line, SNAP a narrow peak high up; the
+        cone's switch (`name` empty) the cone in profile, as the back's cells draw it. */
+    static void paintSpeakerIcon (ui::Graphics& g, const ui::String& name, ui::Rectangle<float> r, ui::Colour colour, float line)
+    {
+        g.setColour (colour);
+        const auto at = [&r] (float x, float y) { return ui::Point<float> (r.getX() + x * r.getWidth(), r.getY() + y * r.getHeight()); };
+        ui::Path p;
+        if (name.isEmpty())
+        {
+            p.startNewSubPath (at (0.25f, 0.0f));
+            p.lineTo (at (0.25f, 1.0f));
+            p.startNewSubPath (at (0.25f, 0.05f));
+            p.lineTo (at (0.55f, 0.36f));
+            p.lineTo (at (0.55f, 0.64f));
+            p.lineTo (at (0.25f, 0.95f));
+            g.strokePath (p, ui::PathStrokeType (line, ui::PathStrokeType::curved, ui::PathStrokeType::rounded));
+            g.fillRect (ui::Rectangle<float> (0.17f * r.getWidth(), 0.32f * r.getHeight()).withPosition (at (0.55f, 0.34f)));
+            return;
+        }
+        const auto bump = [] (float t, float c, float w) { return std::exp (-((t - c) / w) * ((t - c) / w)); };
+        const auto rise = [] (float t, float from) { const float u = ui::jmax (0.0f, (t - from) / (1.0f - from)); return u * u; };
+        const auto level = [&] (float t)
+        {
+            if (name == "mid")    return 0.75f - 0.6f * bump (t, 0.5f, 0.17f);
+            if (name == "bright") return 0.8f - 0.72f * rise (t, 0.35f);
+            if (name == "dark")   return 0.25f + 0.68f * rise (t, 0.4f);
+            if (name == "scoop")  return 0.15f + 0.7f * bump (t, 0.5f, 0.22f);
+            if (name == "snap")   return 0.7f - 0.65f * bump (t, 0.7f, 0.08f);
+            return 0.5f;   // flat
+        };
+        constexpr int n = 24;
+        for (int i = 0; i <= n; ++i)
+        {
+            const float t = (float) i / (float) n;
+            if (i == 0)
+                p.startNewSubPath (at (t, level (t)));
+            else
+                p.lineTo (at (t, level (t)));
+        }
+        g.strokePath (p, ui::PathStrokeType (line, ui::PathStrokeType::curved, ui::PathStrokeType::rounded));
     }
 
     /** The chosen box's horn over its speaker, big, always in the scene's top right corner, wherever it stands on the
@@ -790,15 +1237,18 @@ private:
         return { x, block.getBottom() - 14.0f, ui::look().trackedWidth (hornWords[i], font, 0.06f) + 4.0f, 14.0f };
     }
 
-    /** The speaker's centre: the scene's, moved down under a horn, so the horn has its room. */
+    /** The speaker's centre: the middle of what the speakers' row and BLEND leave of the scene — under a horn, of what its
+        HORN and steps leave there, so the horn has its room. */
     ui::Point<float> coneCentre() const
     {
-        const auto sc = scene();
-        if (chosen < 0 || ! cabs()[(size_t) chosen].horn)
+        const auto sc = coneArea();
+        if (! underHorn())
             return sc.getCentre();
-        const float shift = ui::jlimit (0.0f, 28.0f, 0.5f * (sc.getHeight() - 2.12f * radius()) - 4.0f);
-        return sc.getCentre().translated (0.0f, shift);
+        const float top = hornBlock().getBottom() + 2.0f;
+        return { sc.getCentreX(), 0.5f * (top + sc.getBottom()) };
     }
+
+    bool underHorn() const { return chosen >= 0 && cabs()[(size_t) chosen].horn; }
 
     static constexpr float columnGapM = 0.04f;   // between a pile's columns, m
     static constexpr float stackGapPx = 2.0f;    // between a box and the one on it
@@ -887,6 +1337,12 @@ private:
     Hot hotAt (ui::Point<float> p) const
     {
         const auto pos = p.roundToInt();
+        // A "?"'s window over all else while it is out, then the "?" themselves.
+        if (helpOpen >= 0 && helpBox (helpOpen).contains (pos))
+            return { Part::helpBox, -1, helpOpen };
+        for (int i = 0; i < helpSpots; ++i)
+            if (helpSpot (i).mark.expanded (3).contains (pos))
+                return { Part::help, -1, i };
         if (downloadArea().contains (pos))
             return { Part::download };
         if (downloadFormatArea().contains (pos))
@@ -897,18 +1353,16 @@ private:
             // The chosen box's back, a cell each.
             if (chosen >= 0)
                 for (int i = 0; i < backs(); ++i)
-                    if (backCell (i).expanded (backGap() / 2, 2.0f).contains (p))
+                    if (backCell (i).expanded (backGap / 2, 2.0f).contains (p))
                         return { Part::back, -1, i };
             // ...the wall behind it, where the catalog has the switch...
-            if (chosen >= 0 && catalog().wallSwitch && wallArea().expanded (4.0f, 2.0f).contains (p))
+            if (chosen >= 0 && catalog().wallSwitch && wallArea().expanded (backGap / 2, 2.0f).contains (p))
                 return { Part::wall };
-            // ...and its speaker, where it has a row of them — SPEAKER itself the cone's switch, where there is a variant.
-            if (chosen >= 0 && hasSpeakers() && catalog().coneVariant.isNotEmpty() && speakerWordArea().expanded (4.0f, 2.0f).contains (p))
-                return { Part::speakerCone };
-            if (chosen >= 0 && hasSpeakers())
-                for (int i = 0; i < catalog().speakers.size(); ++i)
-                    if (speakerCell (i).expanded (speakerGap / 2, 2.0f).contains (p))
-                        return { Part::speaker, -1, i };
+            // ...and the room round it, OFF first.
+            if (chosen >= 0 && hasRooms())
+                for (int i = -1; i < catalog().rooms.size(); ++i)
+                    if (roomCell (i).expanded (speakerGap / 2, 2.0f).contains (p))
+                        return { Part::room, -1, i };
 
             const int at = cabAt (p);
             if (at < 0)
@@ -924,27 +1378,42 @@ private:
         if (chosen < 0)
             return {};
 
+        // On the speaker the mics first, drawn over everything else there: a mic's distance and angle while they are out,
+        // then the mic itself — never the horn's steps, a speaker's icon or BLEND under it (the owner, 07.11).
+        if (scene().contains (p))
+        {
+            if (const int m = handlesShown(); m >= 0)
+            {
+                if (p.getDistanceFrom (angleKnob (m)) < 10.0f)
+                    return { Part::angle, m };
+                if (distHandle (m).expanded (8.0f, 6.0f).contains (p))
+                    return { Part::distance, m };
+            }
+            if (const int m = micAt (p); m >= 0)
+                return { Part::mic, m };
+        }
+
         if (! hornCorner().isEmpty())
             for (int i = 0; i < 4; ++i)
                 if (hornStepArea (i).expanded (hornGap / 2, 3.0f).contains (p))
                     return { Part::horn, -1, i };
 
-        for (int m = 0; m < 2; ++m)
-            if (distArea (m).contains (pos))
-                return { Part::distance, m };
+        // FIND, in A's column under its places: before the column, which keeps every other click in it for its own.
+        if (findArea().contains (pos))
+            return { Part::find };
 
         for (int m = 0; m < 2; ++m)
         {
             if (! column (m).contains (pos))
                 continue;
-            for (int i = 0; i < 4; ++i)
+            for (int i = 0; i < placeCount; ++i)
                 if (placeArea (m, i).contains (pos))
                     return { Part::place, m, i };
             for (int i = 0; i < mics().size(); ++i)
                 if (micRow (m, i).contains (pos))
                     return { Part::micRow, m, i };
-            if (angleTrack (m).expanded (2.0f, 10.0f).contains (p))
-                return { Part::angle, m };
+            if (m == 1 && alignArea().expanded (2, 2).contains (pos))  return { Part::align };
+            if (m == 1 && invertArea().expanded (2, 2).contains (pos)) return { Part::invert };
             if (m == 1 && timeTrack().expanded (2.0f, 10.0f).contains (p))
                 return { Part::shift, 1 };
             return {};
@@ -952,11 +1421,16 @@ private:
 
         if (onClose != nullptr && closeArea().contains (pos)) return { Part::close };
         if (defaultArea().contains (pos))                     return { Part::reset };
-        if (findArea().contains (pos))                        return { Part::find };
-        if (alignArea().expanded (4, 2).contains (pos))       return { Part::align };
-        if (invertArea().expanded (4, 2).contains (pos))      return { Part::invert };
-        if (bothHeard() && blendTrack().expanded (8.0f, 8.0f).contains (p)) return { Part::blend };
-        if (const int m = micAt (p); m >= 0)                  return { Part::mic, m };
+
+        // The speakers' row over the speaker, the guitar's: a curve each, the cone's switch the last.
+        if (hasSpeakers())
+            for (int i = 0; i < catalog().speakers.size(); ++i)
+                if (speakerCell (i).expanded (0.5f * speakerIconGap, 4.0f).contains (p))
+                    return { Part::speaker, -1, i };
+        if (hasSpeakers() && catalog().coneVariant.isNotEmpty() && speakerCell (-1).expanded (0.5f * speakerIconGap, 4.0f).contains (p))
+            return { Part::speakerCone };
+
+        if (bothHeard() && blendTrack().expanded (8.0f, 6.0f).contains (p)) return { Part::blend };
         return {};
     }
 
@@ -974,6 +1448,27 @@ private:
         switch (h.part)
         {
             case Part::none:
+                return;
+
+            // A "?": its window kept open; clicked again, closed, and not opened till the hand has been off it.
+            case Part::help:
+                if (helpPinned && helpOpen == h.i)
+                {
+                    closeHelp();
+                    helpQuiet = true;
+                }
+                else
+                {
+                    helpOpen = h.i;
+                    helpPinned = true;
+                    helpQuiet = false;
+                    repaint();
+                }
+                return;
+
+            case Part::helpBox:   // a click in it keeps it, as one on its "?"
+                helpPinned = true;
+                repaint();
                 return;
 
             case Part::download:
@@ -1008,6 +1503,12 @@ private:
                 send();
                 return;
 
+            // The room round the box, or none; kept from box to box as the back is.
+            case Part::room:
+                setup_.room = h.i;
+                send();
+                return;
+
             case Part::cab:
                 if (h.i != chosen)
                 {
@@ -1030,7 +1531,7 @@ private:
 
             case Part::distance:
                 takeUp (h.m);
-                dragTrack = distTrack (h.m);
+                dragTrack = distHandle (h.m);
                 grab (Drag::distance, h.m, e);
                 return;
 
@@ -1171,70 +1672,110 @@ private:
                                 ui::Justification::topLeft);
         }
 
-        // Over the pile the chosen box's back: BACK, then each drawn with its word, the one it stands at in the block's
-        // orange line.
+        // Over the pile the chosen box's back, a cell each: the box cut through, its word inside it, the one it stands at
+        // in the block's orange line; WALL after them. The one under the hand drawn last, grown (backZoomed).
         if (chosen >= 0)
         {
-            g.setColour (ui::look().txFaint);
-            ui::look().drawTracked (g, "BACK", backWordArea(), font, 0.08f, ui::Justification::centredLeft);
+            const int zi = backZoomed();
             for (int i = 0; i < backs(); ++i)
             {
-                const int kind = backAt (i);
-                const bool on = kind == backOf (chosen, setup_), over = ! on && isHot (Part::back, -1, i);
-                auto cell = backCell (i);
-                if (over)   // framed as a box under the hand is
+                if (i != zi)
+                    paintBackCell (g, i, backIcon (i));
+                // The box's own back, a dot before its picture: where DEFAULT goes back to.
+                if (backAt (i) == ownBack (chosen))
                 {
-                    g.setColour (ui::look().violet.withAlpha (0.7f));
-                    g.drawRoundedRectangle (cell.expanded (6.0f, 2.0f), 3.0f, 1.0f);
-                }
-                const auto word = cell.removeFromBottom ((float) backWordH);
-                paintBack (g, kind, cell.withHeight ((float) backIconH).withSizeKeepingCentre (56.0f, 34.0f),
-                           on ? ui::look().orange : ui::look().violet.withAlpha (over ? 0.9f : 0.6f));
-                g.setColour (on ? ui::look().orange : over ? ui::look().tx : ui::look().txDim);
-                ui::look().drawTracked (g, backWords[kind], word, font, 0.06f, ui::Justification::centred);
-                // The box's own back, a dot before its word: where DEFAULT goes back to.
-                if (kind == ownBack (chosen))
-                {
-                    const float w = ui::look().trackedWidth (backWords[kind], font, 0.06f);
                     g.setColour (ui::look().txDim);
-                    g.fillEllipse (ui::Rectangle<float> (4.0f, 4.0f).withCentre ({ word.getCentreX() - 0.5f * w - 8.0f, word.getCentreY() }));
+                    g.fillEllipse (ui::Rectangle<float> (4.0f, 4.0f).withCentre ({ backIcon (i).getX() - 8.0f, backIcon (i).getCentreY() }));
                 }
+            }
+            if (catalog().wallSwitch && zi != backs())
+                paintWallCell (g, backIcon (backs()));
+            if (zi >= 0)
+            {
+                // The one under the hand grown, its word under it, over what lies there.
+                const float e = backZoom * backZoom * (3.0f - 2.0f * backZoom), k = 1.0f + backZoomBy * e;   // eased in and out
+                auto big = backIcon (zi, k);
+                const float right = (float) leftW + 0.5f * gutter - 1.0f;
+                big = big.translated (ui::jmax (0.0f, 1.0f - big.getX()) - ui::jmax (0.0f, big.getRight() - right),
+                                      ui::jmax (0.0f, 1.0f - big.getY()));
+                const auto font13 = ui::look().font (13.0f);
+                const ui::String word = zi < backs() ? ui::String (backWords[backAt (zi)]) : ui::String ("WALL");
+                const float w = ui::look().trackedWidth (word, font13, 0.06f) + 12.0f;
+                const float x = ui::jlimit (1.0f, right - w, big.getCentreX() - 0.5f * w);
+                const ui::Rectangle<float> label (x, big.getBottom() + 2.0f, w, 18.0f);
+                g.setColour (ui::look().panel);   // what is under them hidden, no box of their own
+                g.fillRoundedRectangle (big.expanded (4.0f, 3.0f), 4.0f);
+                g.setColour (ui::look().panel.withMultipliedAlpha (e));
+                g.fillRoundedRectangle (label, 3.0f);
+                if (zi < backs())
+                    paintBackCell (g, zi, big);
+                else
+                    paintWallCell (g, big);
+                const bool on = zi < backs() ? backAt (zi) == backOf (chosen, setup_) : setup_.wall;
+                g.setColour ((on ? ui::look().orange : ui::look().tx).withMultipliedAlpha (e));
+                ui::look().drawTracked (g, word, label, font13, 0.06f, ui::Justification::centred);
             }
         }
 
-        // WALL under BACK, where the catalog has it: orange on, dim off, faint with the back closed — nothing gets out there.
-        if (chosen >= 0 && catalog().wallSwitch)
+        // ...and under them the room, where the catalog has rooms: ROOM, then OFF and theirs, the one round the box lit.
+        if (chosen >= 0 && hasRooms())
         {
-            const bool over = isHot (Part::wall), closed = backOf (chosen, setup_) == 0;
-            g.setColour (setup_.wall ? (closed ? ui::look().orange.withAlpha (0.45f) : ui::look().orange)
-                                     : over ? ui::look().tx : closed ? ui::look().txFaint : ui::look().txDim);
-            ui::look().drawTracked (g, "WALL", wallArea(), font, 0.08f, ui::Justification::centredLeft);
-        }
-
-        // Under it the speakers, where the catalog has them: SPEAKER, then their words, the box's own dotted as its back is.
-        if (chosen >= 0 && hasSpeakers())
-        {
-            // SPEAKER, the cone's switch where the catalog has a variant: orange with it on, lit under the hand.
-            g.setColour (setup_.cone ? ui::look().orange : isHot (Part::speakerCone) ? ui::look().tx : ui::look().txFaint);
-            ui::look().drawTracked (g, "SPEAKER", speakerWordArea(), font, 0.08f, ui::Justification::centredLeft);
-            for (int i = 0; i < catalog().speakers.size(); ++i)
+            g.setColour (ui::look().txFaint);
+            ui::look().drawTracked (g, "ROOM", roomWordArea(), font, 0.08f, ui::Justification::centredLeft);
+            for (int i = -1; i < catalog().rooms.size(); ++i)
             {
-                const bool on = i == speakerOf (chosen, setup_), over = ! on && isHot (Part::speaker, -1, i);
-                const auto cell = speakerCell (i);
+                const bool on = i == setup_.room, over = ! on && isHot (Part::room, -1, i);
+                const auto cell = roomCell (i);
                 if (over)
                 {
                     g.setColour (ui::look().violet.withAlpha (0.7f));
                     g.drawRoundedRectangle (cell.expanded (6.0f, 0.0f), 3.0f, 1.0f);
                 }
                 g.setColour (on ? ui::look().orange : over ? ui::look().tx : ui::look().txDim);
-                ui::look().drawTracked (g, catalog().speakerWords[i], cell, font, 0.06f, ui::Justification::centred);
-                if (i == ownSpeaker (chosen))
-                {
-                    g.setColour (ui::look().txDim);
-                    g.fillEllipse (ui::Rectangle<float> (4.0f, 4.0f).withCentre ({ cell.getX() - 7.0f, cell.getCentreY() }));
-                }
+                ui::look().drawTracked (g, roomWord (i), cell, font, 0.06f, ui::Justification::centred);
             }
         }
+    }
+
+    /** A back's picture in `icon`: the box cut through — orange where the box stands at it, brighter under the hand. */
+    void paintBackCell (ui::Graphics& g, int i, ui::Rectangle<float> icon) const
+    {
+        const bool on = backAt (i) == backOf (chosen, setup_), over = isHot (Part::back, -1, i);
+        paintBack (g, backAt (i), icon, on ? ui::look().orange : ui::look().violet.withAlpha (over ? 0.95f : 0.6f));
+    }
+
+    /** WALL's picture in `icon`, the guitar's: the wall itself, upright, laid in bricks — orange on, violet off, faint with
+        the back closed, nothing gets out there. */
+    void paintWallCell (ui::Graphics& g, ui::Rectangle<float> icon) const
+    {
+        const bool over = isHot (Part::wall), closed = backOf (chosen, setup_) == 0;
+        const auto ink = setup_.wall ? (closed ? ui::look().orange.withAlpha (0.45f) : ui::look().orange)
+                                     : ui::look().violet.withAlpha (closed ? 0.35f : over ? 0.95f : 0.6f);
+        g.setColour (ink);
+        g.drawRoundedRectangle (icon, 1.5f, setup_.wall ? 1.5f : 1.2f);
+        constexpr int rows = 6;
+        const float brickH = icon.getHeight() / (float) rows, x = icon.getX(), w = icon.getWidth();
+        for (int r = 1; r < rows; ++r)
+            g.drawLine (x, icon.getY() + (float) r * brickH, x + w, icon.getY() + (float) r * brickH, 0.9f);
+        for (int r = 0; r < rows; ++r)   // the joints, every other row offset
+        {
+            const float y0 = icon.getY() + (float) r * brickH, y1 = y0 + brickH;
+            if (r % 2 == 0)
+                g.drawLine (x + 0.5f * w, y0, x + 0.5f * w, y1, 0.9f);
+            else
+            {
+                g.drawLine (x + 0.25f * w, y0, x + 0.25f * w, y1, 0.9f);
+                g.drawLine (x + 0.75f * w, y0, x + 0.75f * w, y1, 0.9f);
+            }
+        }
+    }
+
+    /** The picture in cell `i` (backs() for WALL) as the row stands it, `k` times its size about its middle. */
+    ui::Rectangle<float> backIcon (int i, float k = 1.0f) const
+    {
+        const auto cell = i < backs() ? backCell (i) : wallArea();
+        const float w = i < backs() ? backIconW : wallIconW;
+        return cell.withSizeKeepingCentre (k * w, k * backIconHigh);
     }
 
 public:
@@ -1404,7 +1945,7 @@ private:
 
     ui::Rectangle<int> column (int m) const
     {
-        const int h = bodyH() - blendH;   // down to BLEND's row
+        const int h = bodyH();
         return m == 0 ? ui::Rectangle<int> (rightX(), 0, colW, h) : ui::Rectangle<int> (getWidth() - edge - colW, 0, colW, h);
     }
 
@@ -1414,55 +1955,102 @@ private:
         return { c.getX(), c.getY() + rowH + 4 + i * rowH, c.getWidth(), rowH };
     }
 
-    /** A column's places under its mics, two to a line: CAP EDGE, OFF ROOM. */
+    /** A column's places under its mics, on one line: CAP at its left, OFF at its right, EDGE between (the owner, 07.11). */
     ui::Rectangle<int> placeArea (int m, int i) const
     {
         const auto c = column (m);
         const int top = micRow (m, mics().size() - 1).getBottom() + 4;
-        return { c.getX() + 4 + (i % 2) * (c.getWidth() / 2), top + (i / 2) * rowH, c.getWidth() / 2 - 4, rowH };
+        int w[placeCount], sum = 0;
+        for (int k = 0; k < placeCount; ++k)
+            sum += (w[k] = wordW (places[k].word));
+        const int gap = (c.getWidth() - sum) / (placeCount - 1);
+        int x = c.getX();
+        for (int k = 0; k < i; ++k)
+            x += w[k] + gap;
+        if (i == placeCount - 1)
+            x = c.getRight() - w[i];
+        return { x, top, w[i], rowH };
     }
 
-    /** A column's angle: a word and its value over a track. */
-    ui::Rectangle<float> angleTrack (int m) const
+    /** B's ALIGN and Ø, under its places: ALIGN at the left, Ø at the right (the owner, 07.11). */
+    ui::Rectangle<int> alignArea() const
     {
-        const auto c = column (m);
-        const int top = placeArea (m, 3).getBottom() + 6;
-        return ui::Rectangle<float> ((float) c.getX() + (m == 0 ? 4.0f : 8.0f), (float) (top + rowH + 2), (float) c.getWidth() - 12.0f, 6.0f);
+        return { column (1).getX(), placeArea (1, 0).getBottom() + 4, wordW ("ALIGN"), rowH };
     }
 
-    /** B's TIME, under its angle: B moved against A, -1 ms to +1, nought in the middle (the owner, 05.11). */
+    ui::Rectangle<int> invertArea() const { return { column (1).getRight() - 20, alignArea().getY(), 20, rowH }; }
+
+    /** ...and its TIME under them: B moved against A, -1 ms to +1, nought in the middle (the owner, 05.11) — its value and
+        its word over a track. */
     static constexpr float maxShiftMs = 1.0f;
     ui::Rectangle<float> timeTrack() const
     {
-        const auto a = angleTrack (1);
-        return a.translated (0.0f, (float) rowH + 12.0f);
+        const auto c = column (1);
+        const int top = alignArea().getBottom() + 2 + rowH + 3;
+        return { (float) c.getX() + 6.0f, (float) top, (float) c.getWidth() - 12.0f, 6.0f };
     }
 
-    /** A mic's distance in its column, along its list of mics and no lower (the owner, 05.11) — over EDGE's GE in A's,
-        over CAP's CA in B's, where the names leave room — its centimetres level with the column's name, far at the top. */
-    float distX (int m) const
+    /** THE MIC'S DISTANCE AND ANGLE, ON THE SPEAKER, while the hand is on the mic (handlesShown): its distance a track
+        upright beside it, on the side toward the cap — its glyph leans the other way — the near at the foot, kept inside
+        the scene; its angle a knob on an arc round its capsule just past the glyph's top, as a turning handle stands
+        over what it turns — straight up nought, out toward the lean 60 (the owner, 07.11) — no farther than the scene
+        keeps it in sight. */
+    static constexpr float distHandleH = 80.0f, distHandleOff = 23.0f;
+
+    float angleArcR (int m) const
     {
+        const float tip = 0.94f * glyphOf (mic (m), coneCentre(), radius(), 1.0f).box.getHeight() + 12.0f;
+        return ui::jlimit (30.0f, ui::jmax (30.0f, spotOf (m).y - coneArea().getY() - 7.0f), tip);   // under the speakers' row
+    }
+
+    float leanSide (int m) const { return spotOf (m).x >= coneCentre().x ? 1.0f : -1.0f; }   // the way its glyph leans
+
+    ui::Rectangle<float> distHandle (int m) const
+    {
+        const auto at = spotOf (m);
+        const auto sc = scene();
+        const float top = ui::jlimit (sc.getY() + 4.0f, sc.getBottom() - 4.0f - distHandleH, at.y + 2.0f - distHandleH);
+        return { at.x - leanSide (m) * distHandleOff - 3.0f, top, 6.0f, distHandleH };
+    }
+
+    ui::Point<float> angleKnob (int m) const
+    {
+        const float a = mic (m).angle * ui::MathConstants<float>::pi / 180.0f;
+        const float r = angleArcR (m);
+        return spotOf (m) + ui::Point<float> (leanSide (m) * r * std::sin (a), -r * std::cos (a));
+    }
+
+    void paintHandles (ui::Graphics& g) const
+    {
+        const int m = handlesShown();
+        if (m < 0)
+            return;
+        const auto colour = colourOf (m);
+        // The distance: its track, its knob where the mic stands, the far at the top.
+        const auto t = drag == Drag::distance ? dragTrack : distHandle (m);
+        const bool distOver = drag == Drag::distance || isHot (Part::distance, m);
+        g.setColour (ui::look().violet.withAlpha (distOver ? 0.7f : 0.45f));
+        g.fillRoundedRectangle (t.withSizeKeepingCentre (3.0f, t.getHeight()), 1.5f);
+        g.setColour (distOver ? colour.brighter (0.3f) : colour);
+        g.fillRoundedRectangle (ui::Rectangle<float> (14.0f, 6.0f).withCentre ({ t.getCentreX(), t.getBottom() - nearness (mic (m).distance) * t.getHeight() }), 2.0f);
+        // The angle: its arc from straight up out to 60, its knob where the mic leans.
+        const auto at = spotOf (m);
+        const bool angleOver = drag == Drag::angle || isHot (Part::angle, m);
+        const float side = leanSide (m), pi = ui::MathConstants<float>::pi, to = maxAngle * pi / 180.0f;
+        ui::Path arc;
+        const float r = angleArcR (m);
+        arc.addCentredArc (at.x, at.y, r, r, 0.0f, side > 0.0f ? 0.0f : -to, side > 0.0f ? to : 0.0f, true);
+        g.setColour (ui::look().violet.withAlpha (angleOver ? 0.7f : 0.45f));
+        g.strokePath (arc, ui::PathStrokeType (3.0f, ui::PathStrokeType::curved, ui::PathStrokeType::rounded));
+        g.setColour (angleOver ? colour.brighter (0.3f) : colour);
+        g.fillEllipse (ui::Rectangle<float> (10.0f, 10.0f).withCentre (angleKnob (m)));
+        // ...its degrees beside the knob, out on its side.
+        const auto deg = ui::String (ui::roundToInt (mic (m).angle)) + ui::String::fromUTF8 ("\xc2\xb0");
         const auto font = ui::look().font (13.0f);
-        const auto width = [&font] (const ui::String& word) { return ui::look().trackedWidth (word, font, 0.06f); };
-        float longest = 0.0f;   // ...and clear of the longest name by a little
-        for (const auto& word : micWords())
-            longest = ui::jmax (longest, width (word));
-        const auto c = column (m).toFloat();
-        if (m == 0)
-            return ui::jmax ((float) placeArea (0, 1).getX() + width ("EDGE") - 0.5f * width ("GE"), c.getX() + 20.0f + longest + 14.0f);
-        return ui::jmin ((float) placeArea (1, 0).getRight() - 4.0f - width ("CAP") + 0.5f * width ("CA"), c.getRight() - 20.0f - longest - 14.0f);
-    }
-
-    ui::Rectangle<int> distArea (int m) const   // the hand's: the value over the track and the track
-    {
-        const int top = column (m).getY(), bottom = micRow (m, mics().size() - 1).getBottom();
-        return { ui::roundToInt (distX (m)) - 12, top, 24, bottom - top };
-    }
-
-    ui::Rectangle<float> distTrack (int m) const
-    {
-        const float top = (float) micRow (m, 0).getY() + 4.0f, bottom = (float) micRow (m, mics().size() - 1).getBottom() - 4.0f;
-        return { distX (m) - 3.0f, top, 6.0f, bottom - top };
+        const float w = ui::look().trackedWidth (deg, font, 0.0f) + 4.0f;
+        const auto k = angleKnob (m);
+        g.drawTracked (deg, ui::Rectangle<float> (w, 16.0f).withCentre ({ k.x + side * (10.0f + 0.5f * w), k.y }), font, 0.0f,
+                       ui::Justification::centred);
     }
 
     static ui::String cmOf (float distance)   // a metre and on, in metres: "1.2 m"
@@ -1511,21 +2099,28 @@ private:
         return r;
     }
 
-    static constexpr int blendH = 26;   // BLEND's row, right under the speaker
+    /** THE SPEAKER'S SCENE, between the columns, the body's height: the guitar's speakers along its top (speakerCell),
+        BLEND along its foot (blendTrack), the speaker in what they leave (coneArea, the owner, 07.11). */
+    static constexpr int blendInH = 22;   // the scene's foot BLEND takes
 
     ui::Rectangle<float> scene() const
     {
         const int x0 = column (0).getRight() + 8, x1 = column (1).getX() - 8;
-        return ui::Rectangle<int> (x0, 4, x1 - x0, bodyH() - 4 - blendH).toFloat();
+        return ui::Rectangle<int> (x0, 4, x1 - x0, bodyH() - 8).toFloat();
     }
 
-    float radius() const { const auto s = scene(); return ui::jmax (10.0f, ui::jmin (s.getWidth(), s.getHeight()) * 0.5f / 1.2f); }
-
-    /** Under the speaker (the owner, 05.11): BLEND, A, its track as wide as the speaker's scene, B — ALIGN and Ø after. */
-    ui::Rectangle<int> blendRow() const
+    ui::Rectangle<float> coneArea() const
     {
-        const int y = scene().toNearestInt().getBottom() + 2;
-        return { rightX(), y, getWidth() - rightX(), bodyH() - y };
+        return scene().withTrimmedTop (hasSpeakers() ? (float) iconRowH : 0.0f).withTrimmedBottom ((float) blendInH);
+    }
+
+    float radius() const
+    {
+        const auto s = coneArea();
+        float r = ui::jmin (s.getWidth(), s.getHeight()) * 0.5f / 1.2f;
+        if (underHorn())   // its surround clear of HORN and its steps
+            r = ui::jmin (r, (s.getBottom() - hornBlock().getBottom() - 2.0f) / 2.12f);
+        return ui::jmax (10.0f, r);
     }
 
     ui::Rectangle<int> foot() const { return { rightX(), getHeight() - footHeight() + 4, getWidth() - rightX(), footHeight() - 4 }; }
@@ -1547,47 +2142,77 @@ private:
         return { closeArea().getX() - (onClose != nullptr ? 6 : 0) - w, foot().getY(), w, foot().getHeight() };
     }
 
-    ui::Rectangle<int> alignArea() const { return { column (1).getX(), blendRow().getY(), wordW ("ALIGN"), blendRow().getHeight() }; }
-
-    ui::Rectangle<int> invertArea() const { return { alignArea().getRight() + 8, blendRow().getY(), 20, blendRow().getHeight() }; }
-
+    /** BLEND, along the speaker's foot inside its scene: a track, no word — A's orange at its left, B's lilac at its right
+        in the knob's colour (the owner, 07.11). */
     ui::Rectangle<float> blendTrack() const
     {
         const auto sc = scene();
-        return { sc.getX() + 18.0f, blendRow().toFloat().getCentreY() - 3.0f, sc.getWidth() - 36.0f, 6.0f };
+        return { sc.getX() + 18.0f, sc.getBottom() - 0.5f * (float) blendInH - 3.0f, sc.getWidth() - 36.0f, 6.0f };
     }
+
+    /** FIND, under A's places, its column's width — level with B's ALIGN and TIME (the owner, 07.11): orange, the panel's
+        one call to act, its words on two lines where one is too narrow for them at the reading size. */
+    static constexpr int findLineH = 15;   // FIND's two lines, at the reading size, a little closer than a row
 
     ui::Rectangle<int> findArea() const
     {
         if (onFind == nullptr)
             return {};
-        const auto row = blendRow();
-        return { column (0).getX(), row.getY() + 2, wordW ("FIND") + 14, row.getHeight() - 4 };
+        const auto c = column (0);
+        const int h = 2 * findLineH + 4;
+        const int top = ui::jmin (placeArea (0, 0).getBottom() + 8, bodyH() - 2 - h);
+        return { c.getX() + 4, top, c.getWidth() - 8, h };
     }
 
-    ui::Rectangle<float> blendWordArea() const
+    void paintFind (ui::Graphics& g) const
     {
-        const float w = ui::look().trackedWidth ("BLEND", ui::look().font (13.0f), 0.06f) + 4.0f;
-        const auto row = blendRow().toFloat();
-        return { blendTrack().getX() - 22.0f - w, row.getY(), w, row.getHeight() };
+        const auto r = findArea();
+        if (r.isEmpty())
+            return;
+        const auto b = r.toFloat().reduced (0.5f);
+        const auto font = ui::look().font (13.0f);
+        const auto ink = searching || isHot (Part::find) ? ui::look().orange.brighter (0.3f) : ui::look().orange;
+        g.setColour (ui::look().panel2);
+        g.fillRoundedRectangle (b, 4.0f);
+        g.setColour (ink);
+        g.drawRoundedRectangle (b, 4.0f, searching ? 1.6f : 1.2f);
+        if (ui::look().trackedWidth ("FIND BEST POSITION", font, 0.06f) + 14.0f <= b.getWidth())
+            ui::look().drawTracked (g, "FIND BEST POSITION", b, font, 0.06f, ui::Justification::centred);
+        else
+        {
+            const auto lines = b.withSizeKeepingCentre (b.getWidth(), 2.0f * (float) findLineH);
+            ui::look().drawTracked (g, "FIND BEST", lines.withHeight ((float) findLineH), font, 0.06f, ui::Justification::centred);
+            ui::look().drawTracked (g, "POSITION", lines.withTrimmedTop ((float) findLineH), font, 0.06f, ui::Justification::centred);
+        }
     }
 
     /** The places a mic is put at with one click, as the table's positions stand them: at the cap, at the cone's edge,
-        half way out and turned 35° to the cap, and as far off as it goes. Across the cone on the mic's own side. */
+        half way out and turned 35° to the cap — ROOM gone, the distance out on the speaker reaching as far (the owner,
+        07.11). Across the cone on the mic's own side. */
     struct Place { const char* word; float r, distance, angle; };
-    static constexpr Place places[] { { "CAP", 0.0f, 0.05f, 0.0f }, { "EDGE", 0.8f, 0.04f, 0.0f },
-                                      { "OFF", 0.5f, 0.05f, 35.0f }, { "ROOM", 0.0f, 0.30f, 0.0f } };
-    /** ...ROOM as far as the catalog says (the guitar's a metre). */
-    static Place placeAt (int i) { auto p = places[i]; if (i == 3) p.distance = catalog().roomM; return p; }
+    static constexpr Place places[] { { "CAP", 0.0f, 0.05f, 0.0f }, { "EDGE", 0.8f, 0.04f, 0.0f }, { "OFF", 0.5f, 0.05f, 35.0f } };
+    static constexpr int placeCount = 3;
+    static Place placeAt (int i) { return places[i]; }
+    /** Where a place puts mic `m` across the speaker, in radii — on the mic's own side, on the axis the side away from the
+        other mic while that one is on; a dark B where taking it up would stand it first (takeUp). */
+    ui::Point<float> placeSpot (int m, const Place& p) const
+    {
+        float x = mic (m).x;
+        if (m == 1 && ! heard (1) && std::hypot (setup_.b.x - setup_.a.x, setup_.b.y - setup_.a.y) < 0.4f)
+            x = ui::jmin (1.05f, setup_.a.x + 0.7f);
+        float side = x > 0.0f ? 1.0f : -1.0f;
+        if (std::abs (x) <= 0.05f)
+            side = mic (1 - m).x > 0.0f && heard (1 - m) ? -1.0f : 1.0f;
+        return { side * p.r, 0.0f };
+    }
+
     void putAt (int m, const Place& p)
     {
         takeUp (m);
+        const auto at = placeSpot (m, p);
         auto& sp = mic (m);
-        float side = sp.x > 0.0f ? 1.0f : -1.0f;
-        if (std::abs (sp.x) <= 0.05f)   // on the axis: the side away from the other mic, while that one is on
-            side = mic (1 - m).x > 0.0f && heard (1 - m) ? -1.0f : 1.0f;
-        sp.x = side * p.r;
-        sp.y = 0.0f;
+        sp.x = at.x;
+        sp.y = at.y;
         sp.distance = p.distance;
         sp.angle = p.angle;
         send();
@@ -1693,35 +2318,30 @@ private:
         }
 
         // Its places, in its colour where it stands.
-        for (int i = 0; i < 4; ++i)
+        for (int i = 0; i < placeCount; ++i)
         {
             const bool over = isHot (Part::place, m, i);
             g.setColour ((standsAt (sp, placeAt (i)) ? (over ? colour.brighter (0.3f) : colour) : over ? ui::look().tx : ui::look().txDim)
                              .withMultipliedAlpha (dim));
-            auto cell = placeArea (m, i).toFloat();
-            ui::look().drawTracked (g, placeAt (i).word, m == 0 ? cell : cell.withTrimmedRight (4.0f), font, 0.06f, side);
+            ui::look().drawTracked (g, placeAt (i).word, placeArea (m, i).toFloat(), font, 0.06f, ui::Justification::centred);
         }
 
-        // Its angle, a word and its value over a track — the value on the side away from the word.
-        {
-            const auto t = angleTrack (m);
-            const auto label = ui::Rectangle<float> (t.getX(), t.getY() - (float) rowH - 2.0f, t.getWidth(), (float) rowH);
-            g.setColour (ui::look().txFaint.withMultipliedAlpha (dim));
-            ui::look().drawTracked (g, "ANGLE", label, font, 0.06f, side);
-            g.setColour (ui::look().txDim.withMultipliedAlpha (dim));
-            ui::look().drawTracked (g, ui::String (ui::roundToInt (sp.angle)) + ui::String::fromUTF8 ("\xc2\xb0"), label, font, 0.0f,
-                                m == 0 ? ui::Justification::centredRight : ui::Justification::centredLeft);
-            g.setColour (ui::look().hair2);
-            g.fillRoundedRectangle (t.withSizeKeepingCentre (t.getWidth(), 2.0f), 1.0f);
-            g.setColour (colour.withMultipliedAlpha (dim));
-            g.fillRoundedRectangle (ui::Rectangle<float> (6.0f, 12.0f).withCentre ({ t.getX() + sp.angle / maxAngle * t.getWidth(), t.getCentreY() }), 2.0f);
-        }
-
-        // B's TIME under its angle: the word, its milliseconds, a track with nought marked in its middle.
+        // B's ALIGN and Ø, then its TIME: the value, the word, a track with nought marked in its middle — faint while one
+        // mic is heard, the two not mixed then.
         if (m == 1)
         {
+            const auto toggle = [this] (bool on, Part part)
+            {
+                const bool over = isHot (part);
+                return on ? (over ? ui::look().orange.brighter (0.3f) : ui::look().orange) : over ? ui::look().tx : ui::look().txFaint;
+            };
+            g.setColour (toggle (bothHeard() && setup_.align, Part::align));
+            ui::look().drawTracked (g, "ALIGN", alignArea().toFloat(), font, 0.06f, ui::Justification::centredLeft);
+            g.setColour (toggle (bothHeard() && setup_.invert, Part::invert));
+            ui::look().drawTracked (g, ui::String::fromUTF8 ("\xc3\x98"), invertArea().toFloat(), font, 0.0f, ui::Justification::centredRight);
+
             const auto t = timeTrack();
-            const auto label = ui::Rectangle<float> (t.getX(), t.getY() - (float) rowH - 2.0f, t.getWidth(), (float) rowH);
+            const auto label = ui::Rectangle<float> ((float) c.getX(), t.getY() - (float) rowH - 3.0f, (float) c.getWidth(), (float) rowH);
             g.setColour (ui::look().txFaint.withMultipliedAlpha (dim));
             ui::look().drawTracked (g, "TIME", label, font, 0.06f, side);
             g.setColour ((std::abs (setup_.shiftMs) > 0.0f ? colour : ui::look().txDim).withMultipliedAlpha (dim));
@@ -1733,18 +2353,6 @@ private:
             g.setColour (colour.withMultipliedAlpha (dim));
             const float at = t.getX() + (0.5f + 0.5f * setup_.shiftMs / maxShiftMs) * t.getWidth();
             g.fillRoundedRectangle (ui::Rectangle<float> (6.0f, 12.0f).withCentre ({ at, t.getCentreY() }), 2.0f);
-        }
-
-        // Its distance, beside its list: its centimetres level with the column's name, far at the top.
-        {
-            const auto t = distTrack (m);
-            g.setColour (ui::look().txDim.withMultipliedAlpha (dim));
-            ui::look().drawTracked (g, cmOf (sp.distance), { t.getCentreX() - 24.0f, (float) c.getY(), 48.0f, (float) rowH }, font, 0.0f,
-                                ui::Justification::centred);
-            g.setColour (ui::look().hair2);
-            g.fillRoundedRectangle (t.withSizeKeepingCentre (2.0f, t.getHeight()), 1.0f);
-            g.setColour (colour.withMultipliedAlpha (dim));
-            g.fillRoundedRectangle (ui::Rectangle<float> (12.0f, 6.0f).withCentre ({ t.getCentreX(), t.getBottom() - nearness (sp.distance) * t.getHeight() }), 2.0f);
         }
     }
 
@@ -1811,6 +2419,27 @@ private:
                     g.drawEllipse (dot, 1.0f);
                 }
 
+            // The guitar's speakers along the scene's top.
+            paintSpeakerRow (g);
+
+            // BLEND along the speaker's foot: its track, A's orange at one end and B's lilac at the other, the knob between
+            // them in their mix — faint while one mic is heard, the blend not heard then.
+            {
+                const float dim = bothHeard() ? 1.0f : 0.45f;
+                const bool over = drag == Drag::blend || isHot (Part::blend);
+                const auto t = blendTrack();
+                g.setColour (ui::look().hair2);
+                g.fillRoundedRectangle (t.withSizeKeepingCentre (t.getWidth(), 2.0f), 1.0f);
+                g.setColour (ui::look().orange.withMultipliedAlpha (0.8f * dim));
+                g.fillEllipse (ui::Rectangle<float> (4.0f, 4.0f).withCentre ({ t.getX() - 6.0f, t.getCentreY() }));
+                g.setColour (ui::look().lilac.withMultipliedAlpha (0.8f * dim));
+                g.fillEllipse (ui::Rectangle<float> (4.0f, 4.0f).withCentre ({ t.getRight() + 6.0f, t.getCentreY() }));
+                const auto knob = ui::look().orange.interpolatedWith (ui::look().lilac, setup_.blend);
+                g.setColour ((over ? knob.brighter (0.3f) : knob).withMultipliedAlpha (dim));
+                g.fillRoundedRectangle (ui::Rectangle<float> (6.0f, 14.0f).withCentre ({ t.getX() + setup_.blend * t.getWidth(), t.getCentreY() }), 2.0f);
+            }
+
+            // The mics over all of it, as a click finds them first (hotAt).
             paintMicsOn (g, cab, setup_, o, R, 1.0f, drag == Drag::spot ? dragMic : hot.part == Part::mic ? hot.m : -1);
 
             // Each heard mic's centimetres under it, the two kept apart.
@@ -1821,36 +2450,75 @@ private:
                     g.setColour (colourOf (m));
                     ui::look().drawTracked (g, cmOf (mic (m).distance), labels[(size_t) m], font, 0.0f, ui::Justification::centred);
                 }
+
+            // The hand's mic: its distance and its angle out beside it.
+            paintHandles (g);
+
+            // A place under the hand (CAP, EDGE, OFF): where it would put its mic, a dot ringed in the mic's colour (the
+            // owner, 07.11).
+            if (hot.part == Part::place)
+            {
+                const auto to = placeSpot (hot.m, placeAt (hot.i));
+                const auto at = o + ui::Point<float> (to.x * R, -to.y * R);
+                g.setColour (colourOf (hot.m));
+                g.fillEllipse (ui::Rectangle<float> (7.0f, 7.0f).withCentre (at));
+                g.drawEllipse (ui::Rectangle<float> (16.0f, 16.0f).withCentre (at), 1.4f);
+            }
         }
 
-        // The blend: A..B on a track, ALIGN, and Ø for B — faint while one mic is heard, the blend not heard then.
+        paintFind (g);
+        paintButton (g, defaultArmed ? "SURE?" : "DEFAULT", defaultArea(), defaultArmed, isHot (Part::reset));
+        paintButton (g, "CLOSE", closeArea(), false, isHot (Part::close));
+    }
+
+    /** THE GUITAR'S SPEAKERS along the scene's top: a curve each, the box's in the block's orange, its own a dot under it;
+        the one under the hand grown, its word under it; the cone's switch after them, orange while it is on. */
+    void paintSpeakerRow (ui::Graphics& g) const
+    {
+        if (! hasSpeakers())
+            return;
+        const int own = ownSpeaker (chosen), on = speakerOf (chosen, setup_);
+        const bool cone = catalog().coneVariant.isNotEmpty();
+        const auto colourAt = [&] (int i)
         {
-            const float dim = bothHeard() ? 1.0f : 0.45f;
-            const auto row = blendRow().toFloat();
-            g.setColour (ui::look().txFaint);
-            ui::look().drawTracked (g, "BLEND", blendWordArea(), font, 0.06f, ui::Justification::centredRight);
-            const auto t = blendTrack();
-            g.setColour (ui::look().orange.withMultipliedAlpha (dim));
-            ui::look().drawTracked (g, "A", ui::Rectangle<float> (t.getX() - 18.0f, row.getY(), 14.0f, row.getHeight()), font, 0.0f, ui::Justification::centred);
-            g.setColour (ui::look().lilac.withMultipliedAlpha (dim));
-            ui::look().drawTracked (g, "B", ui::Rectangle<float> (t.getRight() + 4.0f, row.getY(), 14.0f, row.getHeight()), font, 0.0f, ui::Justification::centred);
-            g.setColour (ui::look().hair2);
-            g.fillRoundedRectangle (t.withSizeKeepingCentre (t.getWidth(), 2.0f), 1.0f);
-            g.setColour (ui::look().orange.interpolatedWith (ui::look().lilac, setup_.blend).withMultipliedAlpha (dim));
-            g.fillRoundedRectangle (ui::Rectangle<float> (6.0f, 14.0f).withCentre ({ t.getX() + setup_.blend * t.getWidth(), t.getCentreY() }), 2.0f);
-            const auto toggle = [this] (bool on, Part part)
+            const bool lit = i < 0 ? setup_.cone : i == on;
+            const bool over = i < 0 ? isHot (Part::speakerCone) : isHot (Part::speaker, -1, i);
+            return lit ? (over ? ui::look().orange.brighter (0.3f) : ui::look().orange) : over ? ui::look().tx : ui::look().violet.withAlpha (0.75f);
+        };
+        const auto nameAt = [] (int i) { return i < 0 ? ui::String() : catalog().speakers[i]; };
+        const int grown = hot.part == Part::speaker ? hot.i : hot.part == Part::speakerCone ? -1 : -2;
+
+        for (int i = cone ? -1 : 0; i < catalog().speakers.size(); ++i)
+        {
+            const auto cell = speakerCell (i);
+            if (i != grown)
+                paintSpeakerIcon (g, nameAt (i), cell, colourAt (i), 1.4f);
+            if (i >= 0 && i == own)
             {
-                const bool over = isHot (part);
-                return on ? (over ? ui::look().orange.brighter (0.3f) : ui::look().orange) : over ? ui::look().tx : ui::look().txFaint;
-            };
-            g.setColour (toggle (bothHeard() && setup_.align, Part::align));
-            ui::look().drawTracked (g, "ALIGN", alignArea().toFloat(), font, 0.06f, ui::Justification::centredLeft);
-            g.setColour (toggle (bothHeard() && setup_.invert, Part::invert));
-            ui::look().drawTracked (g, ui::String::fromUTF8 ("\xc3\x98"), invertArea().toFloat(), font, 0.0f, ui::Justification::centred);
-            paintButton (g, "FIND", findArea(), searching, isHot (Part::find));
-            paintButton (g, defaultArmed ? "SURE?" : "DEFAULT", defaultArea(), defaultArmed, isHot (Part::reset));
-            paintButton (g, "CLOSE", closeArea(), false, isHot (Part::close));
+                g.setColour (ui::look().txDim);
+                g.fillEllipse (ui::Rectangle<float> (3.0f, 3.0f).withCentre ({ cell.getCentreX(), cell.getBottom() + 3.5f }));
+            }
         }
+        if (grown < -1)
+            return;
+
+        // The one under the hand, grown over its neighbours, its word under it.
+        const auto sc = scene();
+        const auto cell = speakerCell (grown);
+        auto big = cell.withSizeKeepingCentre (1.7f * cell.getWidth(), 1.7f * cell.getHeight());
+        big = big.withPosition (big.getX(), ui::jmax (sc.getY() + 2.0f, big.getY()));
+        const auto font = ui::look().font (13.0f);
+        const auto word = grown < 0 ? catalog().coneVariant.toUpperCase() : catalog().speakerWords[grown];
+        const float w = ui::look().trackedWidth (word, font, 0.06f) + 12.0f;
+        const float x = ui::jlimit (sc.getX() + 2.0f, sc.getRight() - 2.0f - w, cell.getCentreX() - 0.5f * w);
+        const ui::Rectangle<float> label (x, big.getBottom() + 3.0f, w, 18.0f);
+        g.setColour (ui::look().bezel);
+        g.fillRoundedRectangle (big.expanded (4.0f, 3.0f), 3.0f);
+        g.setColour (ui::look().bezel.withAlpha (0.9f));
+        g.fillRoundedRectangle (label, 3.0f);
+        paintSpeakerIcon (g, nameAt (grown), big, colourAt (grown), 1.8f);
+        g.setColour (ui::look().tx);
+        ui::look().drawTracked (g, word, label, font, 0.06f, ui::Justification::centred);
     }
 
     /** A button: a box round its word — DEFAULT, CLOSE, DOWNLOAD IR — orange while it asks. */
@@ -1883,6 +2551,32 @@ private:
         return responseArea().toFloat().withTrimmedLeft (36.0f).withTrimmedRight (12.0f).withTrimmedTop (9.0f).withTrimmedBottom (20.0f);
     }
 
+    /** THE INSTRUMENT'S NAME across the response, a watermark — BASS CAB, GUITAR CAB, big, solid and pale, under the curve,
+        the comb's colours and the grid — so the two builders are never taken one for the other (the owner, 07.11);
+        brighter while the hand is over the response. */
+    void paintInstrument (ui::Graphics& g, ui::Rectangle<float> plot) const
+    {
+        const float e = responseFade * responseFade * (3.0f - 2.0f * responseFade);   // eased in and out
+        g.setColour (ui::look().violet.withAlpha (instrumentAlpha + (instrumentAlphaOver - instrumentAlpha) * e));
+        ui::look().drawTracked (g, catalog().instrumentWord, plot, ui::look().font (instrumentSize), 0.08f, ui::Justification::centred);
+    }
+    static constexpr float instrumentSize = 102.0f, instrumentAlpha = 0.11f, instrumentAlphaOver = 0.22f;
+
+    /** The hand over the response, and the watermark brightening toward it: 0 none .. 1 whole, a quarter of a second. */
+    bool overResponse = false;
+    float responseFade = 0.0f;
+    static constexpr float responseFadeSeconds = 0.25f;
+    bool responseFading() const { return overResponse ? responseFade < 1.0f : responseFade > 0.0f; }
+
+    void stepResponseFade (double dt)
+    {
+        if (! responseFading())
+            return;
+        const float by = (float) (dt / responseFadeSeconds);
+        responseFade = overResponse ? ui::jmin (1.0f, responseFade + by) : ui::jmax (0.0f, responseFade - by);
+        repaint (responseArea());
+    }
+
     void paintResponse (ui::Graphics& g) const
     {
         const auto font = ui::look().font (13.0f);
@@ -1893,6 +2587,8 @@ private:
 
         const auto xOf = [p] (float hz) { return p.getX() + p.getWidth() * std::log (hz / 30.0f) / std::log (12000.0f / 30.0f); };
         const auto yOf = [p] (float db) { return p.getY() + (responseTop - db) / (responseTop - responseBottom) * p.getHeight(); };
+
+        paintInstrument (g, p);
 
         // Under it all, with two mics heard, where they meet (the owner, 05.11): green where they add in phase, red
         // where they cancel — the stronger, the deeper, full at 6 dB.
@@ -2013,16 +2709,56 @@ private:
         }
     }
 
+    /** The "?" — an orange ring, so it is seen (the owner, 07.11), brighter under the hand and while its window is out, and
+        thicker once a click keeps it — and over everything the window out, its text at 13 px. */
+    void paintHelp (ui::Graphics& g) const
+    {
+        const auto font = ui::look().font (helpTextSize);
+        for (int i = 0; i < helpSpots; ++i)
+        {
+            const auto m = helpSpot (i).mark.toFloat().reduced (0.5f);
+            const bool open = helpOpen == i, lit = open || isHot (Part::help, -1, i);
+            g.setColour (ui::look().panel2);
+            g.fillEllipse (m);
+            const auto ink = lit ? ui::look().orange.brighter (0.3f) : ui::look().orange;
+            g.setColour (ink);
+            g.drawEllipse (m.reduced (open && helpPinned ? 0.3f : 0.0f), open && helpPinned ? 1.8f : 1.3f);
+            ui::look().drawTracked (g, "?", m, font, 0.0f, ui::Justification::centred);
+        }
+        if (helpOpen < 0)
+            return;
+        const auto b = helpBox (helpOpen).toFloat();
+        g.setColour (ui::look().panel2.withAlpha (0.97f));
+        g.fillRoundedRectangle (b, 6.0f);
+        g.setColour (helpPinned ? ui::look().orange.withAlpha (0.7f) : ui::look().violet.withAlpha (0.6f));
+        g.drawRoundedRectangle (b.reduced (0.5f), 6.0f, 1.0f);
+        g.setColour (ui::look().tx);
+        float y = b.getY() + (float) helpPad - 2.0f;
+        for (const auto& line : helpLines (helpOpen, (int) b.getWidth() - 2 * helpPad))
+        {
+            if (line.empty())
+            {
+                y += (float) helpGap;
+                continue;
+            }
+            ui::look().drawTracked (g, line, { b.getX() + (float) helpPad, y, b.getWidth() - 2.0f * (float) helpPad, (float) helpLineH },
+                                    font, 0.0f, ui::Justification::centredLeft);
+            y += (float) helpLineH;
+        }
+    }
+
 };
 
 /** A STATE FROM ITS TEXT, as the panel can draw and the synthesis render it: none where the text is none, or where it
     names a box the table has not — one kept by an older version under a name since changed, say (0.1.3 named the boxes by
-    size and family), which would render a box of no cones. Wherever a state comes in from outside — a run's workspace, a
+    size and family), which would render a box of no cones — or a mic the panel has not, which it has no glyph to draw
+    (a hand-made or mangled text, the site found 07.11). Wherever a state comes in from outside — a run's workspace, a
     preset file, a host's session, a page — it comes through here, and a caller falls back to its default. */
 inline std::optional<State> knownState (const std::string& toml)
 {
     auto s = fromToml (toml);
-    if (s && Panel::indexOf (ui::String (s->box)) < 0)
+    const auto knownMic = [] (const Mic& m) { return m.model.empty() || Panel::mics().contains (ui::String (m.model)); };
+    if (s && (Panel::indexOf (ui::String (s->box)) < 0 || ! knownMic (s->a) || ! knownMic (s->b)))
         return std::nullopt;
     return s;
 }

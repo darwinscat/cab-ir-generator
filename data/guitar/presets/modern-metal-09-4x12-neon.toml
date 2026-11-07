@@ -1,0 +1,28 @@
+name = "MODERN METAL: 4x12 NEON"
+style = "Modern Metal"
+cabir = 1
+box = "4x12-closed"
+back = "closed"
+speaker = "bright"
+horn = false
+horn_db = 0
+blend = 0.400
+align = true
+invert = false
+
+[mic.a]
+on = true
+model = "e906"
+x = 0.450
+y = 0.300
+distance = 0.012
+angle = 0.0
+
+[mic.b]
+on = true
+model = "ribbon"
+x = 0.900
+y = -0.275
+distance = 0.120
+angle = 0.0
+shift = -0.225

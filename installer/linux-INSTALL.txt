@@ -1,0 +1,17 @@
+Orbit Cab Builder for Linux
+
+This folder holds the app and its two plugins:
+
+  the app, a single file: run it from here or copy it anywhere, for example to ~/.local/bin
+  the .vst3 folder: copy it to ~/.vst3 (for you) or /usr/lib/vst3 (for everyone)
+  the .clap file: copy it to ~/.clap (for you) or /usr/lib/clap (for everyone)
+
+For example, from this folder:
+
+  mkdir -p ~/.vst3 ~/.clap
+  cp -r *.vst3 ~/.vst3/
+  cp *.clap ~/.clap/
+
+Then let your host rescan its plugins.
+
+https://darwinscat.com/felitronics

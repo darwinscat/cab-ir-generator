@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of Cab IR Generator — see LICENSE.
+// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of Orbit Bass Cab Builder and Orbit Guitar Cab Builder — see LICENSE.
 
 #pragma once
 
@@ -7,7 +7,7 @@
 // and the server never sees which cabinet (the owner, 05.11) — opening the live panel on exactly that cabinet. The same
 // link is in every WAV the generator writes (synth::WavMeta), beside its preset's TOML.
 //
-//   https://darwinscat.com/felitronics/bass-cab-ir-generator#cab=1&box=8x10&back=closed&horn=-6
+//   https://darwinscat.com/felitronics/orbit-bass-cab-builder#cab=1&box=8x10&back=closed&horn=-6
 //       &a=md421,-0.3,0,5,0&b=u47,-0.65,0,12,0&blend=0.35&align=1&invert=0&shift=0
 //
 // cab — the link's own version, 1, first, so an older link still reads when the cabinet grows (an unknown key is passed
@@ -28,9 +28,11 @@
 namespace cabir
 {
 
-// The bass's page (the site moved it 07.11, the guitar's to come at /felitronics/guitar-cab-ir-generator; the old address
-// answers with a permanent redirect that keeps the #cab= part, so the WAVs already out still open).
-inline constexpr const char* pageAddress = "https://darwinscat.com/felitronics/bass-cab-ir-generator";
+// The bass's page, its address the product's name (the owner, 07.11; the guitar's at /felitronics/orbit-guitar-cab-builder).
+// Every address it had before — /felitronics/cab-ir-generator, bass-cab-ir-generator, bass-cab-ir-builder — answers with a
+// permanent redirect that keeps the #cab= part, so the WAVs already out still open.
+inline constexpr const char* pageAddress = "https://darwinscat.com/felitronics/orbit-bass-cab-builder";
+inline constexpr const char* guitarPageAddress = "https://darwinscat.com/felitronics/orbit-guitar-cab-builder";
 
 namespace link
 {
@@ -99,6 +101,7 @@ inline std::string linkOf (const State& s)
                     + (s.speaker.empty() ? std::string() : "&speaker=" + s.speaker)   // the guitar's, where turned
                     + (s.wall ? "&wall=1" : "")                                        // ...and its wall, where on
                     + (s.cone.empty() ? std::string() : "&cone=" + s.cone)              // ...and its cone, where a variant
+                    + (s.room.empty() ? std::string() : "&room=" + s.room)              // ...and its room, where one
                     + "&horn=" + (s.horn ? number (std::round (s.hornDb), 0) : std::string ("off"));
     if (s.a.on) out += "&a=" + mic (s.a);
     if (s.b.on) out += "&b=" + mic (s.b);
@@ -134,6 +137,8 @@ inline std::optional<State> fromLink (std::string_view text)
         if (f.size() < 5 || ! link::numberOf (f[1], x) || ! link::numberOf (f[2], y) || ! link::numberOf (f[3], cm)
             || ! link::numberOf (f[4], angle))
             return false;
+        if (f[0] != "own" && ! Panel::mics().contains (ui::String (f[0])))
+            return false;   // a mic the panel has none of (a link mangled on its way): no cabinet, the page's default
         m.on = true;
         m.model = f[0] == "own" ? std::string() : f[0];
         m.x = std::clamp (x, -1.2, 1.2);
@@ -168,6 +173,7 @@ inline std::optional<State> fromLink (std::string_view text)
         }
         else if (key == "wall") s.wall = value == "1";
         else if (key == "cone") { if (! Panel::catalog().coneVariant.isEmpty() && value == Panel::catalog().coneVariant.toStdString()) s.cone = value; }
+        else if (key == "room") { if (Panel::catalog().rooms.contains (ui::String (value))) s.room = value; }
         else if (key == "speaker")
         {
             if (Panel::catalog().speakers.contains (ui::String (value)))

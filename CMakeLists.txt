@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-# Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of Cab IR Generator — see LICENSE.
+# Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of Orbit Bass Cab Builder and Orbit Guitar Cab Builder — see LICENSE.
 
 cmake_minimum_required(VERSION 3.22)
 
@@ -9,7 +9,7 @@ cmake_minimum_required(VERSION 3.22)
 set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "The oldest macOS the binaries run on")
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
-project(cab_ir_generator VERSION 0.1.5 LANGUAGES C CXX)
+project(cab_ir_generator VERSION 0.2.0 LANGUAGES C CXX)
 
 include(FetchContent)
 
@@ -40,6 +40,16 @@ target_compile_features(cabir_synth INTERFACE cxx_std_20)
 target_compile_definitions(cabir_synth INTERFACE CABIR_VERSION="${PROJECT_VERSION}")   # what a WAV says made it (synth::WavMeta)
 target_sources(cabir_synth INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/src/synth/State.cpp")
 target_link_libraries(cabir_synth INTERFACE felitronics::toml)
+
+# WHAT THE PANEL'S "?" SAY — a plain text per instrument (data/help.txt, data/guitar/help.txt), baked into a header as it
+# is configured (panel/HelpText.h), so every host has it, the page's module too, with nothing to load. On the synthesis's
+# include path, as src is: everything that draws the panel links that. No "@" in the texts: configure_file reads it.
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/data/help.txt" CABIR_HELP_BASS)
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/data/guitar/help.txt" CABIR_HELP_GUITAR)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+             "${CMAKE_CURRENT_SOURCE_DIR}/data/help.txt" "${CMAKE_CURRENT_SOURCE_DIR}/data/guitar/help.txt")
+configure_file(src/panel/HelpText.h.in "${CMAKE_CURRENT_BINARY_DIR}/generated/panel/HelpText.h" @ONLY)
+target_include_directories(cabir_synth INTERFACE "${CMAKE_CURRENT_BINARY_DIR}/generated")
 
 # THE CABINETS the synthesis reads: a host embeds the file the way it embeds its other data.
 set(CABIR_CABINETS "${CMAKE_CURRENT_SOURCE_DIR}/data/cabinets.txt" CACHE INTERNAL "The cabinet table the synthesis reads")
@@ -86,7 +96,8 @@ if(CABIR_TESTS)
     add_test(NAME state COMMAND cabir_state_test)
 endif()
 
-# THE APP — Cab IR Generator itself: the panel, a player through the family's convolver, the family's version window.
+# THE APPS — Orbit Bass Cab Builder and Orbit Guitar Cab Builder: the panel, a player through the family's convolver, the
+# family's version window.
 option(CABIR_APP "Build the standalone app" ${cabirNative})
 option(CABIR_WEB "Build the page's module (src/web) and irdump, the check of it against the native build" ${PROJECT_IS_TOP_LEVEL})
 
@@ -167,11 +178,16 @@ if(CABIR_APP)
     # draws, from `logo` (assets/logo, the bass's, or assets/logo/guitar) — and its data: the cabinet table, the factory's
     # presets and the riffs the player carries, from `data` (the bass's) or `data/guitar`.
     function(cabir_add_app target logo data dataTarget riffsTarget)
-        cmake_parse_arguments(APP "GUITAR" "PRODUCT;BUNDLE" "" ${ARGN})
+        cmake_parse_arguments(APP "GUITAR" "PRODUCT;BUNDLE;DESCRIPTION" "" ${ARGN})
         juce_add_gui_app(${target}
             PRODUCT_NAME  "${APP_PRODUCT}"
+            DESCRIPTION   "${APP_DESCRIPTION}"
             COMPANY_NAME  "Darwin's Cat"
             BUNDLE_ID     ${APP_BUNDLE}
+            # INPUT plays an audio interface through the cabinet: macOS asks the first time it is picked, and a signed
+            # build carries the audio-input entitlement (app/standalone.entitlements).
+            MICROPHONE_PERMISSION_ENABLED TRUE
+            MICROPHONE_PERMISSION_TEXT    "INPUT plays your instrument through the cabinet."
             ICON_BIG      "${CMAKE_CURRENT_SOURCE_DIR}/${logo}/icon.png"   # the logo's mark, drawn from mark.svg
             VERSION       ${PROJECT_VERSION})
         target_sources(${target} PRIVATE app/Main.cpp app/MainComponent.cpp app/Engine.cpp)
@@ -181,6 +197,7 @@ if(CABIR_APP)
         juce_add_binary_data(${riffsTarget} HEADER_NAME RiffData.h NAMESPACE RiffData SOURCES ${riffs})
         target_compile_definitions(${target} PRIVATE
             JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0
+            CABIR_PLUGIN=0
             CABIR_GUITAR=$<BOOL:${APP_GUITAR}>
             CABIR_GIT_HASH="${cabirGitHash}"
             CABIR_CORE_VERSION="${cabirCoreVersion}"
@@ -200,13 +217,91 @@ if(CABIR_APP)
             juce::juce_recommended_warning_flags)
     endfunction()
 
-    cabir_add_app(CabIrGenerator assets/logo data CabIrData CabIrRiffs
-        PRODUCT "Cab IR Generator" BUNDLE com.darwinscat.cabirgenerator)
+    cabir_add_app(OrbitBassCabBuilder assets/logo data CabIrData CabIrRiffs
+        PRODUCT "Orbit Bass Cab Builder" BUNDLE com.darwinscat.orbitbasscabbuilder
+        DESCRIPTION "Bass cabinet IR generator and cab sim")
 
     # THE GUITAR'S — the same app on the guitar's cabinets (data/guitar, src/panel/GuitarCatalog.h).
     option(CABIR_GUITAR_APP "Build the guitar's app too" ON)
     if(CABIR_GUITAR_APP)
-        cabir_add_app(GuitarCabIrGenerator assets/logo/guitar data/guitar GuitarCabIrData GuitarCabIrRiffs GUITAR
-            PRODUCT "Guitar Cab IR Generator" BUNDLE com.darwinscat.guitarcabirgenerator)
+        cabir_add_app(OrbitGuitarCabBuilder assets/logo/guitar data/guitar GuitarCabIrData GuitarCabIrRiffs GUITAR
+            PRODUCT "Orbit Guitar Cab Builder" BUNDLE com.darwinscat.orbitguitarcabbuilder
+            DESCRIPTION "Guitar cabinet IR generator and cab sim")
+    endif()
+
+    # THE PLUGINS — the same window in a host's, the track through the cabinet (app/Plugin.h): VST3, AU and CLAP, one for
+    # each instrument, on the app's data (`dataTarget`, its cabinets and presets; no riffs, the track plays).
+    option(CABIR_PLUGINS "Build the plugins (VST3, AU, CLAP)" ON)
+    if(CABIR_PLUGINS)
+        # CLAP via the MIT clap-juce-extensions wrapper, pinned as the family's plugins pin it.
+        set(CABIR_CLAP_EXT_TAG "51a9359315298de632cf44e9d7524940868441e6" CACHE STRING "clap-juce-extensions git commit to build against")
+        FetchContent_Declare(clap-juce-extensions GIT_REPOSITORY https://github.com/free-audio/clap-juce-extensions.git GIT_TAG ${CABIR_CLAP_EXT_TAG})
+        FetchContent_MakeAvailable(clap-juce-extensions)
+
+        # 4-char codes, kept once released: the family's maker (Dcat), the plugin's own (`code`).
+        function(cabir_add_plugin target logo dataTarget code)
+            cmake_parse_arguments(PLUG "GUITAR" "PRODUCT;BUNDLE;DESCRIPTION" "" ${ARGN})
+            juce_add_plugin(${target}
+                PRODUCT_NAME                "${PLUG_PRODUCT}"
+                DESCRIPTION                 "${PLUG_DESCRIPTION}"
+                COMPANY_NAME                "Darwin's Cat"
+                BUNDLE_ID                   ${PLUG_BUNDLE}
+                PLUGIN_MANUFACTURER_CODE    Dcat
+                PLUGIN_CODE                 ${code}
+                FORMATS                     VST3 AU
+                VST3_CATEGORIES             "Fx"
+                AU_MAIN_TYPE                "kAudioUnitType_Effect"
+                IS_SYNTH                    FALSE
+                NEEDS_MIDI_INPUT            FALSE
+                NEEDS_MIDI_OUTPUT           FALSE
+                IS_MIDI_EFFECT              FALSE
+                EDITOR_WANTS_KEYBOARD_FOCUS FALSE
+                COPY_PLUGIN_AFTER_BUILD     FALSE
+                ICON_BIG                    "${CMAKE_CURRENT_SOURCE_DIR}/${logo}/icon.png"
+                VERSION                     ${PROJECT_VERSION})
+            clap_juce_extensions_plugin(TARGET ${target}
+                CLAP_ID       "${PLUG_BUNDLE}"
+                CLAP_FEATURES audio-effect mono stereo)
+            add_dependencies(${target}_All ${target}_CLAP)   # the wrapper's target is not among JUCE's _All by itself
+            # The CLAP wrapper's own icon is the generic CLAP logo: the one juceaide made for the JUCE formats over it.
+            if(APPLE)
+                add_custom_command(TARGET ${target}_CLAP POST_BUILD
+                    COMMAND "${CMAKE_COMMAND}" -E copy
+                            "$<TARGET_PROPERTY:${target},JUCE_ICON_FILE>"
+                            "$<TARGET_BUNDLE_DIR:${target}_CLAP>/Contents/Resources/clap.icns"
+                    VERBATIM)
+            endif()
+            target_sources(${target} PRIVATE app/Plugin.cpp app/MainComponent.cpp app/Engine.cpp)
+            target_compile_definitions(${target} PUBLIC
+                JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0
+                JUCE_VST3_CAN_REPLACE_VST2=0
+                JUCE_DISPLAY_SPLASH_SCREEN=0
+                CABIR_PLUGIN=1
+                CABIR_GUITAR=$<BOOL:${PLUG_GUITAR}>
+                CABIR_GIT_HASH="${cabirGitHash}"
+                CABIR_CORE_VERSION="${cabirCoreVersion}"
+                CABIR_TOML_VERSION="${cabirTomlVersion}"
+                CABIR_APPKIT_VERSION="${cabirAppkitVersion}")
+            target_link_libraries(${target} PRIVATE
+                ${dataTarget}
+                cabir::panel
+                felitronics::convolution
+                felitronics::appkit
+                juce::juce_gui_extra
+                juce::juce_audio_utils
+                juce::juce_audio_formats
+                juce::juce_recommended_config_flags
+                juce::juce_recommended_lto_flags
+                juce::juce_recommended_warning_flags)
+        endfunction()
+
+        cabir_add_plugin(OrbitBassCabBuilderPlugin assets/logo CabIrData Cirb
+            PRODUCT "Orbit Bass Cab Builder" BUNDLE com.darwinscat.orbitbasscabbuilder.plugin
+            DESCRIPTION "Bass cabinet IR generator and cab sim")
+        if(CABIR_GUITAR_APP)
+            cabir_add_plugin(OrbitGuitarCabBuilderPlugin assets/logo/guitar GuitarCabIrData Cirg GUITAR
+                PRODUCT "Orbit Guitar Cab Builder" BUNDLE com.darwinscat.orbitguitarcabbuilder.plugin
+                DESCRIPTION "Guitar cabinet IR generator and cab sim")
+        endif()
     endif()
 endif()

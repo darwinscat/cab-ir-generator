@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of Cab IR Generator — see LICENSE.
+// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of Orbit Bass Cab Builder and Orbit Guitar Cab Builder — see LICENSE.
 
 #pragma once
 
@@ -329,6 +329,13 @@ struct Cab
     double baffleStepDb = 0.5;
     // The floor the box stands on, floorGap under its bottom: what of a source's image under it comes back (0, no floor).
     double floorGap = 0, floorRefl = 0;
+    // THE ROOM round it (Spot::room, the guitar's row; a table's "room-<name>" section): room_width_m across, room_length_m
+    // from the wall behind the box to the one behind the mic, room_height_m from the floor up; the box's back room_back_m off
+    // its wall, its middle room_side_m off the room's. Each wall gives back sqrt(1 - absorption) of what reaches it —
+    // room_absorption up to 1 kHz, room_absorption_high from 4 kHz — the floor its floor_reflection. Early, every cone's
+    // images to two bounces, the cone a piston narrowing as it lets go, the box shadowing what goes behind it; late, a tail
+    // as long as Sabine's time says, its level as the room's absorption leaves it (room_tail scales it). 0 wide, none.
+    double roomW = 0, roomL = 0, roomH = 0, roomBack = 1, roomSide = 0, roomAlpha = 0.3, roomAlphaHigh = 0.3, roomTail = 1;
     double lengthMs = 200, fadeMs = 30;
     double refDelay = -1;   // the time zero, s from the sound leaving: below zero, the first arrival's own
     double rate = fs;       // the IR's sample rate: the panel's and the app's 48 kHz, a pack's 44.1 or 96 too
@@ -421,6 +428,14 @@ inline Cab build (const Section& s)
     c.baffleStepDb = num (s, "baffle_step_depth_db", 0.5);
     c.floorGap = num (s, "floor_gap_m", 0);
     c.floorRefl = num (s, "floor_reflection", 0);
+    c.roomW = num (s, "room_width_m", 0);
+    c.roomL = num (s, "room_length_m", 0);
+    c.roomH = num (s, "room_height_m", 0);
+    c.roomBack = num (s, "room_back_m", 1);
+    c.roomSide = num (s, "room_side_m", 0);
+    c.roomAlpha = num (s, "room_absorption", 0.3);
+    c.roomAlphaHigh = num (s, "room_absorption_high", c.roomAlpha);
+    c.roomTail = num (s, "room_tail", 1);
     c.lengthMs = num (s, "length_ms", 200);
     c.fadeMs = num (s, "tail_fade_ms", 30);
 
@@ -576,10 +591,36 @@ inline void forEachBin (size_t bins, const F& bin, size_t threadsAsked = 0)
 #endif
 }
 
+/** J1, Bessel's of the first kind and order one (Numerical Recipes' rational fits, as good as a float), for a piston's beam. */
+inline double besselJ1 (double x)
+{
+    const double ax = std::abs (x);
+    if (ax < 8.0)
+    {
+        const double y = x * x;
+        return x * (72362614232.0 + y * (-7895059235.0 + y * (242396853.1 + y * (-2972611.439 + y * (15704.48260 + y * -30.16036606)))))
+             / (144725228442.0 + y * (2300535178.0 + y * (18583304.74 + y * (99447.43394 + y * (376.9991397 + y)))));
+    }
+    const double z = 8.0 / ax, y = z * z, xx = ax - 2.356194491;
+    const double p = 1.0 + y * (0.183105e-2 + y * (-0.3516396496e-4 + y * (0.2457520174e-5 + y * -0.240337019e-6)));
+    const double q = 0.04687499995 + y * (-0.2002690873e-3 + y * (0.8449199096e-5 + y * (-0.88228987e-6 + y * 0.105787412e-6)));
+    const double j = std::sqrt (0.636619772 / ax) * (std::cos (xx) * p - z * std::sin (xx) * q);
+    return x < 0 ? -j : j;
+}
+
+/** A piston's beam, 2 J1(x) / x, x = ka sin(angle off its axis): 1 on the axis or below ka ~ 1, narrowing above. */
+inline double pistonBeam (double x) { return std::abs (x) < 1e-6 ? 1.0 : 2 * besselJ1 (x) / x; }
+
 inline std::vector<double> render (const Cab& c, size_t n, size_t threads = 0)
 {
     if (c.drivers.empty())   // a box the table has not (cabAt of an unknown name): silence, never a cone read that is not there
         return std::vector<double> (n, 0.0);
+    // A room's tail longer than the size asked for: the size doubled until it fits, the tail never wrapped round — but a
+    // moving hand's render (the app's and the page's ask 2^13 then) keeps its size, the tail cut to it and faded, the one
+    // kept when the hand lets go bringing it whole.
+    if (c.roomW > 0 && n > ((size_t) 1 << 13))
+        while ((double) n < 1.1 * c.lengthMs * c.rate / 1000)
+            n *= 2;
     const size_t bins = n / 2 + 1;
     std::vector<cd> H (n, 0.0);
 
@@ -690,6 +731,96 @@ inline std::vector<double> render (const Cab& c, size_t n, size_t threads = 0)
     for (auto& e : c.hornEq) hornEq.push_back (Biquad::make ("peak", e[0], e[1], e[2], c.rate));
     const double stepDb = c.baffleStepDb, stepHz = 115.0 / c.bw;
 
+    // THE ROOM (Cab::roomW): each cone's images in its walls, ceiling and floor to two bounces — the floor's alone left to
+    // the patches' own image above — and its back's too where the box is open, each facing as the mirror turns it.
+    struct RoomImage { double x, y, z, facing; int walls, floors; };
+    std::vector<std::vector<RoomImage>> roomFront, roomRear;
+    std::vector<cd> tailLow, tailHigh;   // the late part: one noise, as the room keeps the low end and the top
+    const double aBox = std::sqrt (c.bw * c.bh / pi);   // the box as a disc: what it shadows behind it
+    if (c.roomW > 0)
+    {
+        const double ax = c.roomSide - c.roomW / 2, bx = c.roomSide + c.roomW / 2, ay = floorY, by = floorY + c.roomH;
+        const double az = -c.depth - c.roomBack, bz = az + c.roomL;
+        struct Along { double q; int low, high; };   // one axis's image: where, and how many off its low wall and its high
+        const auto along = [] (double q, double a, double b) {
+            return std::vector<Along> { { q, 0, 0 }, { 2 * a - q, 1, 0 }, { 2 * b - q, 0, 1 }, { q + 2 * (b - a), 1, 1 }, { q - 2 * (b - a), 1, 1 } };
+        };
+        const auto imagesOf = [&] (double x, double y, double z, double facing) {
+            std::vector<RoomImage> out;
+            for (const auto& ix : along (x, ax, bx))
+                for (const auto& iy : along (y, ay, by))
+                    for (const auto& iz : along (z, az, bz))
+                    {
+                        const int nx = ix.low + ix.high, ny = iy.low + iy.high, nz = iz.low + iz.high;
+                        if (nx + ny + nz == 0 || nx + ny + nz > 2 || (nx == 0 && nz == 0 && iy.low == 1 && iy.high == 0))
+                            continue;
+                        out.push_back ({ ix.q, iy.q, iz.q, nz % 2 ? -facing : facing, nx + iy.high + nz, iy.low });
+                    }
+            return out;
+        };
+        for (const auto& d : c.drivers)
+        {
+            roomFront.push_back (imagesOf (d.x, d.y, 0, 1));
+            roomRear.push_back (imagesOf (d.x, d.y, -c.depth, -1));
+        }
+
+        // Late, a tail: Sabine's time and the room's constant from its size and absorption — the reverberant against the
+        // direct sound at the mic's distance (8 pi r^2 / R, the box radiating into half the space) — its noise building up
+        // between the first bounce and the last of the two, then dying away; fixed per place in quarter metres, no draw.
+        double rc, dxc, dyc, dzc;
+        pathTo (t.x, t.y, -c.depthFrac * c.radius, rc, dxc, dyc, dzc);
+        const double V = c.roomW * c.roomL * c.roomH, S = 2 * (c.roomW * c.roomL + c.roomW * c.roomH + c.roomL * c.roomH);
+        const double t1 = 0.5 * std::min ({ c.roomW, c.roomL, c.roomH }) / c0, t2 = 2 * std::max ({ c.roomW, c.roomL, c.roomH }) / c0;
+        const size_t whole = (size_t) std::lround (c.lengthMs * c.rate / 1000), len = std::min (n, whole);   // ...cut, a hand moving
+        uint32_t seed = 2166136261u;
+        for (const double v : { std::round (mic.x * 4), std::round (mic.y * 4), std::round (mic.z * 4), c.roomW, c.roomL, c.roomH })
+            seed = (seed ^ (uint32_t) std::llround (v * 1000 + 1e6)) * 16777619u;
+        std::vector<double> noise (whole);
+        for (auto& x : noise)
+        {
+            seed ^= seed << 13; seed ^= seed >> 17; seed ^= seed << 5;
+            x = (double) seed / 2147483648.0 - 1.0;
+        }
+        const auto tail = [&] (double absorption) {
+            const double alpha = std::clamp (absorption, 0.01, 0.99), rt = 0.161 * V / (S * alpha), R = S * alpha / (1 - alpha);
+            const double energy = c.roomTail * 8 * pi * rc * rc / R * std::exp (-13.8 * 0.5 * (t1 + t2) / rt);
+            std::vector<cd> x (n, 0.0);
+            double e = 0;   // over the whole tail, so a cut one keeps its level
+            for (size_t i = 0; i < whole; ++i)
+            {
+                const double ti = (double) i / c.rate, rise = std::clamp ((ti - t1) / (t2 - t1), 0.0, 1.0);
+                const double v = noise[i] * rise * std::exp (-6.91 * ti / rt);
+                e += v * v;
+                if (i < len)
+                    x[i] = v;
+            }
+            const double g = e > 0 ? std::sqrt (energy / e) : 0.0;
+            for (auto& v : x) v *= g;
+            fft (x, false);
+            return x;
+        };
+        tailLow = tail (c.roomAlpha);
+        tailHigh = tail (c.roomAlphaHigh);
+    }
+    // What a room's images bring a mic: each off its walls (sqrt(1 - absorption), 1 kHz to 4 kHz from the low to the high)
+    // and the floor, a piston beaming `ka` toward the mic from where it stands — behind it, the box's shadow.
+    const auto roomHeard = [&] (const std::vector<RoomImage>& ims, double ka, double f) {
+        const double k = 2 * pi * f / c0, up = std::clamp (std::log2 (f / 1000) / 2, 0.0, 1.0);
+        const double wall = std::sqrt (1 - std::clamp (c.roomAlpha + (c.roomAlphaHigh - c.roomAlpha) * up, 0.0, 0.99));
+        const double shadow = 1 / std::sqrt (1 + (k * aBox) * (k * aBox));
+        cd at = 0.0;
+        for (const auto& im : ims)
+        {
+            double r, dx, dy, dz;
+            pathTo (im.x, im.y, im.z, r, dx, dy, dz);
+            const double cosT = -dz * im.facing / r;   // from the image to the mic, against the way it faces
+            const double beam = cosT >= 0 ? pistonBeam (ka * std::sqrt (1 - cosT * cosT)) : pistonBeam (ka) * shadow;
+            at += std::pow (c.floorRefl, im.floors) * std::pow (wall, im.walls) * beam * heard (c, mic, dx, dy, dz, f) / r
+                * std::polar (1.0, -2 * pi * f * (r / c0 - minDelay));
+        }
+        return at;
+    };
+
     // Each bin on its own — nothing below writes what another bin reads — so the bins are spread over a few threads.
     const auto bin = [&] (size_t k)
     {
@@ -725,6 +856,8 @@ inline std::vector<double> render (const Cab& c, size_t n, size_t threads = 0)
 
         const cd piston = lowpass2 (f, c.wooferLp, c.wooferQ) * (c.wooferLp2 > 0 ? lowpass2 (f, c.wooferLp2, c.wooferQ2) : cd (1.0));
         cd sum = 0.0;
+        cd roomFed = 0.0;      // a room's: the cones' whole output, what its tail is fed
+        double roomKa = 0;     // ...and how the cones beam it, their moving part a piston
         for (size_t d = 0; d < patches.size(); ++d)
         {
             // Each mode's resonance at f, once per cone.
@@ -742,6 +875,7 @@ inline std::vector<double> render (const Cab& c, size_t n, size_t threads = 0)
             // The coil and the cap keep their mass as the outer cone lets go (cone_fixed_mass_fraction).
             const cd held = c.fixedMass > 0 ? piston / (c.fixedMass + (1 - c.fixedMass) * moving / whole) : piston * (whole / moving);
             cd drv = 0.0;
+            cd whole1 = 0.0;   // a room's: the cone's whole motion, as far away on its axis
             for (size_t pi_ = 0; pi_ < patches[d].size(); ++pi_)
             {
                 const auto& p = patches[d][pi_];
@@ -763,8 +897,17 @@ inline std::vector<double> render (const Cab& c, size_t n, size_t threads = 0)
                     at += (img == 0 ? 1.0 : c.floorRefl) * heard (c, mic, dx, dy, dz, f) / r * std::polar (1.0, -2 * pi * f * (r / c0 - minDelay));
                 }
                 drv += v * p.area * at;
+                if (c.roomW > 0)
+                    whole1 += v * p.area * std::polar (1.0, 2 * pi * f * p.z / c0);
             }
             sum += drv * c.sens[d] * cone * box * coil[k];
+            if (c.roomW > 0)   // the room's images of this cone, its moving part beaming as a piston
+            {
+                const cd out = whole1 * c.sens[d] * cone * box * coil[k];
+                roomKa = 2 * pi * f / c0 * c.radius * std::sqrt (moving / whole);
+                sum += out * roomHeard (roomFront[d], roomKa, f);
+                roomFed += out;
+            }
         }
         // Normalise the cones' sum to the nearest cone's 1/r at its centre, so the port and the horn sit against it.
         double r0, dx0, dy0, dz0;
@@ -827,6 +970,7 @@ inline std::vector<double> render (const Cab& c, size_t n, size_t threads = 0)
                         sum -= floorBy * cone * pipe * coil[k] * c.sens[d] * share (block) * (r0 / r) * (c.half ? halfOut : lowpass1 (f, c.openLp))
                              * heard (c, mic, dx, dy, dz, f) * std::polar (1.0, -2 * pi * f * (r / c0 - minDelay));
                         // ...and off the wall behind, where there is one: the back's image beyond it, round the box.
+                        // (A room's back wall stands in for it: cabAt leaves wallM nought with a room.)
                         if (c.wallM > 0)
                         {
                             double rw, wx, wy, wz;
@@ -837,6 +981,14 @@ inline std::vector<double> render (const Cab& c, size_t n, size_t threads = 0)
                                  * std::polar (1.0, -2 * pi * f * (rw / c0 - minDelay));
                         }
                     }
+                }
+            if (c.roomW > 0)   // the back's sound in the room too: out behind the box, half of it over the baffle's step
+                for (size_t d = 0; d < c.drivers.size(); ++d)
+                {
+                    const cd back = cone * pipe * coil[k] * c.sens[d] * (c.half ? halfOut : lowpass1 (f, c.openLp))
+                                  * (c.openFullLow ? 0.5 + 0.5 * low : 0.5);
+                    sum -= back * r0 * roomHeard (roomRear[d], roomKa, f);
+                    roomFed = std::sqrt (std::norm (roomFed) + std::norm (back));   // ...and feeds its tail beside the front
                 }
         }
         if (c.horn)
@@ -871,6 +1023,19 @@ inline std::vector<double> render (const Cab& c, size_t n, size_t threads = 0)
             }
         }
 
+        // The room's tail: what the cones put into the whole room — beamed (sqrt(2 R1(2ka)) / ka of the axis, 1 low down)
+        // — as the mic hears a sound from everywhere (its pattern's mean over six ways), the room keeping less of the top.
+        if (c.roomW > 0)
+        {
+            const double r1 = roomKa < 0.05 ? 0.5 * roomKa * roomKa : 1 - besselJ1 (2 * roomKa) / roomKa;
+            const double beam = roomKa < 0.05 ? 1.0 : std::sqrt (2 * r1) / roomKa;
+            double around = 0;
+            for (const auto& u : { std::array<double, 3> { 3, 0, 0 }, { -3, 0, 0 }, { 0, 3, 0 }, { 0, -3, 0 }, { 0, 0, 3 }, { 0, 0, -3 } })
+                around += std::norm (heard (c, mic, u[0], u[1], u[2], f)) / 6;
+            const double up = std::clamp (std::log2 (f / 500) / 3, 0.0, 1.0);   // 500 Hz to 4 kHz, the low tail to the high
+            sum += (tailLow[k] * (1 - up) + tailHigh[k] * up) * std::abs (roomFed) * beam * std::sqrt (around);
+        }
+
         // The mic: its capsule's own response, and the proximity it hears at this distance.
         cd capsule = highpass2 (f, c.micHp, 0.707) * (c.micTop > 0 ? lowpass1 (f, c.micTop) : lowpass2 (f, c.micLp, 0.707));
         for (auto& b : presence) capsule *= b.at (f, c.rate);
@@ -881,7 +1046,7 @@ inline std::vector<double> render (const Cab& c, size_t n, size_t threads = 0)
     H[0] = 0;
     fft (H, true);
 
-    const int len = (int) std::lround (c.lengthMs * c.rate / 1000), fade = (int) std::lround (c.fadeMs * c.rate / 1000);
+    const int len = (int) std::min ((double) n, (double) std::lround (c.lengthMs * c.rate / 1000)), fade = (int) std::lround (c.fadeMs * c.rate / 1000);
     std::vector<double> ir ((size_t) len);
     for (int i = 0; i < len; ++i)
     {
@@ -923,6 +1088,7 @@ struct Spot
     bool wall = false;     // the wall behind the box the table places (back_wall_m), the guitar's switch: off, none
     std::string cone;      // a variant of the speaker's cone, its "speaker-<name>-<cone>" section laid over it (the guitar's
                            // "paper"), or empty for the speaker as it is
+    std::string room;      // the room round the box, its "room-<name>" section (the guitar's row), or empty for none
 };
 
 /** THE BOX'S BACK, turned: closed, the cone on the air inside alone; ported, the port tuned as the table tunes it —
@@ -944,6 +1110,9 @@ inline Cab cabAt (const Table& table, const std::string& cab, const Spot& spot, 
     if (! spot.cone.empty())   // the speaker's cone as its variant has it: the box's own speaker's (speaker_name) or the one laid over
         for (auto& [k, v] : resolve (table, "speaker-" + (spot.speaker.empty() ? str (s, "speaker_name") : spot.speaker) + "-" + spot.cone))
             s[k] = v;
+    if (! spot.room.empty())
+        for (auto& [k, v] : resolve (table, "room-" + spot.room))
+            s[k] = v;
     if (! spot.mic.empty())
         for (auto& [k, v] : resolve (table, "mic-" + spot.mic))
             s[k] = v;
@@ -954,7 +1123,9 @@ inline Cab cabAt (const Table& table, const std::string& cab, const Spot& spot, 
     c.micD    = spot.distance;
     c.tilt    = spot.angle;
     c.horn    = c.horn && spot.horn;
-    if (! spot.wall)
+    if (spot.wall && c.roomW > 0)   // in a room WALL puts the box's back by the room's own wall, which then is the one
+        c.roomBack = c.wallM;
+    if (! spot.wall || c.roomW > 0)
         c.wallM = 0;
     c.hornDb += spot.hornDb;
     if (spot.back == closedBack || spot.back == openBack || spot.back == halfBack)
@@ -974,6 +1145,23 @@ inline Cab cabAt (const Table& table, const std::string& cab, const Spot& spot, 
             c.fb = std::clamp (0.85 * c.fsd, 35.0, 55.0);   // a little under the driver's own resonance
     }
     return c;
+}
+
+/** WHERE THE PANEL'S LINE REDDENS for a box of the table: its response this far under its neighbours, dB — the table's
+    pit_red_db (the guitar's 5: its speakers' own dips run deeper than a bass's, the owner, 07.11), else the bass's 3.
+    The panel's own is its catalog's (Panel::Catalog::pitRedDb), the same number. */
+inline double pitRedOf (const Table& table, const std::string& cab)
+{
+    return num (resolve (table, cab + " cap"), "pit_red_db", 3.0);
+}
+
+/** WHERE A PAIR'S COMB REDDENS FROM combTopHz UP, dB: the table's comb_top_red_db — the guitar's 6, up there a comb a
+    tone of its own, the second mic's phase colour (the owner, 07.11) — else 3, as under it, where a comb thins the low
+    notes. The panel's line, FIND and the presets' tools judge a comb by it. */
+constexpr double combTopHz = 2000.0;
+inline double combTopRedOf (const Table& table, const std::string& cab)
+{
+    return num (resolve (table, cab + " cap"), "comb_top_red_db", 3.0);
 }
 
 /** When the first sound reaches the mic: the nearest patch of the nearest cone, s. */
@@ -1071,6 +1259,7 @@ public:
         bSpot.speaker = p.a.speaker;
         bSpot.wall = p.a.wall;
         bSpot.cone = p.a.cone;
+        bSpot.room = p.a.room;
         auto ca = cabAt (table, cab, p.a, rate), cb = cabAt (table, cab, bSpot, rate);
         const double da = firstArrival (ca), db = firstArrival (cb), first = std::min (da, db);
         ca.refDelay = p.align ? da : first;
@@ -1126,7 +1315,7 @@ private:
         char text[256];
         std::snprintf (text, sizeof text, "|%.6f|%.6f|%.6f|%d|%.4f|%.4f|%d|%.12g|%zu|%.0f|", s.x, s.y, s.distance, s.horn ? 1 : 0,
                        s.angle, s.hornDb, s.back, refDelay, n, rate);
-        return cab + "|" + s.mic + "|" + s.speaker + (s.wall ? "|wall|" : "||") + s.cone + text;
+        return cab + "|" + s.mic + "|" + s.speaker + (s.wall ? "|wall|" : "||") + s.cone + "|" + s.room + text;
     }
 
     static const std::vector<double>& irOf (Kept& kept, const std::string& key, const Cab& c, size_t n)
@@ -1165,6 +1354,7 @@ inline Pair pairOf (const State& s)
         p.speaker = s.speaker;
         p.wall = s.wall;
         p.cone = s.cone;
+        p.room = s.room;
         return p;
     };
     Pair pair { spot (s.a), spot (s.b), s.blend, s.align, s.invert, s.shiftMs / 1000.0 };
@@ -1200,7 +1390,7 @@ public:
     struct Judged { double score = -1e30, shiftMs = 0; };   // -1e30: not judged
 
     BSearch (const Table& t, const State& s, size_t size = 1 << 13)
-        : table (t), state (s), n (size)
+        : table (t), state (s), n (size), topSlack (combTopRedOf (t, s.box) - 3.0)
     {
         both = s;
         both.a.on = both.b.on = true;
@@ -1302,7 +1492,9 @@ public:
                 double e = 1e-30;
                 for (size_t k = lo; k <= hi; ++k)
                     e += std::norm (a[k] + b[k] * std::polar (1.0, -2 * pi * (double) k * bin * tau));
-                sum += std::min (10 * std::log10 (e / apart[i]), 0.0) * (hzOf[i] <= 2000.0 ? 1.0 : 0.8);
+                // From combTopHz up a comb counts only past what the table lets it cancel there (combTopRedOf).
+                const double cancel = 10 * std::log10 (e / apart[i]);
+                sum += hzOf[i] <= combTopHz ? std::min (cancel, 0.0) : std::min (cancel + topSlack, 0.0) * 0.8;
             }
             if (sum > bestSum + 1e-9 || (std::abs (sum - bestSum) < 1e-9 && std::abs (tau) < std::abs (bestShift)))
             {
@@ -1319,6 +1511,7 @@ private:
     const Table& table;
     State state, both;
     size_t n;
+    double topSlack;   // dB a comb may cancel from combTopHz up past the 3 under it: the guitar's 3, the bass's none
     Pair pair;
     Cab ca;
     double da = 0;

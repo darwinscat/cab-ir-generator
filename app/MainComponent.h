@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of Cab IR Generator — see LICENSE.
+// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of Orbit Bass Cab Builder and Orbit Guitar Cab Builder — see LICENSE.
 
 #pragma once
 
@@ -22,13 +22,17 @@ namespace cabir::app
     player's own, SAVE AS), and A/B/C/D, each with its own history; the cabinets' panel; and a strip — the sample (OPEN,
     a file dropped anywhere on the window, PLAY / STOP), AUDIO's settings, and the version, which opens the family's
     version window. What the panel sets is rendered on a worker, the latest asked winning — heard live while the hand
-    moves, kept when it lets go — and the whole workspace, A/B/C/D with it, is kept between runs. */
+    moves, kept when it lets go — and the whole workspace, A/B/C/D with it, is kept between runs.
+    IN A PLUGIN the same window, handed the plugin's Session: no sample, no PLAY, no AUDIO — the track plays through the
+    cabinet — and the workspace kept in the session, so the host saves it with its project. */
 class MainComponent final : public juce::Component,
                             public juce::FileDragAndDropTarget,
+                            private juce::ChangeListener,
                             private juce::Timer
 {
 public:
-    MainComponent();
+    /** The app's window, with no session: its own player and its settings' workspace. */
+    explicit MainComponent (Session* session = nullptr);
 
     /** THE PANEL AS STILLS (--stills <folder>): drawn as the app draws it, with no window, no audio, no hand — the first
         run's state; FIND's map and the place it found; a pair that combs; one mic alone — and each box of the pile alone
@@ -48,31 +52,34 @@ public:
     void mouseExit (const juce::MouseEvent&) override;
     bool keyPressed (const juce::KeyPress&) override;
 
-    bool isInterestedInFileDrag (const juce::StringArray&) override { return true; }
+    bool isInterestedInFileDrag (const juce::StringArray&) override { return engine != nullptr; }
 
     /** The app's own settings — the window keeps where it was and how large there. */
     juce::PropertiesFile& settings() { return *properties.getUserSettings(); }
     void filesDropped (const juce::StringArray& files, int, int) override;
 
 private:
+    Session* const session;                   // a plugin's, else none
     juce::ApplicationProperties properties;
     felitronics::appkit::UpdateChecker checker;
     felitronics::appkit::VersionBadge badge;
-    Engine engine;
+    std::unique_ptr<Engine> engine;           // the app's player; none in a plugin
+    Sound& sound() { return session != nullptr ? static_cast<Sound&> (*session) : *engine; }
     CabPicker picker;
 
     State state;                              // what the panel last kept: the live state history snapshots
     juce::MemoryBlock keptWav;                // ...rendered, for DOWNLOAD IR
     std::vector<float> keptCurve;             // ...its response: the ghost under the next one
 
-    /** HEAR, in the strip: what the sample is played through — the pair, one mic of it as it stands in the pair, or no
-        cabinet (BYPASS); A and B only while two mics are heard. The player's alone: nothing of the preset, nothing
-        DOWNLOAD IR writes (the owner, 05.11). */
+    /** BYPASS, in the strip: A, B, A+B — a mic taken out of what the sample is played through, the other heard as it stands
+        in the pair; both out, no cabinet. A+B lit while both are out, a click on it taking both out or, both out, putting
+        both back; none pressed, the pair (the owner, 07.11). A and B only while two mics are heard. The player's alone:
+        nothing of the preset, nothing DOWNLOAD IR writes (the owner, 05.11). */
     enum class Hear { pair, a, b, bypass };
-    static constexpr const char* hearWords[] { "A+B", "A", "B", "BYPASS" };
-    Hear hear = Hear::pair;
+    static constexpr const char* bypassWords[] { "A", "B", "A+B" };
+    bool offA = false, offB = false;          // BYPASS A, BYPASS B
     std::vector<float> irMix, irA, irB;       // the last rendered: the pair and each mic's part of it (none with one mic)
-    Hear hearing() const;                     // HEAR as it plays: A or B with one mic heard plays the pair
+    Hear hearing() const;                     // what plays: one mic out with one mic heard plays the pair
     void playHeard();
 
     juce::ThreadPool worker { 1 };
@@ -92,6 +99,10 @@ private:
     void render (const State&, bool live);
     static State defaultState();                   // the first run's, and the preset menu's DEFAULT
     void keep (const State&);                      // the panel's state, kept: what history and the next run see
+    void carryFormerName();                        // a first run under the new name: the old one's settings and presets copied
+    void loadWorkspace (const juce::String& xml);  // A/B/C/D as kept, else the default alone
+    void keepSession();                            // ...and, in a plugin, the workspace handed to its session
+    void changeListenerCallback (juce::ChangeBroadcaster*) override;   // the host handed the session a project; the device changed
     void findPlace (const State&, bool thorough = false);   // B where it combs least with A, or one mic where it has no pit
     void show (const State&);                      // ...and one put on the panel from elsewhere (undo, A/B/C/D, a preset)
     void showPresets();
@@ -103,6 +114,7 @@ private:
     void openSample();
     void loadSample (const juce::File&);
     void loadRiff (int);                           // one of the riffs the app carries, by its place in the menu
+    void useInput();                               // the live input instead, silent until played
     void showSamples();
     void showAudio();
     void download();
@@ -111,6 +123,7 @@ private:
     DownloadFormat format;                         // panel/Download.h
     void showFormats();
     void formatChosen();
+    void noteDownload();                           // the line under DOWNLOAD IR, the whole IR as long as the cabinet's
     synth::WavMeta metaOf (const State&) const;   // what a WAV of `s` says of itself
     void timerCallback() override;
 
@@ -127,7 +140,8 @@ private:
     juce::Rectangle<int> openArea() const;
     juce::Rectangle<int> playArea() const;
     juce::Rectangle<int> sampleArea() const;
-    juce::Rectangle<int> hearArea (int) const;
+    juce::Rectangle<int> bypassWordArea() const;
+    juce::Rectangle<int> hearArea (int) const;     // BYPASS's A, B, A+B
     juce::Rectangle<int> audioArea() const;
     juce::Rectangle<int> versionArea() const;
 };

@@ -1,0 +1,12 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of Orbit Bass Cab Builder and Orbit Guitar Cab Builder — see LICENSE.
+
+// Made by the build from data/help.txt and data/guitar/help.txt (CMakeLists.txt) — edit those, not this.
+
+#pragma once
+
+namespace cabir::helpText
+{
+inline constexpr const char* bass = R"CABIRHELP(@CABIR_HELP_BASS@)CABIRHELP";
+inline constexpr const char* guitar = R"CABIRHELP(@CABIR_HELP_GUITAR@)CABIRHELP";
+} // namespace cabir::helpText

@@ -1,15 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of Cab IR Generator — see LICENSE.
+// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of Orbit Bass Cab Builder and Orbit Guitar Cab Builder — see LICENSE.
 
 // THE PANEL FOR A PAGE: the app's own panel (src/panel/Panel.h), drawn into a buffer of drawing calls a canvas plays
 // (src/web/cabir-panel.mjs plays them as the app's JUCE does), the hand's moves handed in, what it asks handed out.
 //
-//   cabir_panel_size (w, h)                    its size in the panel's units (906 x 492 the app's, no foot)
+//   cabir_panel_size (w, h)                    its size in the panel's units (960 x 446 the app's, no foot)
 //   cabir_panel_options (find, download, def, close)   which buttons it offers — 1 each for the app's: 1, 1, 0, 0
 //   cabir_panel_show (toml)                    what plays: the state, as the synthesis takes it
 //   cabir_panel_response (now, before, comb)   the band's curves, cabir_points() floats each; null for none
 //   cabir_panel_search (x, y, score) / cabir_panel_end_search ()      FIND's map as it goes, and done
 //   cabir_panel_pointer (kind, x, y)           0 move, 1 down, 2 drag, 3 up, 4 exit, 5 double click
+//   cabir_panel_grabs (x, y)                   1 if a press there would start a drag (a mic on the speaker, its distance
+//                                              track or angle knob while shown, BLEND, B's TIME), else 0 — a touch's
+//                                              host asks it as the finger lands: the panel's touch, or the page's scroll
 //   cabir_panel_tick (seconds)                 the page's clock, while cabir_panel_wants_frames () says 1
 //   cabir_panel_paint ()                       the calls: their 32-bit words, at cabir_panel_ops (); their words' text
 //                                              in cabir_panel_text () (cabir_panel_text_size () bytes, UTF-8)
@@ -19,6 +22,9 @@
 //                                              — and 5, DOWNLOAD IR's ▾ (cabir_panel_download_format): the page's format menu,
 //                                              anchored at cabir_panel_format_rect () (x, y, w, h, ints)
 //   cabir_panel_download_format (show)         DOWNLOAD IR's ▾ beside it, or none (the default)
+//   cabir_panel_rect (name)                    where a page's hint goes, as the panel stands now: "cabinet" (the boxes),
+//                                              "mic-a" (A's glyph on the speaker; the speaker while A is off), "download"
+//                                              — x, y, w, h (ints, the panel's units); null for another name or none shown
 //   cabir_panel_download_note (text)           the line under the button: what the next download will be (UTF-8; "" none)
 //   cabir_glyph_svg (mic)                      a mic's glyph as SVG, its black for the canvas to recolour
 //   cabir_label (toml)                         a state as a line reads it, the app's words: "4x10 PORTED · MD421+U47" (UTF-8)
@@ -143,6 +149,7 @@ namespace
         Event last;
         std::vector<float> now, before, comb;
         int formatRect[4] {};
+        int hintRect[4] {};
 
         PanelSession()
         {
@@ -222,6 +229,7 @@ CABIR_EXPORT void cabir_panel_pointer (int kind, float x, float y)
     }
 }
 
+CABIR_EXPORT int cabir_panel_grabs (float x, float y) { return session().panel.grabs ({ x, y }) ? 1 : 0; }
 CABIR_EXPORT void cabir_panel_tick (double seconds) { session().panel.tick (seconds); }
 CABIR_EXPORT int cabir_panel_wants_frames() { return session().panel.wantsFrames() ? 1 : 0; }
 
@@ -267,6 +275,19 @@ CABIR_EXPORT const int* cabir_panel_format_rect()
     s.formatRect[2] = r.getWidth();
     s.formatRect[3] = r.getHeight();
     return s.formatRect;
+}
+
+CABIR_EXPORT const int* cabir_panel_rect (const char* name)
+{
+    auto& s = session();
+    const auto r = s.panel.hintRect (ui::String (name != nullptr ? name : "")).toNearestInt();
+    if (r.isEmpty())
+        return nullptr;
+    s.hintRect[0] = r.getX();
+    s.hintRect[1] = r.getY();
+    s.hintRect[2] = r.getWidth();
+    s.hintRect[3] = r.getHeight();
+    return s.hintRect;
 }
 
 CABIR_EXPORT void cabir_panel_download_note (const char* text)

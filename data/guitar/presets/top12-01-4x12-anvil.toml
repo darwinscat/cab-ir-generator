@@ -1,0 +1,28 @@
+name = "TOP 12: 4x12 ANVIL"
+style = "Top 12"
+cabir = 1
+box = "4x12-closed"
+back = "closed"
+speaker = "scoop"
+horn = false
+horn_db = 0
+blend = 0.300
+align = true
+invert = false
+
+[mic.a]
+on = true
+model = "sm57"
+x = 0.200
+y = 0.000
+distance = 0.015
+angle = 0.0
+
+[mic.b]
+on = true
+model = "u87"
+x = -0.400
+y = 0.000
+distance = 0.200
+angle = 0.0
+shift = -0.025

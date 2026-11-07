@@ -1,0 +1,28 @@
+name = "HARD ROCK: 2x12 SWAGGER"
+style = "Hard Rock"
+cabir = 1
+box = "2x12-open"
+back = "closed"
+speaker = "mid"
+horn = false
+horn_db = 0
+blend = 0.200
+align = true
+invert = false
+
+[mic.a]
+on = true
+model = "sm57"
+x = 0.000
+y = 0.300
+distance = 0.015
+angle = 0.0
+
+[mic.b]
+on = true
+model = "ribbon"
+x = 0.750
+y = 0.350
+distance = 0.061
+angle = 0.0
+shift = 0.350

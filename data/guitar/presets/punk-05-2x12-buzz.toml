@@ -1,0 +1,28 @@
+name = "PUNK: 2x12 BUZZ"
+style = "Punk"
+cabir = 1
+box = "2x12-open"
+back = "open"
+speaker = "mid"
+horn = false
+horn_db = 0
+blend = 0.350
+align = true
+invert = false
+
+[mic.a]
+on = true
+model = "sm57"
+x = -0.300
+y = 0.150
+distance = 0.012
+angle = 0.0
+
+[mic.b]
+on = false
+model = "ribbon"
+x = 0.400
+y = 0.000
+distance = 0.100
+angle = 0.0
+shift = 0.000

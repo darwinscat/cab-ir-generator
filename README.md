@@ -1,30 +1,33 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 
-<p align="center"><img src="assets/logo/lockup.svg" alt="Cab IR Generator" width="520"></p>
+<p align="center"><img src="assets/logo/lockup.svg" alt="Orbit Bass Cab Builder" width="650"></p>
 
-# Cab IR Generator
+# Orbit Bass Cab Builder and Orbit Guitar Cab Builder
 
 Bass cabinet impulse responses, synthesized: a box of each size, its back closed, ported or open, a
 horn switched in and out, and up to two mics placed on the speaker — kind, spot, distance, angle and
 blend — rendered to a 48 kHz IR while you move them, with the response and where two mics comb drawn
-as you go.
+as you go. **Orbit Guitar Cab Builder** is the same on a guitar's cabinets: seven boxes, six speakers and six mics
+of its own.
 
 <p align="center"><img src="docs/app.png" alt="The app: the boxes, the speaker with two mics on it, and the response" width="880"></p>
 
-One code base for three homes:
+One code base for four homes:
 
 - the cabinet panel and its miniature inside Darwin's Cat's bass amps (OrbitBass, RedGrooveBass);
 - a standalone app for Windows, macOS and Linux, with a sample player to audition by ear, history,
   undo/redo and A/B/C/D;
+- plugins, VST3, AU and CLAP: the same window in a host, the track played through the cabinet;
 - a live web page.
 
 ## Download
 
-The app is on this repository's [Releases](../../releases) page:
+Both builders are on this repository's [Releases](../../releases) page, a download for each, with its app and its
+plugins:
 
-- **macOS** — a `.dmg`, one app for Apple silicon and Intel, signed and notarized; macOS 11 or later.
-- **Windows** — a `.zip` with the `.exe`, x64 and arm64.
-- **Linux** — a `.tar.gz` with the binary, x86_64 and arm64.
+- **macOS** — a `.pkg`: the app, VST3, AU and CLAP, for Apple silicon and Intel, signed and notarized; macOS 11 or later.
+- **Windows** — an installer `.exe`: the app, VST3 and CLAP, x64 and arm64.
+- **Linux** — a `.tar.gz`: the app, VST3 and CLAP, x86_64 and arm64, with how to install them.
 
 ## What it does
 
@@ -58,7 +61,8 @@ phase and where they cancel; the response before your last change stays as a fai
 **Presets.** 160 of them in eight styles — Funk, Jazz, Metal, Modern, Motown, Punk, Reggae and Rock;
 the arrows beside the menu (and the arrow keys) step through them.
 
-**Listening.** A few bass riffs come with the app, or drop a sample of your own on the window. **Space**
+**Listening.** A few bass riffs come with the app, or drop a sample of your own on the window — or pick
+**INPUT** and play your instrument live through the cabinet from an audio interface, silent until PLAY. **Space**
 plays and stops. **HEAR** chooses what you listen through: **A+B**, **A** or **B** alone as it stands in
 the pair, or **BYPASS**, the sample with no cabinet at all — for listening only, nothing of the preset
 changes. **AUDIO** picks the output device.
@@ -87,7 +91,7 @@ sudo apt-get install ninja-build libasound2-dev libfreetype-dev libfontconfig1-d
   libxrender-dev libglu1-mesa-dev mesa-common-dev
 ```
 
-Options: `CABIR_APP` (the app), `CABIR_TOOLS` (the tools below), `CABIR_TESTS`, `CABIR_WEB` (the
+Options: `CABIR_APP` (the apps), `CABIR_GUITAR_APP` (the guitar's too), `CABIR_PLUGINS`, `CABIR_TOOLS` (the tools below), `CABIR_TESTS`, `CABIR_WEB` (the
 page's module, and `irdump`, its check against the native build).
 
 - **The page's module** — `tools/wasm/build.sh`, with Emscripten on the path (or in `~/emsdk`).
@@ -101,7 +105,7 @@ page's module, and `irdump`, its check against the native build).
 - `src/panel/` — the panel, JUCE-free (`Panel.h`, drawn through `ui/Ui.h`), and `CabPicker.h`, its
   JUCE host; colours and type come from the host.
 - `src/web/` — the page's module (WebAssembly): the synthesis and the same panel, drawn on a canvas.
-- `app/` — the standalone app.
+- `app/` — the standalone apps and the plugins.
 - `data/` — `cabinets.txt`, the cabinets, mics and positions the synthesis reads; the factory presets;
   the typical cabinets; the riffs.
 - `tools/` — `cabgen` renders a table to files, `irlook` reads an IR's response back, `presetcheck`
