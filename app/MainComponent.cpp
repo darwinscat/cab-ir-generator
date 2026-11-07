@@ -209,9 +209,9 @@ MainComponent::~MainComponent()
     worker.removeAllJobs (true, 2000);
     if (session != nullptr)
     {
-        // The window closed, the plugin plays on: the pair, whatever HEAR had picked, and the workspace as it was left.
+        // The window closed, the plugin plays on: the pair, whatever BYPASS had taken out, and the workspace as it was left.
         session->removeChangeListener (this);
-        hear = Hear::pair;
+        offA = offB = false;
         playHeard();
         keepSession();
     }
@@ -301,7 +301,7 @@ void MainComponent::render (const State& s, bool live)
             irA = std::move (ir.a);
             irB = std::move (ir.b);
             playHeard();
-            repaint (strip());   // HEAR's A and B, lit with two mics heard
+            repaint (strip());   // BYPASS's A and B, live with two mics heard
             if (! live)
             {
                 keptWav = std::move (bytes);
@@ -925,18 +925,26 @@ juce::Rectangle<int> MainComponent::playArea() const    { return openArea().tran
 juce::Rectangle<int> MainComponent::sampleArea() const  { return playArea().translated (78, 0).withWidth (300); }
 juce::Rectangle<int> MainComponent::audioArea() const   { return versionArea().translated (-82, 0).withWidth (74); }
 
-juce::Rectangle<int> MainComponent::hearArea (int i) const   // after the sample, a button a word; a plugin's first in the strip
+juce::Rectangle<int> MainComponent::bypassWordArea() const   // after the sample, BYPASS; a plugin's first in the strip
 {
-    int x = engine != nullptr ? sampleArea().getRight() + 16 : openArea().getX();
+    const int x = engine != nullptr ? sampleArea().getRight() + 16 : openArea().getX();
+    return sampleArea().withX (x).withWidth (juce::roundToInt (look().trackedWidth ("BYPASS", look().font (13.0f), 0.08f)) + 4);
+}
+
+juce::Rectangle<int> MainComponent::hearArea (int i) const   // ...then A, B, A+B, a button a word
+{
+    int x = bypassWordArea().getRight() + 8;
     for (int k = 0; k < i; ++k)
-        x += juce::roundToInt (look().trackedWidth (hearWords[k], look().font (13.0f), 0.06f)) + 22 + 4;
-    return sampleArea().withX (x).withWidth (juce::roundToInt (look().trackedWidth (hearWords[i], look().font (13.0f), 0.06f)) + 22);
+        x += juce::roundToInt (look().trackedWidth (bypassWords[k], look().font (13.0f), 0.06f)) + 22 + 4;
+    return sampleArea().withX (x).withWidth (juce::roundToInt (look().trackedWidth (bypassWords[i], look().font (13.0f), 0.06f)) + 22);
 }
 
 MainComponent::Hear MainComponent::hearing() const
 {
+    if (offA && offB)
+        return Hear::bypass;
     const bool parts = ! irA.empty() && ! irB.empty();
-    return (hear == Hear::a || hear == Hear::b) && ! parts ? Hear::pair : hear;
+    return ! parts ? Hear::pair : offA ? Hear::b : offB ? Hear::a : Hear::pair;
 }
 
 void MainComponent::playHeard()
@@ -1058,8 +1066,14 @@ void MainComponent::paint (juce::Graphics& g)
     g.setColour (look().hair);
     g.fillRect (s.withHeight (1));
 
-    for (int i = 0; i < 4; ++i)   // HEAR: the one playing lit; A and B dim with one mic heard
-        button (hearWords[i], hearArea (i), (int) hearing() == i, i == 0 || i == 3 || (! irA.empty() && ! irB.empty()));
+    {   // BYPASS: each mic out lit, A+B with both; A and B dim with one mic heard
+        const bool parts = ! irA.empty() && ! irB.empty();
+        g.setColour (look().txFaint);
+        look().drawTracked (g, "BYPASS", bypassWordArea().toFloat(), font, 0.08f, juce::Justification::centredLeft);
+        button (bypassWords[0], hearArea (0), offA && parts, parts);
+        button (bypassWords[1], hearArea (1), offB && parts, parts);
+        button (bypassWords[2], hearArea (2), offA && offB);
+    }
 
     if (engine != nullptr)   // the app's player; a plugin's track plays through it, set in the host
     {
@@ -1135,11 +1149,16 @@ void MainComponent::mouseDown (const juce::MouseEvent& e)
     }
     else if (engine != nullptr && audioArea().contains (p))
         showAudio();
-    else if (const int h = [&] { for (int i = 0; i < 4; ++i) if (hearArea (i).contains (p)) return i; return -1; }(); h >= 0)
+    else if (const int h = [&] { for (int i = 0; i < 3; ++i) if (hearArea (i).contains (p)) return i; return -1; }(); h >= 0)
     {
-        if ((h == 1 || h == 2) && (irA.empty() || irB.empty()))
-            return;   // A or B with one mic heard: nothing to pick
-        hear = (Hear) h;
+        if (h < 2 && (irA.empty() || irB.empty()))
+            return;   // A or B with one mic heard: nothing to take out
+        if (h == 0)
+            offA = ! offA;
+        else if (h == 1)
+            offB = ! offB;
+        else
+            offA = offB = ! (offA && offB);   // both out, or both back
         playHeard();
         repaint (strip());
     }

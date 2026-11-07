@@ -71,14 +71,15 @@ private:
     juce::MemoryBlock keptWav;                // ...rendered, for DOWNLOAD IR
     std::vector<float> keptCurve;             // ...its response: the ghost under the next one
 
-    /** HEAR, in the strip: what the sample is played through — the pair, one mic of it as it stands in the pair, or no
-        cabinet (BYPASS); A and B only while two mics are heard. The player's alone: nothing of the preset, nothing
-        DOWNLOAD IR writes (the owner, 05.11). */
+    /** BYPASS, in the strip: A, B, A+B — a mic taken out of what the sample is played through, the other heard as it stands
+        in the pair; both out, no cabinet. A+B lit while both are out, a click on it taking both out or, both out, putting
+        both back; none pressed, the pair (the owner, 07.11). A and B only while two mics are heard. The player's alone:
+        nothing of the preset, nothing DOWNLOAD IR writes (the owner, 05.11). */
     enum class Hear { pair, a, b, bypass };
-    static constexpr const char* hearWords[] { "A+B", "A", "B", "BYPASS" };
-    Hear hear = Hear::pair;
+    static constexpr const char* bypassWords[] { "A", "B", "A+B" };
+    bool offA = false, offB = false;          // BYPASS A, BYPASS B
     std::vector<float> irMix, irA, irB;       // the last rendered: the pair and each mic's part of it (none with one mic)
-    Hear hearing() const;                     // HEAR as it plays: A or B with one mic heard plays the pair
+    Hear hearing() const;                     // what plays: one mic out with one mic heard plays the pair
     void playHeard();
 
     juce::ThreadPool worker { 1 };
@@ -139,7 +140,8 @@ private:
     juce::Rectangle<int> openArea() const;
     juce::Rectangle<int> playArea() const;
     juce::Rectangle<int> sampleArea() const;
-    juce::Rectangle<int> hearArea (int) const;
+    juce::Rectangle<int> bypassWordArea() const;
+    juce::Rectangle<int> hearArea (int) const;     // BYPASS's A, B, A+B
     juce::Rectangle<int> audioArea() const;
     juce::Rectangle<int> versionArea() const;
 };
