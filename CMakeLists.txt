@@ -163,19 +163,20 @@ if(CABIR_APP)
     execute_process(COMMAND git rev-parse --short HEAD WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
                     OUTPUT_VARIABLE cabirGitHash OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
 
-    # One app, built for each instrument (app/Flavour.h): its name, its bundle, and its data — the cabinet table, the
-    # factory's presets and the riffs the player carries, from `data` (the bass's) or `data/guitar`.
-    function(cabir_add_app target data dataTarget riffsTarget)
+    # One app, built for each instrument (app/Flavour.h): its name, its bundle, its logo — the icon and the mark the header
+    # draws, from `logo` (assets/logo, the bass's, or assets/logo/guitar) — and its data: the cabinet table, the factory's
+    # presets and the riffs the player carries, from `data` (the bass's) or `data/guitar`.
+    function(cabir_add_app target logo data dataTarget riffsTarget)
         cmake_parse_arguments(APP "GUITAR" "PRODUCT;BUNDLE" "" ${ARGN})
         juce_add_gui_app(${target}
             PRODUCT_NAME  "${APP_PRODUCT}"
             COMPANY_NAME  "Darwin's Cat"
             BUNDLE_ID     ${APP_BUNDLE}
-            ICON_BIG      "${CMAKE_CURRENT_SOURCE_DIR}/assets/logo/icon.png"   # the logo's mark, drawn from mark.svg
+            ICON_BIG      "${CMAKE_CURRENT_SOURCE_DIR}/${logo}/icon.png"   # the logo's mark, drawn from mark.svg
             VERSION       ${PROJECT_VERSION})
         target_sources(${target} PRIVATE app/Main.cpp app/MainComponent.cpp app/Engine.cpp)
         file(GLOB presets CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/${data}/presets/*.toml")   # the factory's presets
-        juce_add_binary_data(${dataTarget} SOURCES ${data}/cabinets.txt assets/logo/mark.svg ${presets})
+        juce_add_binary_data(${dataTarget} SOURCES ${data}/cabinets.txt ${logo}/mark.svg ${presets})
         file(GLOB riffs CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/${data}/riffs/*.flac")       # the riffs the player carries
         juce_add_binary_data(${riffsTarget} HEADER_NAME RiffData.h NAMESPACE RiffData SOURCES ${riffs})
         target_compile_definitions(${target} PRIVATE
@@ -199,13 +200,13 @@ if(CABIR_APP)
             juce::juce_recommended_warning_flags)
     endfunction()
 
-    cabir_add_app(CabIrGenerator data CabIrData CabIrRiffs
+    cabir_add_app(CabIrGenerator assets/logo data CabIrData CabIrRiffs
         PRODUCT "Cab IR Generator" BUNDLE com.darwinscat.cabirgenerator)
 
     # THE GUITAR'S — the same app on the guitar's cabinets (data/guitar, src/panel/GuitarCatalog.h).
     option(CABIR_GUITAR_APP "Build the guitar's app too" ON)
     if(CABIR_GUITAR_APP)
-        cabir_add_app(GuitarCabIrGenerator data/guitar GuitarCabIrData GuitarCabIrRiffs GUITAR
+        cabir_add_app(GuitarCabIrGenerator assets/logo/guitar data/guitar GuitarCabIrData GuitarCabIrRiffs GUITAR
             PRODUCT "Guitar Cab IR Generator" BUNDLE com.darwinscat.guitarcabirgenerator)
     endif()
 endif()
