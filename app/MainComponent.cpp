@@ -40,7 +40,7 @@ namespace
     }
 
     /** The product's page on the site, where every link the app offers leads (the owner, 05.11: none to GitHub). */
-    const juce::String productUrl = juce::String ("https://darwinscat.com/felitronics/cab-ir-generator?utm_source=") + flavour::utmSource + "&utm_medium=app";
+    const juce::String productUrl = juce::String ("https://darwinscat.com/felitronics/bass-cab-ir-generator?utm_source=") + flavour::utmSource + "&utm_medium=app";
 
     // The riffs the app carries (Flavour.h).
     using flavour::riffs;

@@ -5,6 +5,13 @@ All notable changes to **Cab IR Generator** are documented here. The format foll
 [Keep a Changelog](https://keepachangelog.com/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+- **The page's new address**, darwinscat.com/felitronics/bass-cab-ir-generator: the app's links, DOWNLOAD IR's WAVs
+  (their comment, the link that opens the cabinet live), the page's own downloads and the IR packs' WAVs and
+  index.html all name it. The old address leads there, the cabinet in the link kept, so the WAVs already out still open.
+
 ## [0.1.5] — 2026-11-06 — DOWNLOAD IR in the format a loader takes
 
 ### Added
