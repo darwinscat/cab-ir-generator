@@ -40,7 +40,7 @@ namespace
     }
 
     /** The product's page on the site, where every link the app offers leads (the owner, 05.11: none to GitHub). */
-    const juce::String productUrl = juce::String ("https://darwinscat.com/felitronics/bass-cab-ir-generator?utm_source=") + flavour::utmSource + "&utm_medium=app";
+    const juce::String productUrl = juce::String (flavour::page) + "?utm_source=" + flavour::utmSource + "&utm_medium=app";
 
     // The riffs the app carries (Flavour.h).
     using flavour::riffs;
@@ -670,8 +670,7 @@ synth::WavMeta MainComponent::metaOf (const State& s) const
     synth::WavMeta meta;
     meta.name = (presetName.isNotEmpty() && toToml (s) == presetText ? presetName : CabPicker::labelOf (s)).toStdString();
     meta.software = std::string (flavour::product) + " " + CABIR_VERSION;
-    // The guitar's has no page yet: its link alone, the state it opens.
-    meta.comment = (flavour::guitar ? std::string() : std::string (pageAddress)) + "#" + linkOf (s);
+    meta.comment = std::string (flavour::page) + "#" + linkOf (s);   // its own page: the bass's, or the guitar's
     meta.preset = "name = \"" + meta.name + "\"\n\n" + toToml (s);
     return meta;
 }

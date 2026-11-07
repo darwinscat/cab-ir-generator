@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <panel/Link.h>
 #include <synth/State.h>
 
 #include <iterator>
@@ -19,6 +20,7 @@ struct Riff { const char* file; const char* title; };
 #if CABIR_GUITAR
 inline constexpr bool guitar = true;
 inline constexpr const char* product = "Guitar Cab IR Generator";
+inline constexpr const char* page = "https://darwinscat.com/felitronics/guitar-cab-ir-generator";   // its own, on the site
 inline constexpr const char* utmSource = "guitar-cab-ir-generator";
 inline constexpr const char* sampleWord = "GUITAR";
 inline constexpr const char* samplePrompt = "A guitar sample";
@@ -42,6 +44,7 @@ inline State defaultState()
 #else
 inline constexpr bool guitar = false;
 inline constexpr const char* product = "Cab IR Generator";
+inline constexpr const char* page = pageAddress;   // the bass's (Link.h)
 inline constexpr const char* utmSource = "cab-ir-generator";
 inline constexpr const char* sampleWord = "BASS";
 inline constexpr const char* samplePrompt = "A bass sample";
