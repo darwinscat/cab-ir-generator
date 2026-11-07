@@ -248,6 +248,7 @@ if(CABIR_APP)
             clap_juce_extensions_plugin(TARGET ${target}
                 CLAP_ID       "${PLUG_BUNDLE}"
                 CLAP_FEATURES audio-effect mono stereo)
+            add_dependencies(${target}_All ${target}_CLAP)   # the wrapper's target is not among JUCE's _All by itself
             # The CLAP wrapper's own icon is the generic CLAP logo: the one juceaide made for the JUCE formats over it.
             if(APPLE)
                 add_custom_command(TARGET ${target}_CLAP POST_BUILD
