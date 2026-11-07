@@ -615,7 +615,10 @@ inline std::vector<double> render (const Cab& c, size_t n, size_t threads = 0)
 {
     if (c.drivers.empty())   // a box the table has not (cabAt of an unknown name): silence, never a cone read that is not there
         return std::vector<double> (n, 0.0);
-    if (c.roomW > 0)   // a room's tail longer than the size asked for: the size doubled until it fits, the tail never wrapped round
+    // A room's tail longer than the size asked for: the size doubled until it fits, the tail never wrapped round — but a
+    // moving hand's render (the app's and the page's ask 2^13 then) keeps its size, the tail cut to it and faded, the one
+    // kept when the hand lets go bringing it whole.
+    if (c.roomW > 0 && n > ((size_t) 1 << 13))
         while ((double) n < 1.1 * c.lengthMs * c.rate / 1000)
             n *= 2;
     const size_t bins = n / 2 + 1;
@@ -768,11 +771,11 @@ inline std::vector<double> render (const Cab& c, size_t n, size_t threads = 0)
         pathTo (t.x, t.y, -c.depthFrac * c.radius, rc, dxc, dyc, dzc);
         const double V = c.roomW * c.roomL * c.roomH, S = 2 * (c.roomW * c.roomL + c.roomW * c.roomH + c.roomL * c.roomH);
         const double t1 = 0.5 * std::min ({ c.roomW, c.roomL, c.roomH }) / c0, t2 = 2 * std::max ({ c.roomW, c.roomL, c.roomH }) / c0;
-        const size_t len = std::min (n, (size_t) std::lround (c.lengthMs * c.rate / 1000));
+        const size_t whole = (size_t) std::lround (c.lengthMs * c.rate / 1000), len = std::min (n, whole);   // ...cut, a hand moving
         uint32_t seed = 2166136261u;
         for (const double v : { std::round (mic.x * 4), std::round (mic.y * 4), std::round (mic.z * 4), c.roomW, c.roomL, c.roomH })
             seed = (seed ^ (uint32_t) std::llround (v * 1000 + 1e6)) * 16777619u;
-        std::vector<double> noise (len);
+        std::vector<double> noise (whole);
         for (auto& x : noise)
         {
             seed ^= seed << 13; seed ^= seed >> 17; seed ^= seed << 5;
@@ -782,12 +785,14 @@ inline std::vector<double> render (const Cab& c, size_t n, size_t threads = 0)
             const double alpha = std::clamp (absorption, 0.01, 0.99), rt = 0.161 * V / (S * alpha), R = S * alpha / (1 - alpha);
             const double energy = c.roomTail * 8 * pi * rc * rc / R * std::exp (-13.8 * 0.5 * (t1 + t2) / rt);
             std::vector<cd> x (n, 0.0);
-            double e = 0;
-            for (size_t i = 0; i < len; ++i)
+            double e = 0;   // over the whole tail, so a cut one keeps its level
+            for (size_t i = 0; i < whole; ++i)
             {
                 const double ti = (double) i / c.rate, rise = std::clamp ((ti - t1) / (t2 - t1), 0.0, 1.0);
-                x[i] = noise[i] * rise * std::exp (-6.91 * ti / rt);
-                e += std::norm (x[i]);
+                const double v = noise[i] * rise * std::exp (-6.91 * ti / rt);
+                e += v * v;
+                if (i < len)
+                    x[i] = v;
             }
             const double g = e > 0 ? std::sqrt (energy / e) : 0.0;
             for (auto& v : x) v *= g;
