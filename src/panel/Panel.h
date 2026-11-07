@@ -78,7 +78,7 @@ public:
     }
 
     /** True while something moves on its own: a host ticks it then, and need not otherwise. */
-    bool wantsFrames() const { return ! downloadArea().isEmpty() || searchFade > 0.0f || defaultArmed || micZoom != micZoomTo(); }
+    bool wantsFrames() const { return ! downloadArea().isEmpty() || searchFade > 0.0f || defaultArmed || zoomMoving(); }
 
     /** The size it is drawn for — small enough to open over a cabin's face too. */
     static constexpr int panelW = 906, panelH = 518;
@@ -618,12 +618,13 @@ private:
     float searchFade = 0.0f;
     double searchEnded = 0;            // the host's clock when it was done; -1 until the tick after
 
-    /** A MIC'S NAME UNDER THE HAND (the owner, 07.11): its glyph grown big beside it, left of the name — A's out of its own
-        glyph, B's before its words — growing in over about a sixth of a second and fading out as fast. */
+    /** A MIC'S NAME UNDER THE HAND (the owner, 07.11): its glyph grown big beside it, left of the name — A's past its column,
+        B's before its words — opaque, no box round it, growing in over about a sixth of a second and fading out as fast. */
     static constexpr float micZoomH = 120.0f, micZoomSeconds = 0.15f;
     float micZoom = 0.0f;               // 0 none .. 1 whole
     int zoomM = -1, zoomI = -1;          // the column and the mic it shows, kept while it fades
     float micZoomTo() const { return hot.part == Part::micRow ? 1.0f : 0.0f; }
+    bool zoomMoving() const { return micZoom < micZoomTo() || micZoom > micZoomTo(); }
 
     void stepMicZoom (double dt)
     {
@@ -633,7 +634,7 @@ private:
             zoomI = hot.i;
         }
         const float to = micZoomTo(), by = (float) (dt / micZoomSeconds);
-        if (micZoom == to)
+        if (! zoomMoving())
             return;
         micZoom = to > micZoom ? ui::jmin (to, micZoom + by) : ui::jmax (to, micZoom - by);
         repaint();
@@ -655,10 +656,9 @@ private:
         const float right = zm == 0 ? row.getX() - 10.0f : row.getRight() - 12.0f - 8.0f - longest - 12.0f;
         const float top = ui::jlimit (6.0f, (float) bodyH() - 6.0f - h, row.getCentreY() - 0.5f * h);
         const ui::Rectangle<float> box (right - w, top, w, h);
-        g.setColour (ui::look().panel2.withMultipliedAlpha (e));
-        g.fillRoundedRectangle (box.expanded (8.0f, 6.0f), 6.0f);
-        g.setColour (ui::look().hair.withMultipliedAlpha (e));
-        g.drawRoundedRectangle (box.expanded (8.0f, 6.0f), 6.0f, 1.0f);
+        // No box round it: the mic itself opaque — its silhouette in the panel's colour first (MicSvgs.h's "-solid"), the
+        // glyph over it — so what lies under it does not show through (the owner, 07.11).
+        paintMicGlyph (g, mics()[zi] + "-solid", box, ui::look().panel.withMultipliedAlpha (e), 0.0f, {});
         const auto& sp = mic (zm);
         const auto heardBy = sp.mic.isNotEmpty() ? sp.mic : cabs()[(size_t) chosen].mic;
         const auto tint = mics()[zi] == heardBy ? colourOf (zm) : ui::look().tx;
