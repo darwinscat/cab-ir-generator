@@ -22,11 +22,12 @@ One code base for four homes:
 
 ## Download
 
-The app is on this repository's [Releases](../../releases) page:
+Both builders are on this repository's [Releases](../../releases) page, a download for each, with its app and its
+plugins:
 
-- **macOS** — a `.dmg`, one app for Apple silicon and Intel, signed and notarized; macOS 11 or later.
-- **Windows** — a `.zip` with the `.exe`, x64 and arm64.
-- **Linux** — a `.tar.gz` with the binary, x86_64 and arm64.
+- **macOS** — a `.pkg`: the app, VST3, AU and CLAP, for Apple silicon and Intel, signed and notarized; macOS 11 or later.
+- **Windows** — an installer `.exe`: the app, VST3 and CLAP, x64 and arm64.
+- **Linux** — a `.tar.gz`: the app, VST3 and CLAP, x86_64 and arm64, with how to install them.
 
 ## What it does
 
