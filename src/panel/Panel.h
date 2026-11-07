@@ -855,10 +855,10 @@ private:
     }
 
     /** THE BACK over the pile, centred: a cell each, the box cut through from the side (paintBack), its word inside it —
-        no BACK before them, and the words a size under the reading one, a size over it under the hand (the owner, 07.11);
-        WALL, the guitar's, a fifth cell, narrower, after them. */
-    static constexpr float backCellW = 88.0f, backGap = 10.0f, wallCellW = 22.0f;
-    static constexpr float backWordSize = 12.0f, wallLetterSize = 10.0f;
+        no BACK before them, and the words two sizes under the reading one, the whole cell grown under the hand (the owner,
+        07.11); WALL, the guitar's, a fifth cell, narrower, after them. */
+    static constexpr float backCellW = 84.0f, backGap = 12.0f, wallCellW = 22.0f;   // narrower, further apart (the owner, 07.11)
+    static constexpr float backWordSize = 11.0f, wallLetterSize = 10.0f;
 
     static float backRowW()
     {
@@ -1535,7 +1535,7 @@ private:
         paintBack (g, kind, cell, on ? ui::look().orange : ui::look().violet.withAlpha (over ? 0.95f : 0.6f));
         g.setColour (on ? ui::look().orange : over ? ui::look().tx : ui::look().txDim);
         const float speaker = 0.32f * ui::jmin (cell.getWidth(), 1.6f * cell.getHeight());   // the speaker's depth in it
-        drawFitted (g, backWords[kind], cell.withTrimmedLeft (speaker + 6.0f * k).withTrimmedRight (3.0f * k), k * backWordSize);
+        drawFitted (g, backWords[kind], cell.withTrimmedLeft (speaker + 4.0f * k).withTrimmedRight (2.0f * k), k * backWordSize);
     }
 
     /** WALL in `cell`, the guitar's: the wall itself, an upright rectangle, its letters down it one under another (the
