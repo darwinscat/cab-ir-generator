@@ -965,6 +965,10 @@ private:
             if (distArea (m).contains (pos))
                 return { Part::distance, m };
 
+        // FIND, in A's column under its angle: before the column, which keeps every other click in it for its own.
+        if (findArea().contains (pos))
+            return { Part::find };
+
         for (int m = 0; m < 2; ++m)
         {
             if (! column (m).contains (pos))
@@ -984,7 +988,6 @@ private:
 
         if (onClose != nullptr && closeArea().contains (pos)) return { Part::close };
         if (defaultArea().contains (pos))                     return { Part::reset };
-        if (findArea().contains (pos))                        return { Part::find };
         if (alignArea().expanded (4, 2).contains (pos))       return { Part::align };
         if (invertArea().expanded (4, 2).contains (pos))      return { Part::invert };
         if (bothHeard() && blendTrack().expanded (8.0f, 8.0f).contains (p)) return { Part::blend };
@@ -1616,15 +1619,17 @@ private:
 
     /** FIND, under A's angle, its column's width — level with B's TIME (the owner, 07.11): orange, the panel's one call to
         act, its words on two lines where one is too narrow for them at the reading size. */
+    static constexpr int findLineH = 15;   // FIND's two lines, at the reading size, a little closer than a row
+
     ui::Rectangle<int> findArea() const
     {
         if (onFind == nullptr)
             return {};
-        // Two lines tall always; where the column is short (the bass's seven mics) nearer the angle, and down into the top
-        // of BLEND's row, above its words.
+        // Two lines tall always, its lines close (findLineH); where the column is short (the bass's seven mics) nearer the
+        // angle, never down into BLEND's row.
         const auto c = column (0);
-        const int h = 2 * rowH + 4, under = ui::roundToInt (angleTrack (0).getBottom());
-        const int top = ui::jmax (under + 4, ui::jmin (under + 12, blendRow().getY() + 6 - h));
+        const int h = 2 * findLineH + 4, under = ui::roundToInt (angleTrack (0).getBottom());
+        const int top = ui::jmax (under + 4, ui::jmin (under + 12, blendRow().getY() - h));
         return { c.getX() + 4, top, c.getWidth() - 8, h };
     }
 
@@ -1644,9 +1649,9 @@ private:
             ui::look().drawTracked (g, "FIND BEST POSITION", b, font, 0.06f, ui::Justification::centred);
         else
         {
-            const auto lines = b.withSizeKeepingCentre (b.getWidth(), 2.0f * (float) rowH);
-            ui::look().drawTracked (g, "FIND BEST", lines.withHeight ((float) rowH), font, 0.06f, ui::Justification::centred);
-            ui::look().drawTracked (g, "POSITION", lines.withTrimmedTop ((float) rowH), font, 0.06f, ui::Justification::centred);
+            const auto lines = b.withSizeKeepingCentre (b.getWidth(), 2.0f * (float) findLineH);
+            ui::look().drawTracked (g, "FIND BEST", lines.withHeight ((float) findLineH), font, 0.06f, ui::Justification::centred);
+            ui::look().drawTracked (g, "POSITION", lines.withTrimmedTop ((float) findLineH), font, 0.06f, ui::Justification::centred);
         }
     }
 
