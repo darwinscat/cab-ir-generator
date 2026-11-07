@@ -77,10 +77,14 @@ public:
             disarmDefault();
         timerCallback();
         stepMicZoom (dt);
+        stepHandles (dt);
     }
 
     /** True while something moves on its own: a host ticks it then, and need not otherwise. */
-    bool wantsFrames() const { return ! downloadArea().isEmpty() || searchFade > 0.0f || defaultArmed || zoomMoving(); }
+    bool wantsFrames() const
+    {
+        return ! downloadArea().isEmpty() || searchFade > 0.0f || defaultArmed || zoomMoving() || (handlesOf >= 0 && ! handHolds);
+    }
 
     /** The size it is drawn for — small enough to open over a cabin's face too. */
     static constexpr int panelW = 960, panelH = 472;   // 960 x 540 the app's, its header and strip round it: 16:9 (the owner, 07.11)
@@ -500,7 +504,7 @@ public:
             zoomM = hot.m;
             zoomI = hot.i;
         }
-        keepHandles();
+        keepHandles (e.position);
         if (hot != was)
             repaint();
     }
@@ -509,6 +513,7 @@ public:
     {
         hot = {};
         handlesOf = -1;
+        handHolds = false;
         repaint();
     }
 
@@ -588,7 +593,7 @@ public:
                 send();
         }
         hot = hotAt (e.position);
-        keepHandles();   // a mic tapped (a touch screen's, no hand hovering): its distance and angle come to it
+        keepHandles (e.position);   // a mic tapped (a touch screen's, no hand hovering): its distance and angle come to it
     }
 
 private:
@@ -623,14 +628,48 @@ private:
     bool micMoved = false;            // ...and moved since, or let go where it stood
     bool isHot (Part p, int m = -1, int i = -1) const { return hot == Hot { p, m, i }; }
 
-    /** A mic's distance and angle out on the speaker while the hand is on it, or on them — kept as it goes from the mic to
-        its track or its knob, gone as it leaves all three (the owner, 07.11). */
-    void keepHandles()
+    /** A mic's distance and angle out on the speaker while the hand is on it, or on them — kept while it goes from the mic
+        to its track or its knob anywhere round the three (handlesZone), and a moment more once it is out of there, so a
+        hand on its way does not lose them (the owner, 07.11); another mic under the hand takes them. */
+    static constexpr float handlesLinger = 0.4f;   // s
+    bool handHolds = false;                         // the hand on the mic, its handles or round them
+    float handlesLeft = 0.0f;                       // ...else how long they stay, counted down by the tick
+
+    void keepHandles (ui::Point<float> p)
     {
         const int was = handlesOf;
-        handlesOf = hot.part == Part::mic || hot.part == Part::distance || hot.part == Part::angle ? hot.m : -1;
+        if (hot.part == Part::mic || hot.part == Part::distance || hot.part == Part::angle)
+            handlesOf = hot.m;
+        handHolds = handlesOf >= 0 && heard (handlesOf) && (hot.part == Part::mic || hot.part == Part::distance
+                                                            || hot.part == Part::angle || handlesZone (handlesOf).contains (p));
+        if (handHolds)
+            handlesLeft = handlesLinger;
         if (handlesOf != was)
             repaint();
+    }
+
+    void stepHandles (double dt)
+    {
+        if (handlesOf < 0 || handHolds || drag != Drag::none)
+            return;
+        handlesLeft -= (float) dt;
+        if (handlesLeft <= 0.0f)
+        {
+            handlesOf = -1;
+            repaint();
+        }
+    }
+
+    /** Round a mic and its handles: a square about its capsule as far as its knob and a little past — its glyph, however
+        it leans, the arc and the knob in it — and its distance's track. */
+    ui::Rectangle<float> handlesZone (int m) const
+    {
+        const auto at = spotOf (m);
+        const float r = angleArcR (m) + 14.0f;
+        const auto t = distHandle (m).expanded (12.0f, 8.0f);
+        const float x0 = ui::jmin (at.x - r, t.getX()), y0 = ui::jmin (at.y - r, t.getY());
+        const float x1 = ui::jmax (at.x + r, t.getRight()), y1 = ui::jmax (at.y + r, t.getBottom());
+        return { x0, y0, x1 - x0, y1 - y0 };
     }
 
     /** ...the one shown: the hand's while it drags its track or knob, none while it moves a mic. */
