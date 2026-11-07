@@ -21,6 +21,8 @@
 //   cabir_download_name (toml, rate, bits, samples)   ...its file's name, no .wav: "8x10 MD421+RE20 44k 16bit 1024"
 //   cabir_download_note (rate, bits, samples, toml)   ...the line under the button: "44.1 kHz, 16 bit, 1024 samples";
 //                                      the whole IR as long as the state's (a room makes it longer) — toml null, 100 ms
+//   cabir_whole_ms (toml)              how long the state's whole IR is, ms — the format menu's FULL — 100 without a room,
+//                                      a guitar ROOM's 150, 250 or 400; 0 for a state that does not read
 //   cabir_find (toml, thorough)        B's quiet place against A: x, y, distance, shift (ms) at cabir_found() — or, with
 //                                      one mic heard, that one's place without a pit about where it is (shift 0)
 //     cabir_tried / cabir_tried_count  the places tried on the way, x, y, score each, for the search's map
@@ -246,6 +248,12 @@ CABIR_EXPORT const char* cabir_download_note (int rate, int bits, int samples, c
     const auto state = toml != nullptr ? stateOf (toml) : std::nullopt;
     s.text = state ? formatNote ({ rate, bits, samples }, wholeMs (s.table, *state)) : formatNote ({ rate, bits, samples });
     return s.text.c_str();
+}
+
+CABIR_EXPORT int cabir_whole_ms (const char* toml)
+{
+    const auto state = stateOf (toml);
+    return state ? wholeMs (session().table, *state) : 0;
 }
 
 CABIR_EXPORT const float* cabir_mix()    { return dataOf (session().ir.mix); }
