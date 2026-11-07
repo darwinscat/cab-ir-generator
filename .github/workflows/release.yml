@@ -146,11 +146,14 @@ jobs:
       - name: Inno Setup
         shell: pwsh
         run: |
-          choco install innosetup -y --no-progress
+          # Inno Setup pinned, from its own releases: the script is written for 6, and choco's latest is 7 now, installed
+          # somewhere else.
+          Invoke-WebRequest -Uri "https://github.com/jrsoftware/issrc/releases/download/is-6_7_4/innosetup-6.7.4.exe" -OutFile innosetup.exe
+          Start-Process -Wait -FilePath .\innosetup.exe -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/DIR=C:\inno"
           $ver = "${{ needs.version.outputs.version }}"
           foreach ($arch in "x64", "arm64") {
             foreach ($inst in "Bass", "Guitar") {
-              & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /Q "/DInstrument=$inst" "/DArch=$arch" "/DAppVersion=$ver" `
+              & "C:\inno\ISCC.exe" /Q "/DInstrument=$inst" "/DArch=$arch" "/DAppVersion=$ver" `
                   "/DSourceDir=$PWD\stage\windows-stage-$arch\$inst" installer\cabbuilder.iss
               if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             }
