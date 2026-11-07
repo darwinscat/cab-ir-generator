@@ -136,6 +136,10 @@ public:
         // The speakers to choose from, as the table names them (its "speaker-<name>" sections), and as their row writes
         // them — the guitar's; none, no row (the bass's).
         ui::StringArray speakers, speakerWords;
+        // The boxes whose own back is half closed (`alignment = half`), and the back's cells left to right by synth::Back
+        // — none said, CLOSED PORTED OPEN (the bass's); the guitar's has HALF too.
+        ui::StringArray half;
+        std::vector<int> backRow;
     };
 
     static const Catalog& bassCatalog()
@@ -226,9 +230,13 @@ public:
     /** THE BOX'S BACK, as its switch is marked — a click each, the one it stands at in the block's orange; the index the
         engine's (synth::Back). A box comes with its own (ownBack) until one is turned, and that one stays from
         box to box; turned, a sealed one gets a port at its foot. */
-    static constexpr const char* backWords[] { "CLOSED", "PORTED", "OPEN" };
-    static constexpr int backs = 3;
-    static int ownBackOf (const ui::String& name) { return sealed (name) ? 0 : catalog().open.contains (name) ? 2 : 1; }
+    static constexpr const char* backWords[] { "CLOSED", "PORTED", "OPEN", "HALF" };
+    static int backs() { return catalog().backRow.empty() ? 3 : (int) catalog().backRow.size(); }
+    static int backAt (int cell) { return catalog().backRow.empty() ? cell : catalog().backRow[(size_t) cell]; }
+    static int ownBackOf (const ui::String& name)
+    {
+        return sealed (name) ? 0 : catalog().open.contains (name) ? 2 : catalog().half.contains (name) ? 3 : 1;
+    }
     static int ownBack (int cab) { return ownBackOf (cabs()[(size_t) cab].name); }
     static int backOf (int cab, const Setup& s) { return s.back >= 0 ? s.back : ownBack (cab); }
 
@@ -622,17 +630,18 @@ private:
     /** THE BACK over the pile, centred: BACK, then a cell each — the box cut through from the side (paintBack), its word
         under it. */
     static constexpr float backCellW = 84.0f, backCellGap = 18.0f, backLabelGap = 16.0f;
+    static float backGap() { return backs() > 3 ? 8.0f : backCellGap; }   // four cells closer, to stay in the half
 
     ui::Rectangle<float> backWordArea() const
     {
         const float label = ui::look().trackedWidth ("BACK", ui::look().font (13.0f), 0.08f) + 4.0f;
-        const float total = label + backLabelGap + (float) backs * backCellW + (float) (backs - 1) * backCellGap;
+        const float total = label + backLabelGap + (float) backs() * backCellW + (float) (backs() - 1) * backGap();
         return { 0.5f * ((float) leftW - total), (float) backTop, label, (float) backIconH };
     }
 
     ui::Rectangle<float> backCell (int i) const
     {
-        const float x = backWordArea().getRight() + backLabelGap + (float) i * (backCellW + backCellGap);
+        const float x = backWordArea().getRight() + backLabelGap + (float) i * (backCellW + backGap());
         return { x, (float) backTop, backCellW, (float) (backIconH + 2 + backWordH) };
     }
 
@@ -662,7 +671,8 @@ private:
 
     /** A BOX CUT THROUGH FROM THE SIDE, as its back is: the baffle at the left with the speaker on it in profile, its cone
         narrowing in to the magnet, the top and the bottom, and at the right the back — whole (CLOSED); whole, the port's
-        tube in from the baffle under the speaker (PORTED); gone but for a lip at the top, the sound out of it (OPEN). */
+        tube in from the baffle under the speaker (PORTED); gone but for a lip at the top, the sound out of it (OPEN); its
+        upper half, the sound out of the lower (HALF, the guitar's). */
     static void paintBack (ui::Graphics& g, int kind, ui::Rectangle<float> b, ui::Colour colour)
     {
         const float x0 = b.getX(), x1 = b.getRight(), y0 = b.getY(), y1 = b.getBottom(), w = b.getWidth(), h = b.getHeight();
@@ -682,7 +692,15 @@ private:
         else
             g.drawLine (x0, y0, x0, y1, baffle);
 
-        if (kind != 2)
+        if (kind == 3)
+        {
+            g.drawLine (x1, y0, x1, y0 + 0.5f * h, line);
+            ui::Path out;
+            out.addCentredArc (x1 - 1.0f, y0 + 0.78f * h, 5.0f, 5.0f, 0.0f, 0.5f * ui::MathConstants<float>::pi - 0.7f,
+                               0.5f * ui::MathConstants<float>::pi + 0.7f, true);
+            g.strokePath (out, ui::PathStrokeType (line));
+        }
+        else if (kind != 2)
             g.drawLine (x1, y0, x1, y1, line);
         else
         {
@@ -856,8 +874,8 @@ private:
         {
             // The chosen box's back, a cell each.
             if (chosen >= 0)
-                for (int i = 0; i < backs; ++i)
-                    if (backCell (i).expanded (backCellGap / 2, 2.0f).contains (p))
+                for (int i = 0; i < backs(); ++i)
+                    if (backCell (i).expanded (backGap() / 2, 2.0f).contains (p))
                         return { Part::back, -1, i };
             // ...and its speaker, where it has a row of them.
             if (chosen >= 0 && hasSpeakers())
@@ -941,7 +959,7 @@ private:
 
             // The back: kept as turned, its own one too, so every box after comes with it.
             case Part::back:
-                setup_.back = h.i;
+                setup_.back = backAt (h.i);
                 send();
                 return;
 
@@ -1120,9 +1138,10 @@ private:
         {
             g.setColour (ui::look().txFaint);
             ui::look().drawTracked (g, "BACK", backWordArea(), font, 0.08f, ui::Justification::centredLeft);
-            for (int i = 0; i < backs; ++i)
+            for (int i = 0; i < backs(); ++i)
             {
-                const bool on = i == backOf (chosen, setup_), over = ! on && isHot (Part::back, -1, i);
+                const int kind = backAt (i);
+                const bool on = kind == backOf (chosen, setup_), over = ! on && isHot (Part::back, -1, i);
                 auto cell = backCell (i);
                 if (over)   // framed as a box under the hand is
                 {
@@ -1130,14 +1149,14 @@ private:
                     g.drawRoundedRectangle (cell.expanded (6.0f, 2.0f), 3.0f, 1.0f);
                 }
                 const auto word = cell.removeFromBottom ((float) backWordH);
-                paintBack (g, i, cell.withHeight ((float) backIconH).withSizeKeepingCentre (56.0f, 34.0f),
+                paintBack (g, kind, cell.withHeight ((float) backIconH).withSizeKeepingCentre (56.0f, 34.0f),
                            on ? ui::look().orange : ui::look().violet.withAlpha (over ? 0.9f : 0.6f));
                 g.setColour (on ? ui::look().orange : over ? ui::look().tx : ui::look().txDim);
-                ui::look().drawTracked (g, backWords[i], word, font, 0.06f, ui::Justification::centred);
+                ui::look().drawTracked (g, backWords[kind], word, font, 0.06f, ui::Justification::centred);
                 // The box's own back, a dot before its word: where DEFAULT goes back to.
-                if (i == ownBack (chosen))
+                if (kind == ownBack (chosen))
                 {
-                    const float w = ui::look().trackedWidth (backWords[i], font, 0.06f);
+                    const float w = ui::look().trackedWidth (backWords[kind], font, 0.06f);
                     g.setColour (ui::look().txDim);
                     g.fillEllipse (ui::Rectangle<float> (4.0f, 4.0f).withCentre ({ word.getCentreX() - 0.5f * w - 8.0f, word.getCentreY() }));
                 }

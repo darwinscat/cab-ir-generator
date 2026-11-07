@@ -278,6 +278,11 @@ struct Cab
     // back, `openLoss` its damping (openPipe); its back heard inverted from the back's plane, dark above `openLp`.
     bool open = false;
     double openLp = 150, openLoss = 0.48;
+    // Half closed (the guitar's): open but for a part of the back, `halfClosed` of it — the cone on the box's air as much
+    // as the back is closed (lowEnd), the air behind it and the opening's own a resonator that lets the back's sound out
+    // under it and holds it above, and the depth's mode kept as much as the back is closed.
+    bool half = false;
+    double halfClosed = 0.5, halfQ = 1.2;
     double fsd = 50, qts = 0.4, vas = 30, vb = 60, perChamber = 1, chambers = 1, fb = 45, ql = 8;
     bool portRear = false, hornAtMic = false;
     double fixedMass = 0, coilHz = 0, proxStrength = 1, proxCorner = 0, micTop = 12000, depth = 0.4;
@@ -326,7 +331,10 @@ inline Cab build (const Section& s)
     c.bh = baffle.size() > 1 ? baffle[1] : 0.6;
 
     c.vented = str (s, "alignment") == "ported";
-    c.open = str (s, "alignment") == "open";
+    c.open = str (s, "alignment") == "open" || str (s, "alignment") == "half";
+    c.half = str (s, "alignment") == "half";
+    c.halfClosed = num (s, "half_back_closed_fraction", 0.5);
+    c.halfQ = num (s, "half_back_Q", 1.2);
     c.openLp = num (s, "open_back_lowpass_hz", 150);
     c.openLoss = num (s, "open_back_loss", 0.48);
     const auto ts = nums (str (s, "ts", "50,0.4,30"));
@@ -455,7 +463,7 @@ inline void lowEnd (const Cab& c, double f, cd& cone, cd& port)
 {
     const double alpha = c.perChamber * c.vas / c.vb;
     const cd s (0, 2 * pi * f);
-    if (c.open)
+    if (c.open && ! c.half)
     {
         const double ws = 2 * pi * c.fsd;
         cone = s * s / (s * s + s * ws / c.qts + ws * ws);
@@ -464,7 +472,9 @@ inline void lowEnd (const Cab& c, double f, cd& cone, cd& port)
     }
     if (! c.vented)
     {
-        const double wc = 2 * pi * c.fsd * std::sqrt (1 + alpha), qtc = c.qts * std::sqrt (1 + alpha);
+        // Half closed, a leaky box: the cone stiffened by as much of the box's air as the back holds.
+        const double a = c.half ? alpha * c.halfClosed : alpha;
+        const double wc = 2 * pi * c.fsd * std::sqrt (1 + a), qtc = c.qts * std::sqrt (1 + a);
         cone = s * s / (s * s + s * wc / qtc + wc * wc);
         port = 0;
         return;
@@ -659,7 +669,10 @@ inline std::vector<double> render (const Cab& c, size_t n, size_t threads = 0)
         {
             cd by;
             openPipe (c, f, by, pipe);
-            cone *= by;
+            if (! c.half)
+                cone *= by;
+            else   // half closed: the pipe's hold on the cone as much as the back is open, the box's air the rest (lowEnd)
+                cone *= 1.0 + (by - 1.0) * (1 - c.halfClosed);
         }
 
         // What the box adds to every cone's motion: its cavity and panel modes, then the voicing.
@@ -668,6 +681,8 @@ inline std::vector<double> render (const Cab& c, size_t n, size_t threads = 0)
         for (auto& m : c.cavity)
             if (! (c.open && std::abs (m[0] - c0 / (2 * c.depth)) < 0.08 * m[0]))
                 box += m[2] * resonance (f, m[0], m[1]);
+            else if (c.half)   // half closed: as much of it as the back is
+                box += c.halfClosed * m[2] * resonance (f, m[0], m[1]);
         for (auto& m : c.panel) box += m[2] * resonance (f, m[0], m[1]);
         for (auto& b : bodyEq) box *= b.at (f, c.rate);
         // The baffle step: the low end, radiating into the whole room, a few tenths of a dB under the top.
@@ -747,6 +762,15 @@ inline std::vector<double> render (const Cab& c, size_t n, size_t threads = 0)
         if (c.open)
         {
             const double disc = std::sqrt (c.bw * c.bh / pi), z = std::max (c.micD, 0.005);
+            // Half closed: the back's sound through the box's resonator — the opening's air on the air behind the cones
+            // (Helmholtz: c/2pi sqrt(A / V L), L the panel and the opening's two ends) — out under it, held above it.
+            cd halfOut = 1.0;
+            if (c.half)
+            {
+                const double area = (1 - c.halfClosed) * c.bw * c.bh, volume = c.bw * c.bh * c.depth;
+                const double neck = 0.015 + 1.7 * std::sqrt (area / pi);
+                halfOut = lowpass2 (f, c0 / (2 * pi) * std::sqrt (area / (volume * neck)), c.halfQ);
+            }
             for (size_t d = 0; d < c.drivers.size(); ++d)
                 for (int img = 0; img < images; ++img)
                 {
@@ -754,7 +778,7 @@ inline std::vector<double> render (const Cab& c, size_t n, size_t threads = 0)
                     double r, dx, dy, dz;
                     pathTo (c.drivers[d].x, mirrored (img, c.drivers[d].y), -c.depth, r, dx, dy, dz);
                     const double block = std::clamp (1 - 2 / pi * (disc - z * std::atan (disc / z)) * r / (c.depth * c.depth), 0.2, 1.0);
-                    sum -= floorBy * cone * pipe * coil[k] * c.sens[d] * 0.5 * block * (r0 / r) * lowpass1 (f, c.openLp)
+                    sum -= floorBy * cone * pipe * coil[k] * c.sens[d] * 0.5 * block * (r0 / r) * (c.half ? halfOut : lowpass1 (f, c.openLp))
                          * heard (c, mic, dx, dy, dz, f) * std::polar (1.0, -2 * pi * f * (r / c0 - minDelay));
                 }
         }
@@ -845,7 +869,7 @@ struct Spot
     or, on a box the table seals, tuned a little under the driver's resonance in the middle of the baffle's foot
     (portAtFoot over its floor); open, each cone in free air but for the open box's pipe behind it, its back heard
     from the back's plane. */
-enum Back { closedBack = 0, portedBack = 1, openBack = 2 };
+enum Back { closedBack = 0, portedBack = 1, openBack = 2, halfBack = 3 };
 constexpr double portAtFoot = 0.045;
 
 /** A cabinet of the table — its "<name> cap" section, the box as that section says, the speaker `spot` names laid over
@@ -868,10 +892,11 @@ inline Cab cabAt (const Table& table, const std::string& cab, const Spot& spot, 
     c.tilt    = spot.angle;
     c.horn    = c.horn && spot.horn;
     c.hornDb += spot.hornDb;
-    if (spot.back == closedBack || spot.back == openBack)
+    if (spot.back == closedBack || spot.back == openBack || spot.back == halfBack)
     {
         c.vented = false;
-        c.open   = spot.back == openBack;
+        c.open   = spot.back != closedBack;
+        c.half   = spot.back == halfBack;
     }
     else if (spot.back == portedBack && ! c.vented)
     {

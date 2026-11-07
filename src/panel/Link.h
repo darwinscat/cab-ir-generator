@@ -93,7 +93,7 @@ inline std::string linkOf (const State& s)
         return (m.model.empty() ? std::string ("own") : m.model) + "," + number (m.x, 3) + "," + number (m.y, 3) + ","
              + number (m.distance * 100.0, 1) + "," + number (m.angle, 1);
     };
-    std::string out = "cab=1&box=" + box + "&back=" + backNames[std::clamp (s.back, -1, 2) + 1]
+    std::string out = "cab=1&box=" + box + "&back=" + backNames[std::clamp (s.back, -1, 3) + 1]
                     + (s.speaker.empty() ? std::string() : "&speaker=" + s.speaker)   // the guitar's, where turned
                     + "&horn=" + (s.horn ? number (std::round (s.hornDb), 0) : std::string ("off"));
     if (s.a.on) out += "&a=" + mic (s.a);
@@ -158,7 +158,7 @@ inline std::optional<State> fromLink (std::string_view text)
         }
         else if (key == "back")
         {
-            for (int i = 0; i < 4; ++i)
+            for (int i = 0; i < 5; ++i)
                 if (value == backNames[i])
                     s.back = i - 1;
         }

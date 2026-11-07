@@ -22,7 +22,8 @@ struct Mic
     bool operator== (const Mic&) const = default;
 };
 
-/** WHAT THE GENERATOR MAKES, all of it: the box by the table's name; its back — -1 the box's own, else synth::Back;
+/** WHAT THE GENERATOR MAKES, all of it: the box by the table's name; its back — -1 the box's own, else synth::Back (3,
+    half closed, the guitar's);
     its speaker by the table's name ("speaker-<name>"), empty for the box's own — the guitar's; its horn and the horn's step (0, -6, -12 while on); the two mics; and how B joins A — mixed in by `blend` on one
     clock unless `align`, turned over by `invert`, moved in time by `shiftMs`. Both on, the pair; one on, that one alone, the blend kept and not
     heard. A plugin keeps it, the app's history and A/B/C/D hold copies of it, the page links it — written as TOML
@@ -42,8 +43,8 @@ struct State
     bool operator== (const State&) const = default;
 };
 
-/** The words a back is written by, -1 first: "own", "closed", "ported", "open". */
-inline constexpr const char* backNames[] { "own", "closed", "ported", "open" };
+/** The words a back is written by, -1 first: "own", "closed", "ported", "open" — and the guitar's "half". */
+inline constexpr const char* backNames[] { "own", "closed", "ported", "open", "half" };
 
 /** THE STATE AS TOML — canonical: the same state, the same bytes, on every platform. Its first key, `cabir`, is the
     format's mark and version; a mic's model is left out where it is the box's own, and so is the speaker. */

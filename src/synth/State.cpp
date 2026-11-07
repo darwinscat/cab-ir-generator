@@ -19,7 +19,7 @@ std::string toToml (const State& s)
     t::Table root;
     (void) root.insert ("cabir", t::Value (std::int64_t { 1 }));
     (void) root.insert ("box", t::Value (s.box));
-    (void) root.insert ("back", t::Value (backNames[std::clamp (s.back, -1, 2) + 1]));
+    (void) root.insert ("back", t::Value (backNames[std::clamp (s.back, -1, 3) + 1]));
     if (! s.speaker.empty())
         (void) root.insert ("speaker", t::Value (s.speaker));
     (void) root.insert ("horn", t::Value (s.horn));
@@ -98,7 +98,7 @@ std::optional<State> fromToml (std::string_view text)
         return std::nullopt;
 
     s.back = -1;
-    for (int i = 0; i < 4; ++i)
+    for (int i = 0; i < 5; ++i)
         if (back == backNames[i])
             s.back = i - 1;
     s.hornDb = (double) hornDb;

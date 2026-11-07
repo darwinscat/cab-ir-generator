@@ -179,7 +179,7 @@ mic_distance_m = 0.25
 mic_radial_offset_fraction = 0
 mic_axis_tilt_deg = 0
 
-# THE BOXES: four twelves' sealed box, the open combos, the tens. Their cavity modes across the box (c/2W, c/2H) — an
+# THE BOXES: four twelves' sealed box, the tall half-closed 2x12, the open combos, the tens. Their cavity modes across the box (c/2W, c/2H) — an
 # open back lets the depth's go (CabSynth.h, render).
 
 [4x12-closed cap]
@@ -199,6 +199,25 @@ inherit = 4x12-closed cap, pos-edge
 inherit = 4x12-closed cap, pos-offaxis
 [4x12-closed distance]
 inherit = 4x12-closed cap, mic-u87, pos-distance
+
+# Tall, two twelves one over the other, its back half closed: the open box's air with a closed one's low mids.
+[2x12-vertical cap]
+inherit = defaults, speaker-dark, mic-sm57, pos-cap
+seed = 21232
+alignment = half
+chamber = 80, 2, 1
+baffle = 0.545, 0.70, 0.30
+driver_xy = 0/0.165, 0/-0.165
+effective_radius_m = 0.125
+horn = absent
+cavity_modes = 245/4/0.08, 315/5/-0.06, 572/5/0.08
+panel_modes = 140/3/0.06
+[2x12-vertical edge]
+inherit = 2x12-vertical cap, pos-edge
+[2x12-vertical offaxis]
+inherit = 2x12-vertical cap, mic-md421, pos-offaxis
+[2x12-vertical distance]
+inherit = 2x12-vertical cap, mic-ribbon, pos-distance
 
 [2x12-open cap]
 inherit = defaults, speaker-bright, mic-sm57, pos-cap
