@@ -349,6 +349,8 @@ public:
     int size() const { return (int) v.size(); }
     const String& operator[] (int i) const { return v[(size_t) i]; }
     bool contains (const String& t) const { return std::find (v.begin(), v.end(), t) != v.end(); }
+    bool isEmpty() const { return v.empty(); }
+    int indexOf (const String& t) const { const auto it = std::find (v.begin(), v.end(), t); return it == v.end() ? -1 : (int) (it - v.begin()); }
     auto begin() const { return v.begin(); }
     auto end() const { return v.end(); }
 

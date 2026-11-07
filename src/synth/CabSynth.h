@@ -838,6 +838,7 @@ struct Spot
     double angle = 0;   // degrees the mic leans back toward the cap
     double hornDb = 0;  // the horn's level against the table's, its attenuator's step: 0, -6, -12
     int back = -1;      // -1 the table's; 0 closed, 1 ported, 2 open (Back)
+    std::string speaker;   // a "speaker-<name>" section laid over the cabinet's own speaker, or empty for its own
 };
 
 /** THE BOX'S BACK, turned: closed, the cone on the air inside alone; ported, the port tuned as the table tunes it —
@@ -847,11 +848,15 @@ struct Spot
 enum Back { closedBack = 0, portedBack = 1, openBack = 2 };
 constexpr double portAtFoot = 0.045;
 
-/** A cabinet of the table — its "<name> cap" section, the box as that section says, its mic or the one `spot` names
-    laid over it — with the mic at `spot`, aimed straight at the baffle, its back as `spot` turns it. */
+/** A cabinet of the table — its "<name> cap" section, the box as that section says, the speaker `spot` names laid over
+    its own and its mic or the one `spot` names over that — with the mic at `spot`, aimed straight at the baffle, its back
+    as `spot` turns it. */
 inline Cab cabAt (const Table& table, const std::string& cab, const Spot& spot, double rate = fs)
 {
     auto s = resolve (table, cab + " cap");
+    if (! spot.speaker.empty())
+        for (auto& [k, v] : resolve (table, "speaker-" + spot.speaker))
+            s[k] = v;
     if (! spot.mic.empty())
         for (auto& [k, v] : resolve (table, "mic-" + spot.mic))
             s[k] = v;
@@ -973,6 +978,7 @@ public:
         bSpot.horn = p.a.horn;
         bSpot.hornDb = p.a.hornDb;
         bSpot.back = p.a.back;
+        bSpot.speaker = p.a.speaker;
         auto ca = cabAt (table, cab, p.a, rate), cb = cabAt (table, cab, bSpot, rate);
         const double da = firstArrival (ca), db = firstArrival (cb), first = std::min (da, db);
         ca.refDelay = p.align ? da : first;
@@ -1028,7 +1034,7 @@ private:
         char text[256];
         std::snprintf (text, sizeof text, "|%.6f|%.6f|%.6f|%d|%.4f|%.4f|%d|%.12g|%zu|%.0f|", s.x, s.y, s.distance, s.horn ? 1 : 0,
                        s.angle, s.hornDb, s.back, refDelay, n, rate);
-        return cab + "|" + s.mic + text;
+        return cab + "|" + s.mic + "|" + s.speaker + text;
     }
 
     static const std::vector<double>& irOf (Kept& kept, const std::string& key, const Cab& c, size_t n)
@@ -1064,6 +1070,7 @@ inline Pair pairOf (const State& s)
         p.angle = m.angle;
         p.hornDb = s.hornDb;
         p.back = s.back;
+        p.speaker = s.speaker;
         return p;
     };
     Pair pair { spot (s.a), spot (s.b), s.blend, s.align, s.invert, s.shiftMs / 1000.0 };

@@ -71,8 +71,8 @@ woofer_envelope_Q = 1.8
 woofer_lowpass_second = 5400/0.6
 body_eq = 1100/7/-7, 2500/1/2, 3500/1/5
 
-# The ten: small and quick, its breakup and its knee the highest.
-[speaker-ten]
+# The snap: a ten's — small and quick, its breakup and its knee the highest.
+[speaker-snap]
 ts = 100, 0.9, 30
 coil_corner_hz = 3000
 breakup_hz = 1800..9000
@@ -85,6 +85,36 @@ woofer_lowpass_hz = 7000
 woofer_envelope_Q = 2.0
 woofer_lowpass_second = 7500/0.6
 body_eq = 1500/8/-8, 3500/1/4, 5000/1/6
+
+# The scoop: its middle dipped round 800 Hz, a bite at 2.6 kHz and a sizzle at 5, the low end tight.
+[speaker-scoop]
+ts = 90, 0.7, 50
+coil_corner_hz = 2800
+breakup_hz = 1500..7500
+mode_count = 28
+mode_Q = 10..30
+mode_level_rel_piston_db_first3 = 5..9
+mode_level_rel_piston_db_rest = -8..6
+cone_decouple_hz = 6500
+woofer_lowpass_hz = 6400
+woofer_envelope_Q = 2.2
+woofer_lowpass_second = 6800/0.6
+body_eq = 800/1.2/-5, 1300/8/-6, 2600/1.2/4, 5000/1.4/5
+
+# The flat one: big and even, a low resonance and little breakup of its own — a loud clean speaker's.
+[speaker-flat]
+ts = 60, 0.6, 90
+coil_corner_hz = 3500
+breakup_hz = 1400..6500
+mode_count = 20
+mode_Q = 8..20
+mode_level_rel_piston_db_first3 = 3..6
+mode_level_rel_piston_db_rest = -8..3
+cone_decouple_hz = 5500
+woofer_lowpass_hz = 5600
+woofer_envelope_Q = 1.4
+woofer_lowpass_second = 6000/0.6
+body_eq = 1200/6/-3, 3500/1/5
 
 # Each mic's low end and capsule, as the bass's table has them: a mic is the same mic on any cabinet.
 [mic-sm57]
@@ -207,7 +237,7 @@ inherit = 1x12-open cap, mic-md421, pos-offaxis
 inherit = 1x12-open cap, mic-u87, pos-distance
 
 [4x10-open cap]
-inherit = defaults, speaker-ten, mic-sm57, pos-cap
+inherit = defaults, speaker-snap, mic-sm57, pos-cap
 seed = 41022
 alignment = open
 chamber = 70, 4, 1
@@ -225,7 +255,7 @@ inherit = 4x10-open cap, mic-md421, pos-offaxis
 inherit = 4x10-open cap, mic-ribbon, pos-distance
 
 [2x10-open cap]
-inherit = defaults, speaker-ten, mic-sm57, pos-cap
+inherit = defaults, speaker-snap, mic-sm57, pos-cap
 seed = 21021
 alignment = open
 chamber = 40, 2, 1
@@ -243,7 +273,7 @@ inherit = 2x10-open cap, mic-md421, pos-offaxis
 inherit = 2x10-open cap, mic-u87, pos-distance
 
 [1x10-open cap]
-inherit = defaults, speaker-ten, mic-sm57, pos-cap
+inherit = defaults, speaker-snap, mic-sm57, pos-cap
 seed = 11011
 alignment = open
 chamber = 25, 1, 1
