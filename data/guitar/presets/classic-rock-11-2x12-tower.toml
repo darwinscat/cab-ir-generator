@@ -1,0 +1,28 @@
+name = "CLASSIC ROCK: 2x12 TOWER"
+style = "Classic Rock"
+cabir = 1
+box = "2x12-vertical"
+back = "half"
+speaker = "dark"
+horn = false
+horn_db = 0
+blend = 0.350
+align = true
+invert = false
+
+[mic.a]
+on = true
+model = "sm57"
+x = 0.000
+y = 0.150
+distance = 0.032
+angle = 0.0
+
+[mic.b]
+on = false
+model = "ribbon"
+x = 0.400
+y = 0.000
+distance = 0.100
+angle = 0.0
+shift = 0.000

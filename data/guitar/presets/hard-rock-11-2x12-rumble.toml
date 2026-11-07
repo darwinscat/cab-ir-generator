@@ -1,0 +1,28 @@
+name = "HARD ROCK: 2x12 RUMBLE"
+style = "Hard Rock"
+cabir = 1
+box = "2x12-vertical"
+back = "half"
+speaker = "mid"
+horn = false
+horn_db = 0
+blend = 0.250
+align = true
+invert = false
+
+[mic.a]
+on = true
+model = "sm57"
+x = 0.600
+y = -0.300
+distance = 0.012
+angle = 0.0
+
+[mic.b]
+on = true
+model = "md421"
+x = 0.900
+y = 0.350
+distance = 0.023
+angle = 0.0
+shift = -0.300

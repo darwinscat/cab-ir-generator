@@ -1,0 +1,29 @@
+name = "CLASSIC ROCK: 1x12 ECHO"
+style = "Classic Rock"
+cabir = 1
+box = "1x12-open"
+back = "open"
+speaker = "dark"
+cone = "paper"
+horn = false
+horn_db = 0
+blend = 0.400
+align = true
+invert = false
+
+[mic.a]
+on = true
+model = "sm57"
+x = 0.400
+y = -0.150
+distance = 0.030
+angle = 0.0
+
+[mic.b]
+on = true
+model = "u87"
+x = -0.375
+y = -0.425
+distance = 0.135
+angle = 0.0
+shift = 0.000
