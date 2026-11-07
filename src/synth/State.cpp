@@ -19,7 +19,13 @@ std::string toToml (const State& s)
     t::Table root;
     (void) root.insert ("cabir", t::Value (std::int64_t { 1 }));
     (void) root.insert ("box", t::Value (s.box));
-    (void) root.insert ("back", t::Value (backNames[std::clamp (s.back, -1, 2) + 1]));
+    (void) root.insert ("back", t::Value (backNames[std::clamp (s.back, -1, 3) + 1]));
+    if (! s.speaker.empty())
+        (void) root.insert ("speaker", t::Value (s.speaker));
+    if (s.wall)
+        (void) root.insert ("wall", t::Value (true));
+    if (! s.cone.empty())
+        (void) root.insert ("cone", t::Value (s.cone));
     (void) root.insert ("horn", t::Value (s.horn));
     (void) root.insert ("horn_db", t::Value ((std::int64_t) std::lround (s.hornDb)));
     (void) root.insert ("blend", decimal (s.blend, 3));
@@ -67,6 +73,9 @@ std::optional<State> fromToml (std::string_view text)
         in.required ("cabir", version, { 1, 1 });
         in.required ("box", s.box);
         in.optional ("back", back);
+        in.optional ("speaker", s.speaker);
+        in.optional ("wall", s.wall);
+        in.optional ("cone", s.cone);
         in.optional ("horn", s.horn);
         in.optional ("horn_db", hornDb, { -12, 0 });
         in.optional ("blend", s.blend, { 0.0, 1.0 });
@@ -78,7 +87,7 @@ std::optional<State> fromToml (std::string_view text)
             m.optional ("model", out.model);
             m.optional ("x", out.x, { -1.5, 1.5 });
             m.optional ("y", out.y, { -1.5, 1.5 });
-            m.optional ("distance", out.distance, { 0.001, 1.0 });
+            m.optional ("distance", out.distance, { 0.001, 2.0 });   // the guitar's room mic goes to 1.5 m
             m.optional ("angle", out.angle, { 0.0, 90.0 });
         };
         in.table ("mic", t::Need::Optional, [&] (t::Reader& mics)
@@ -95,7 +104,7 @@ std::optional<State> fromToml (std::string_view text)
         return std::nullopt;
 
     s.back = -1;
-    for (int i = 0; i < 4; ++i)
+    for (int i = 0; i < 5; ++i)
         if (back == backNames[i])
             s.back = i - 1;
     s.hornDb = (double) hornDb;

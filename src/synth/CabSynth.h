@@ -278,6 +278,20 @@ struct Cab
     // back, `openLoss` its damping (openPipe); its back heard inverted from the back's plane, dark above `openLp`.
     bool open = false;
     double openLp = 150, openLoss = 0.48;
+    // Half closed (the guitar's): open but for a part of the back, `halfClosed` of it — the cone on the box's air as much
+    // as the back is closed (lowEnd), the air behind it and the opening's own a resonator that lets the back's sound out
+    // under it and holds it above, and the depth's mode kept as much as the back is closed.
+    bool half = false;
+    double halfClosed = 0.5, halfQ = 1.2;
+    // The guitar's open back as it is low down (open_back_full_below_step): under the baffle's step the box neither
+    // shadows the back's sound nor leaves the front the half space alone — the back as loud there as its volume velocity
+    // says, so it takes the low end the front makes. Off, the bass's: half, and blocked as at the top.
+    bool openFullLow = false;
+    // A wall behind the box (Spot::wall, the guitar's switch): back_wall_m behind the back's plane, back_wall_reflection of
+    // the back's sound coming back off it — its image beyond the wall, heard as the back is. 0, none.
+    double wallM = 0, wallRefl = 0;
+    // What of the box's own modes an open back keeps (open_back_cavity_share): 1, the bass's, as closed.
+    double openCavity = 1;
     double fsd = 50, qts = 0.4, vas = 30, vb = 60, perChamber = 1, chambers = 1, fb = 45, ql = 8;
     bool portRear = false, hornAtMic = false;
     double fixedMass = 0, coilHz = 0, proxStrength = 1, proxCorner = 0, micTop = 12000, depth = 0.4;
@@ -286,6 +300,14 @@ struct Cab
     double portArea = 150, portLeakHz = 700;
     // cone
     double wooferLp = 5000, wooferQ = 0.707, decoupleHz = 1200;
+    // A second section over it (woofer_lowpass_second = Hz/Q): a guitar's cone, flat to its knee and falling off a cliff
+    // past it, which one second-order section cannot draw. 0, none — the bass's.
+    double wooferLp2 = 0, wooferQ2 = 0.707;
+    // The paper's way past its breakup (cone_decouple_floor, the guitar's PAPER cone): what of the cone lets go keeps
+    // `floor` of its motion, but scattered — each patch late by its own 0..floorJitterMs (fixed per patch, no draw) —
+    // and falling off at the knee (floorHz, cone_floor_lowpass_hz, the woofer's lowpass by default). Not a piston's: it
+    // does not sum in step at a far mic, nor cancel in step at a near one. 0, none — the bass's.
+    double floor = 0, floorJitterMs = 0.3, floorHz = 0;
     std::vector<std::vector<Mode>> modes;   // per driver
     std::vector<double> sens;               // per driver, linear
     // box
@@ -323,7 +345,14 @@ inline Cab build (const Section& s)
     c.bh = baffle.size() > 1 ? baffle[1] : 0.6;
 
     c.vented = str (s, "alignment") == "ported";
-    c.open = str (s, "alignment") == "open";
+    c.open = str (s, "alignment") == "open" || str (s, "alignment") == "half";
+    c.half = str (s, "alignment") == "half";
+    c.halfClosed = num (s, "half_back_closed_fraction", 0.5);
+    c.halfQ = num (s, "half_back_Q", 1.2);
+    c.openFullLow = num (s, "open_back_full_below_step", 0) > 0;
+    c.wallM = num (s, "back_wall_m", 0);
+    c.wallRefl = num (s, "back_wall_reflection", 0);
+    c.openCavity = num (s, "open_back_cavity_share", 1);
     c.openLp = num (s, "open_back_lowpass_hz", 150);
     c.openLoss = num (s, "open_back_loss", 0.48);
     const auto ts = nums (str (s, "ts", "50,0.4,30"));
@@ -349,6 +378,14 @@ inline Cab build (const Section& s)
 
     c.wooferLp = num (s, "woofer_lowpass_hz", 5000);
     c.wooferQ = num (s, "woofer_envelope_Q", 0.707);
+    c.floor = num (s, "cone_decouple_floor", 0);
+    c.floorJitterMs = num (s, "cone_floor_jitter_ms", 0.3);
+    c.floorHz = num (s, "cone_floor_lowpass_hz", 0) > 0 ? num (s, "cone_floor_lowpass_hz", 0) : c.wooferLp;
+    if (const auto second = nums (str (s, "woofer_lowpass_second")); second.size() >= 2)
+    {
+        c.wooferLp2 = second[0];
+        c.wooferQ2 = second[1];
+    }
     c.decoupleHz = num (s, "cone_decouple_hz", range (s, "breakup_hz", 1200, 7000).first);
     c.body = triples (s, "body_eq");
     c.cavity = triples (s, "cavity_modes");
@@ -447,7 +484,7 @@ inline void lowEnd (const Cab& c, double f, cd& cone, cd& port)
 {
     const double alpha = c.perChamber * c.vas / c.vb;
     const cd s (0, 2 * pi * f);
-    if (c.open)
+    if (c.open && ! c.half)
     {
         const double ws = 2 * pi * c.fsd;
         cone = s * s / (s * s + s * ws / c.qts + ws * ws);
@@ -456,7 +493,9 @@ inline void lowEnd (const Cab& c, double f, cd& cone, cd& port)
     }
     if (! c.vented)
     {
-        const double wc = 2 * pi * c.fsd * std::sqrt (1 + alpha), qtc = c.qts * std::sqrt (1 + alpha);
+        // Half closed, a leaky box: the cone stiffened by as much of the box's air as the back holds.
+        const double a = c.half ? alpha * c.halfClosed : alpha;
+        const double wc = 2 * pi * c.fsd * std::sqrt (1 + a), qtc = c.qts * std::sqrt (1 + a);
         cone = s * s / (s * s + s * wc / qtc + wc * wc);
         port = 0;
         return;
@@ -586,6 +625,17 @@ inline std::vector<double> render (const Cab& c, size_t n, size_t threads = 0)
     // The four edges of the baffle, each a weak inverted source fed by the first cone, at the edge's nearest point.
     const Xy edges[4] { { -c.bw / 2, t.y }, { c.bw / 2, t.y }, { t.x, -c.bh / 2 }, { t.x, c.bh / 2 } };
 
+    // The paper's scatter, once: each patch's own lateness, from its place alone (a hash, not the seeded draws).
+    std::vector<std::vector<double>> floorTau (patches.size());
+    if (c.floor > 0)
+        for (size_t d = 0; d < patches.size(); ++d)
+            for (size_t i = 0; i < patches[d].size(); ++i)
+            {
+                uint32_t h = (uint32_t) (d * 7919u + i * 104729u + 1u);
+                h ^= h >> 16; h *= 0x7feb352du; h ^= h >> 15; h *= 0x846ca68bu; h ^= h >> 16;
+                floorTau[d].push_back ((double) h / 4294967296.0 * c.floorJitterMs * 1e-3);
+            }
+
     // Each mode's shape at each patch, once: a position weighs a mode, it does not move it.
     std::vector<std::vector<std::vector<double>>> shape (patches.size());
     for (size_t d = 0; d < patches.size(); ++d)
@@ -651,21 +701,29 @@ inline std::vector<double> render (const Cab& c, size_t n, size_t threads = 0)
         {
             cd by;
             openPipe (c, f, by, pipe);
-            cone *= by;
+            if (! c.half)
+                cone *= by;
+            else   // half closed: the pipe's hold on the cone as much as the back is open, the box's air the rest (lowEnd)
+                cone *= 1.0 + (by - 1.0) * (1 - c.halfClosed);
         }
 
         // What the box adds to every cone's motion: its cavity and panel modes, then the voicing.
         cd box = 1.0;
         // An open back lets go of the depth's mode, the air shut between baffle and back; across, the box still rings.
         for (auto& m : c.cavity)
-            if (! (c.open && std::abs (m[0] - c0 / (2 * c.depth)) < 0.08 * m[0]))
+            if (c.open && c.openCavity != 1.0 && ! (std::abs (m[0] - c0 / (2 * c.depth)) < 0.08 * m[0]))
+                // the guitar's: an open back lets the modes across go too, a half closed one half of that
+                box += (c.half ? 1 - (1 - c.openCavity) * (1 - c.halfClosed) : c.openCavity) * m[2] * resonance (f, m[0], m[1]);
+            else if (! (c.open && std::abs (m[0] - c0 / (2 * c.depth)) < 0.08 * m[0]))
                 box += m[2] * resonance (f, m[0], m[1]);
+            else if (c.half)   // half closed: as much of it as the back is
+                box += c.halfClosed * m[2] * resonance (f, m[0], m[1]);
         for (auto& m : c.panel) box += m[2] * resonance (f, m[0], m[1]);
         for (auto& b : bodyEq) box *= b.at (f, c.rate);
         // The baffle step: the low end, radiating into the whole room, a few tenths of a dB under the top.
         box *= std::pow (10.0, -stepDb / 20 * (1 / (1 + (f / stepHz) * (f / stepHz))));
 
-        const cd piston = lowpass2 (f, c.wooferLp, c.wooferQ);
+        const cd piston = lowpass2 (f, c.wooferLp, c.wooferQ) * (c.wooferLp2 > 0 ? lowpass2 (f, c.wooferLp2, c.wooferQ2) : cd (1.0));
         cd sum = 0.0;
         for (size_t d = 0; d < patches.size(); ++d)
         {
@@ -691,6 +749,9 @@ inline std::vector<double> render (const Cab& c, size_t n, size_t threads = 0)
                 const double let = p.rho * f / c.decoupleHz;
                 // The modes ride on what the cone carries there: above its breakup they are most of what it does.
                 cd v = 1.0 / (1 + let * let);
+                if (c.floor > 0)   // the paper's: what let go keeps a share of its motion, scattered in time
+                    v += c.floor / (1 + (f / c.floorHz) * (f / c.floorHz)) * (let * let / (1 + let * let))
+                       * std::polar (1.0, -2 * pi * f * floorTau[d][pi_]);
                 for (size_t m = 0; m < res.size(); ++m)
                     v += res[m] * shape[d][m][pi_];
                 v *= held;
@@ -739,6 +800,16 @@ inline std::vector<double> render (const Cab& c, size_t n, size_t threads = 0)
         if (c.open)
         {
             const double disc = std::sqrt (c.bw * c.bh / pi), z = std::max (c.micD, 0.005);
+            // Half closed: the back's sound through the box's resonator — the opening's air on the air behind the cones
+            // (Helmholtz: c/2pi sqrt(A / V L), L the panel and the opening's two ends) — out under it, held above it.
+            cd halfOut = 1.0;
+            const double low = 1 / (1 + (f / stepHz) * (f / stepHz));   // under the baffle's step, 1
+            if (c.half)
+            {
+                const double area = (1 - c.halfClosed) * c.bw * c.bh, volume = c.bw * c.bh * c.depth;
+                const double neck = 0.015 + 1.7 * std::sqrt (area / pi);
+                halfOut = lowpass2 (f, c0 / (2 * pi) * std::sqrt (area / (volume * neck)), c.halfQ);
+            }
             for (size_t d = 0; d < c.drivers.size(); ++d)
                 for (int img = 0; img < images; ++img)
                 {
@@ -746,8 +817,26 @@ inline std::vector<double> render (const Cab& c, size_t n, size_t threads = 0)
                     double r, dx, dy, dz;
                     pathTo (c.drivers[d].x, mirrored (img, c.drivers[d].y), -c.depth, r, dx, dy, dz);
                     const double block = std::clamp (1 - 2 / pi * (disc - z * std::atan (disc / z)) * r / (c.depth * c.depth), 0.2, 1.0);
-                    sum -= floorBy * cone * pipe * coil[k] * c.sens[d] * 0.5 * block * (r0 / r) * lowpass1 (f, c.openLp)
-                         * heard (c, mic, dx, dy, dz, f) * std::polar (1.0, -2 * pi * f * (r / c0 - minDelay));
+                    if (! c.openFullLow)
+                        sum -= floorBy * cone * pipe * coil[k] * c.sens[d] * 0.5 * block * (r0 / r) * (c.half ? halfOut : lowpass1 (f, c.openLp))
+                             * heard (c, mic, dx, dy, dz, f) * std::polar (1.0, -2 * pi * f * (r / c0 - minDelay));
+                    else
+                    {
+                        // The guitar's: whole and unshadowed under the baffle's step, half and blocked over it.
+                        const auto share = [&] (double blocked) { return (0.5 + 0.5 * low) * (blocked + (1 - blocked) * low); };
+                        sum -= floorBy * cone * pipe * coil[k] * c.sens[d] * share (block) * (r0 / r) * (c.half ? halfOut : lowpass1 (f, c.openLp))
+                             * heard (c, mic, dx, dy, dz, f) * std::polar (1.0, -2 * pi * f * (r / c0 - minDelay));
+                        // ...and off the wall behind, where there is one: the back's image beyond it, round the box.
+                        if (c.wallM > 0)
+                        {
+                            double rw, wx, wy, wz;
+                            pathTo (c.drivers[d].x, mirrored (img, c.drivers[d].y), -c.depth - 2 * c.wallM, rw, wx, wy, wz);
+                            const double blockW = std::clamp (1 - 2 / pi * (disc - z * std::atan (disc / z)) * rw / (c.depth * c.depth), 0.2, 1.0);
+                            sum -= floorBy * c.wallRefl * cone * pipe * coil[k] * c.sens[d] * share (blockW) * (r0 / rw)
+                                 * (c.half ? halfOut : lowpass1 (f, c.openLp)) * heard (c, mic, wx, wy, wz, f)
+                                 * std::polar (1.0, -2 * pi * f * (rw / c0 - minDelay));
+                        }
+                    }
                 }
         }
         if (c.horn)
@@ -830,20 +919,31 @@ struct Spot
     double angle = 0;   // degrees the mic leans back toward the cap
     double hornDb = 0;  // the horn's level against the table's, its attenuator's step: 0, -6, -12
     int back = -1;      // -1 the table's; 0 closed, 1 ported, 2 open (Back)
+    std::string speaker;   // a "speaker-<name>" section laid over the cabinet's own speaker, or empty for its own
+    bool wall = false;     // the wall behind the box the table places (back_wall_m), the guitar's switch: off, none
+    std::string cone;      // a variant of the speaker's cone, its "speaker-<name>-<cone>" section laid over it (the guitar's
+                           // "paper"), or empty for the speaker as it is
 };
 
 /** THE BOX'S BACK, turned: closed, the cone on the air inside alone; ported, the port tuned as the table tunes it —
     or, on a box the table seals, tuned a little under the driver's resonance in the middle of the baffle's foot
     (portAtFoot over its floor); open, each cone in free air but for the open box's pipe behind it, its back heard
     from the back's plane. */
-enum Back { closedBack = 0, portedBack = 1, openBack = 2 };
+enum Back { closedBack = 0, portedBack = 1, openBack = 2, halfBack = 3 };
 constexpr double portAtFoot = 0.045;
 
-/** A cabinet of the table — its "<name> cap" section, the box as that section says, its mic or the one `spot` names
-    laid over it — with the mic at `spot`, aimed straight at the baffle, its back as `spot` turns it. */
+/** A cabinet of the table — its "<name> cap" section, the box as that section says, the speaker `spot` names laid over
+    its own and its mic or the one `spot` names over that — with the mic at `spot`, aimed straight at the baffle, its back
+    as `spot` turns it. */
 inline Cab cabAt (const Table& table, const std::string& cab, const Spot& spot, double rate = fs)
 {
     auto s = resolve (table, cab + " cap");
+    if (! spot.speaker.empty())
+        for (auto& [k, v] : resolve (table, "speaker-" + spot.speaker))
+            s[k] = v;
+    if (! spot.cone.empty())   // the speaker's cone as its variant has it: the box's own speaker's (speaker_name) or the one laid over
+        for (auto& [k, v] : resolve (table, "speaker-" + (spot.speaker.empty() ? str (s, "speaker_name") : spot.speaker) + "-" + spot.cone))
+            s[k] = v;
     if (! spot.mic.empty())
         for (auto& [k, v] : resolve (table, "mic-" + spot.mic))
             s[k] = v;
@@ -854,11 +954,14 @@ inline Cab cabAt (const Table& table, const std::string& cab, const Spot& spot, 
     c.micD    = spot.distance;
     c.tilt    = spot.angle;
     c.horn    = c.horn && spot.horn;
+    if (! spot.wall)
+        c.wallM = 0;
     c.hornDb += spot.hornDb;
-    if (spot.back == closedBack || spot.back == openBack)
+    if (spot.back == closedBack || spot.back == openBack || spot.back == halfBack)
     {
         c.vented = false;
-        c.open   = spot.back == openBack;
+        c.open   = spot.back != closedBack;
+        c.half   = spot.back == halfBack;
     }
     else if (spot.back == portedBack && ! c.vented)
     {
@@ -965,6 +1068,9 @@ public:
         bSpot.horn = p.a.horn;
         bSpot.hornDb = p.a.hornDb;
         bSpot.back = p.a.back;
+        bSpot.speaker = p.a.speaker;
+        bSpot.wall = p.a.wall;
+        bSpot.cone = p.a.cone;
         auto ca = cabAt (table, cab, p.a, rate), cb = cabAt (table, cab, bSpot, rate);
         const double da = firstArrival (ca), db = firstArrival (cb), first = std::min (da, db);
         ca.refDelay = p.align ? da : first;
@@ -1020,7 +1126,7 @@ private:
         char text[256];
         std::snprintf (text, sizeof text, "|%.6f|%.6f|%.6f|%d|%.4f|%.4f|%d|%.12g|%zu|%.0f|", s.x, s.y, s.distance, s.horn ? 1 : 0,
                        s.angle, s.hornDb, s.back, refDelay, n, rate);
-        return cab + "|" + s.mic + text;
+        return cab + "|" + s.mic + "|" + s.speaker + (s.wall ? "|wall|" : "||") + s.cone + text;
     }
 
     static const std::vector<double>& irOf (Kept& kept, const std::string& key, const Cab& c, size_t n)
@@ -1056,6 +1162,9 @@ inline Pair pairOf (const State& s)
         p.angle = m.angle;
         p.hornDb = s.hornDb;
         p.back = s.back;
+        p.speaker = s.speaker;
+        p.wall = s.wall;
+        p.cone = s.cone;
         return p;
     };
     Pair pair { spot (s.a), spot (s.b), s.blend, s.align, s.invert, s.shiftMs / 1000.0 };

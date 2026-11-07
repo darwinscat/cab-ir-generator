@@ -1,7 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of Cab IR Generator — see LICENSE.
 
+#include "Flavour.h"
 #include "MainComponent.h"
+
+#if CABIR_GUITAR
+ #include <panel/GuitarCatalog.h>
+#endif
 
 namespace cabir::app
 {
@@ -34,7 +39,7 @@ class Window final : public juce::DocumentWindow
 {
 public:
     Window()
-        : DocumentWindow ("Cab IR Generator", look().panel,
+        : DocumentWindow (flavour::product, look().panel,
                           DocumentWindow::closeButton | DocumentWindow::minimiseButton | DocumentWindow::maximiseButton)
     {
         setUsingNativeTitleBar (true);
@@ -63,12 +68,15 @@ public:
 class Application final : public juce::JUCEApplication
 {
 public:
-    const juce::String getApplicationName() override    { return "Cab IR Generator"; }
+    const juce::String getApplicationName() override    { return flavour::product; }
     const juce::String getApplicationVersion() override { return CABIR_VERSION; }
     bool moreThanOneInstanceAllowed() override          { return getCommandLineParameterArray().contains ("--stills"); }
 
     void initialise (const juce::String&) override
     {
+#if CABIR_GUITAR
+        Panel::useCatalog (guitarCatalog());   // before the first panel: the guitar's boxes and mics
+#endif
         // --stills <folder>: the panel drawn to files, and out — no window, no audio (MainComponent::writeStills).
         if (const auto args = getCommandLineParameterArray(); args.contains ("--stills"))
         {

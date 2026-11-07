@@ -163,33 +163,50 @@ if(CABIR_APP)
     execute_process(COMMAND git rev-parse --short HEAD WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
                     OUTPUT_VARIABLE cabirGitHash OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
 
-    juce_add_gui_app(CabIrGenerator
-        PRODUCT_NAME  "Cab IR Generator"
-        COMPANY_NAME  "Darwin's Cat"
-        BUNDLE_ID     com.darwinscat.cabirgenerator
-        ICON_BIG      "${CMAKE_CURRENT_SOURCE_DIR}/assets/logo/icon.png"   # the logo's mark, drawn from mark.svg
-        VERSION       ${PROJECT_VERSION})
-    target_sources(CabIrGenerator PRIVATE app/Main.cpp app/MainComponent.cpp app/Engine.cpp)
-    file(GLOB cabirPresets CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/data/presets/*.toml")   # the factory's presets
-    juce_add_binary_data(CabIrData SOURCES data/cabinets.txt assets/logo/mark.svg ${cabirPresets})
-    file(GLOB cabirRiffs CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/data/riffs/*.flac")       # the bass riffs the player carries
-    juce_add_binary_data(CabIrRiffs HEADER_NAME RiffData.h NAMESPACE RiffData SOURCES ${cabirRiffs})
-    target_compile_definitions(CabIrGenerator PRIVATE
-        JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0
-        CABIR_GIT_HASH="${cabirGitHash}"
-        CABIR_CORE_VERSION="${cabirCoreVersion}"
-        CABIR_TOML_VERSION="${cabirTomlVersion}"
-        CABIR_APPKIT_VERSION="${cabirAppkitVersion}")
-    target_link_libraries(CabIrGenerator PRIVATE
-        CabIrData
-        CabIrRiffs
-        cabir::panel
-        felitronics::convolution
-        felitronics::appkit
-        juce::juce_gui_extra
-        juce::juce_audio_utils
-        juce::juce_audio_formats
-        juce::juce_recommended_config_flags
-        juce::juce_recommended_lto_flags
-        juce::juce_recommended_warning_flags)
+    # One app, built for each instrument (app/Flavour.h): its name, its bundle, its logo — the icon and the mark the header
+    # draws, from `logo` (assets/logo, the bass's, or assets/logo/guitar) — and its data: the cabinet table, the factory's
+    # presets and the riffs the player carries, from `data` (the bass's) or `data/guitar`.
+    function(cabir_add_app target logo data dataTarget riffsTarget)
+        cmake_parse_arguments(APP "GUITAR" "PRODUCT;BUNDLE" "" ${ARGN})
+        juce_add_gui_app(${target}
+            PRODUCT_NAME  "${APP_PRODUCT}"
+            COMPANY_NAME  "Darwin's Cat"
+            BUNDLE_ID     ${APP_BUNDLE}
+            ICON_BIG      "${CMAKE_CURRENT_SOURCE_DIR}/${logo}/icon.png"   # the logo's mark, drawn from mark.svg
+            VERSION       ${PROJECT_VERSION})
+        target_sources(${target} PRIVATE app/Main.cpp app/MainComponent.cpp app/Engine.cpp)
+        file(GLOB presets CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/${data}/presets/*.toml")   # the factory's presets
+        juce_add_binary_data(${dataTarget} SOURCES ${data}/cabinets.txt ${logo}/mark.svg ${presets})
+        file(GLOB riffs CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/${data}/riffs/*.flac")       # the riffs the player carries
+        juce_add_binary_data(${riffsTarget} HEADER_NAME RiffData.h NAMESPACE RiffData SOURCES ${riffs})
+        target_compile_definitions(${target} PRIVATE
+            JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0
+            CABIR_GUITAR=$<BOOL:${APP_GUITAR}>
+            CABIR_GIT_HASH="${cabirGitHash}"
+            CABIR_CORE_VERSION="${cabirCoreVersion}"
+            CABIR_TOML_VERSION="${cabirTomlVersion}"
+            CABIR_APPKIT_VERSION="${cabirAppkitVersion}")
+        target_link_libraries(${target} PRIVATE
+            ${dataTarget}
+            ${riffsTarget}
+            cabir::panel
+            felitronics::convolution
+            felitronics::appkit
+            juce::juce_gui_extra
+            juce::juce_audio_utils
+            juce::juce_audio_formats
+            juce::juce_recommended_config_flags
+            juce::juce_recommended_lto_flags
+            juce::juce_recommended_warning_flags)
+    endfunction()
+
+    cabir_add_app(CabIrGenerator assets/logo data CabIrData CabIrRiffs
+        PRODUCT "Cab IR Generator" BUNDLE com.darwinscat.cabirgenerator)
+
+    # THE GUITAR'S — the same app on the guitar's cabinets (data/guitar, src/panel/GuitarCatalog.h).
+    option(CABIR_GUITAR_APP "Build the guitar's app too" ON)
+    if(CABIR_GUITAR_APP)
+        cabir_add_app(GuitarCabIrGenerator assets/logo/guitar data/guitar GuitarCabIrData GuitarCabIrRiffs GUITAR
+            PRODUCT "Guitar Cab IR Generator" BUNDLE com.darwinscat.guitarcabirgenerator)
+    endif()
 endif()

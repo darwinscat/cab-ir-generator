@@ -7,7 +7,7 @@
 // and the server never sees which cabinet (the owner, 05.11) — opening the live panel on exactly that cabinet. The same
 // link is in every WAV the generator writes (synth::WavMeta), beside its preset's TOML.
 //
-//   https://darwinscat.com/felitronics/cab-ir-generator#cab=1&box=8x10&back=closed&horn=-6
+//   https://darwinscat.com/felitronics/bass-cab-ir-generator#cab=1&box=8x10&back=closed&horn=-6
 //       &a=md421,-0.3,0,5,0&b=u47,-0.65,0,12,0&blend=0.35&align=1&invert=0&shift=0
 //
 // cab — the link's own version, 1, first, so an older link still reads when the cabinet grows (an unknown key is passed
@@ -28,7 +28,9 @@
 namespace cabir
 {
 
-inline constexpr const char* pageAddress = "https://darwinscat.com/felitronics/cab-ir-generator";
+// The bass's page (the site moved it 07.11, the guitar's to come at /felitronics/guitar-cab-ir-generator; the old address
+// answers with a permanent redirect that keeps the #cab= part, so the WAVs already out still open).
+inline constexpr const char* pageAddress = "https://darwinscat.com/felitronics/bass-cab-ir-generator";
 
 namespace link
 {
@@ -93,7 +95,10 @@ inline std::string linkOf (const State& s)
         return (m.model.empty() ? std::string ("own") : m.model) + "," + number (m.x, 3) + "," + number (m.y, 3) + ","
              + number (m.distance * 100.0, 1) + "," + number (m.angle, 1);
     };
-    std::string out = "cab=1&box=" + box + "&back=" + backNames[std::clamp (s.back, -1, 2) + 1]
+    std::string out = "cab=1&box=" + box + "&back=" + backNames[std::clamp (s.back, -1, 3) + 1]
+                    + (s.speaker.empty() ? std::string() : "&speaker=" + s.speaker)   // the guitar's, where turned
+                    + (s.wall ? "&wall=1" : "")                                        // ...and its wall, where on
+                    + (s.cone.empty() ? std::string() : "&cone=" + s.cone)              // ...and its cone, where a variant
                     + "&horn=" + (s.horn ? number (std::round (s.hornDb), 0) : std::string ("off"));
     if (s.a.on) out += "&a=" + mic (s.a);
     if (s.b.on) out += "&b=" + mic (s.b);
@@ -133,7 +138,7 @@ inline std::optional<State> fromLink (std::string_view text)
         m.model = f[0] == "own" ? std::string() : f[0];
         m.x = std::clamp (x, -1.2, 1.2);
         m.y = std::clamp (y, -1.2, 1.2);
-        m.distance = std::round (std::clamp (cm, 1.0, 30.0) * 10.0) / 1000.0;   // tenths of a cm: the TOML's own metres
+        m.distance = std::round (std::clamp (cm, 1.0, (double) Panel::catalog().farthestCm) * 10.0) / 1000.0;   // tenths of a cm: the TOML's own metres
         m.angle = std::clamp (angle, 0.0, 90.0);
         return true;
     };
@@ -157,9 +162,16 @@ inline std::optional<State> fromLink (std::string_view text)
         }
         else if (key == "back")
         {
-            for (int i = 0; i < 4; ++i)
+            for (int i = 0; i < 5; ++i)
                 if (value == backNames[i])
                     s.back = i - 1;
+        }
+        else if (key == "wall") s.wall = value == "1";
+        else if (key == "cone") { if (! Panel::catalog().coneVariant.isEmpty() && value == Panel::catalog().coneVariant.toStdString()) s.cone = value; }
+        else if (key == "speaker")
+        {
+            if (Panel::catalog().speakers.contains (ui::String (value)))
+                s.speaker = value;
         }
         else if (key == "horn")
         {

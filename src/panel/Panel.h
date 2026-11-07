@@ -101,11 +101,10 @@ public:
         bool aOn = true, bOn = false;
         int back = -1;   // the box's back as the player turned it — an index of backWords — or -1, the box's own (ownBack)
         float shiftMs = 0.0f;   // B moved in time against A, ms, later positive (TIME)
+        int speaker = -1;   // the box's speaker as the player turned it — an index of the catalog's speakers — or -1, its own
+        bool wall = false;  // the wall behind the box, the guitar's switch (WALL)
+        bool cone = false;  // the speakers' cone as the catalog's variant has it (the guitar's PAPER, SPEAKER clicked)
     };
-
-    /** The mics to choose from, as the table names them (its "mic-<name>" sections), and as the columns write them. */
-    static const ui::StringArray& mics()      { static const ui::StringArray m { "md421", "sm57", "re20", "d112", "u87", "u47", "ribbon" }; return m; }
-    static const ui::StringArray& micWords()  { static const ui::StringArray m { "MD421", "SM57", "RE20", "D112", "U87", "U47", "RIBB" }; return m; }
 
     struct Cab
     {
@@ -120,13 +119,44 @@ public:
         ui::Point<float> portAt;
         ui::String mic = "md421";              // the one its table's cap section stands
         bool hornOn = true;                      // how its horn comes when the box is picked: the 1x15-classic's and the 8x10's off
+        ui::String speaker;                      // its own speaker, one of the catalog's — empty where it offers none (the bass's)
     };
 
-    static const std::vector<Cab>& cabs()
+    /** WHAT A PANEL OFFERS: its boxes, how they stand, its mics, and which boxes the table seals and which it leaves open.
+        The bass's (bassCatalog) unless a host hands it another before it draws one (useCatalog): the guitar's app hands
+        its own (GuitarCatalog.h). One for the whole program — every panel and every static below reads it. */
+    struct Catalog
+    {
+        std::vector<Cab> cabs;
+        // The boxes it offers, as they stand: its columns left to right, each from the floor up. The table's other boxes
+        // stay in cabs: a state that kept one still reads as its size.
+        std::vector<ui::StringArray> pile;
+        // The mics to choose from, as the table names them (its "mic-<name>" sections), and as the columns write them.
+        ui::StringArray mics, micWords;
+        // The boxes the table calls sealed and open (its `alignment`); every other one is ported.
+        ui::StringArray sealed, open;
+        // The speakers to choose from, as the table names them (its "speaker-<name>" sections), and as their row writes
+        // them — the guitar's; none, no row (the bass's).
+        ui::StringArray speakers, speakerWords;
+        // The boxes whose own back is half closed (`alignment = half`), and the back's cells left to right by synth::Back
+        // — none said, CLOSED PORTED OPEN (the bass's); the guitar's has HALF too.
+        ui::StringArray half;
+        std::vector<int> backRow;
+        // WALL under BACK, the switch for a wall behind the box (the guitar's): false, none (the bass's).
+        bool wallSwitch = false;
+        // The speakers' other cone, its table's "speaker-<name>-<variant>" sections — SPEAKER itself the switch, lit
+        // where it is on (the guitar's "paper"); empty, none.
+        ui::String coneVariant;
+        // How far a mic goes and where ROOM puts it: the bass's 30 cm, the guitar's a metre and a half, ROOM at one.
+        float farthestCm = 30.0f, roomM = 0.30f;
+    };
+
+    static const Catalog& bassCatalog()
     {
         using P = ui::Point<float>;
-        static const std::vector<Cab> all {
-            { "1x15-classic",    0, 0.61f, 0.56f, { P (0, 0.02f) }, 0.165f, true, P (0.22f, 0.20f), true, P (0, -0.22f), "re20", false },
+        static const Catalog bass {
+          {
+            { "1x15-classic",   0, 0.61f, 0.56f, { P (0, 0.02f) }, 0.165f, true, P (0.22f, 0.20f), true, P (0, -0.22f), "re20", false },
             { "2x10-classic-tall",  0, 0.33f, 0.61f, { P (0, 0.14f), P (0, -0.14f) }, 0.105f, false, {}, false, {} },
             { "2x10-classic",  0, 0.61f, 0.46f, { P (-0.14f, 0), P (0.14f, 0) }, 0.105f, true, P (0, 0.16f), false, {} },
             { "4x10-classic",  0, 0.61f, 0.66f, { P (-0.145f, 0.145f), P (0.145f, 0.145f), P (-0.145f, -0.145f), P (0.145f, -0.145f) },
@@ -169,22 +199,30 @@ public:
             { "4x10-light", 4, 0.56f, 0.58f, { P (-0.13f, 0.15f), P (0.13f, 0.15f), P (-0.13f, -0.11f), P (0.13f, -0.11f) },
               0.105f, true, P (0, 0.02f), true, P (0, -0.26f) },
             { "2x15-light", 4, 0.49f, 0.87f, { P (0, 0.20f), P (0, -0.16f) }, 0.165f, true, P (0, 0.40f), true, P (0, -0.38f), "d112" },
-        };
-        return all;
+          },
+            // A box of each size, no maker's name over them (the owner, 05.11) — the small on the big, the tall ones
+            // alone, the way a backline is stacked. Every size the table holds — 1x15, 1x12, 8x10, 4x10, 2x10, 6x10,
+            // 2x12, 2x15, 4x6, 8x8 — the same for every bass of the family (the owner, 05.11).
+          { { "1x15-classic", "1x12-round" }, { "8x10-classic" }, { "4x10-classic", "2x10-round" }, { "6x10-classic", "2x12-round" },
+            { "2x15-light", "4x6-neo" }, { "8x8-round" } },
+          { "md421", "sm57", "re20", "d112", "u87", "u47", "ribbon" },
+          { "MD421", "SM57", "RE20", "D112", "U87", "U47", "RIBB" },
+          { "2x10-classic-tall", "4x10-classic", "8x10-classic", "1x15-plain", "2x10-plain", "4x10-plain", "8x10-plain" },
+          {} };
+        return bass;
     }
 
-    /** The boxes it offers, as they stand: a box of each size, no maker's name over them (the owner, 05.11), its columns
-        left to right, each from the floor up — the small on the big, the tall ones alone, the way a backline is stacked.
-        Every size the table holds — 1x15, 1x12, 8x10, 4x10, 2x10, 6x10, 2x12, 2x15, 4x6, 8x8 — the same for every bass
-        of the family (the owner, 05.11). The table's other boxes stay in cabs(): a state that kept one still reads as
-        its size. */
-    static const std::vector<ui::StringArray>& pile()
-    {
-        static const std::vector<ui::StringArray> every {
-            { "1x15-classic", "1x12-round" }, { "8x10-classic" }, { "4x10-classic", "2x10-round" }, { "6x10-classic", "2x12-round" },
-            { "2x15-light", "4x6-neo" }, { "8x8-round" } };
-        return every;
-    }
+    /** The catalog every panel draws from here on: before the first is made, and once — a program offers one set. */
+    static void useCatalog (const Catalog& c) { current() = &c; }
+    static const Catalog& catalog() { return *current(); }
+private:
+    static const Catalog*& current() { static const Catalog* c = &bassCatalog(); return c; }
+public:
+
+    static const std::vector<Cab>& cabs() { return catalog().cabs; }
+    static const std::vector<ui::StringArray>& pile() { return catalog().pile; }
+    static const ui::StringArray& mics() { return catalog().mics; }
+    static const ui::StringArray& micWords() { return catalog().micWords; }
 
     /** A BOX AS THE PLAYER READS IT: its speakers and their size — "4x10" — and no maker's model (the owner, 05.11). The
         table's name stays the key a state keeps. */
@@ -195,20 +233,27 @@ public:
         return ui::String ((int) c.drivers.size()) + "x" + ui::String (inches);
     }
 
-    /** The boxes the table calls sealed (data/cabinets.txt, `alignment`); every other one is ported. */
-    static bool sealed (const ui::String& name)
-    {
-        static const ui::StringArray closed { "2x10-classic-tall", "4x10-classic", "8x10-classic", "1x15-plain", "2x10-plain", "4x10-plain", "8x10-plain" };
-        return closed.contains (name);
-    }
+    /** The boxes the table calls sealed (data/cabinets.txt, `alignment`). */
+    static bool sealed (const ui::String& name) { return catalog().sealed.contains (name); }
 
     /** THE BOX'S BACK, as its switch is marked — a click each, the one it stands at in the block's orange; the index the
         engine's (synth::Back). A box comes with its own (ownBack) until one is turned, and that one stays from
         box to box; turned, a sealed one gets a port at its foot. */
-    static constexpr const char* backWords[] { "CLOSED", "PORTED", "OPEN" };
-    static constexpr int backs = 3;
-    static int ownBack (int cab) { return sealed (cabs()[(size_t) cab].name) ? 0 : 1; }
+    static constexpr const char* backWords[] { "CLOSED", "PORTED", "OPEN", "HALF" };
+    static int backs() { return catalog().backRow.empty() ? 3 : (int) catalog().backRow.size(); }
+    static int backAt (int cell) { return catalog().backRow.empty() ? cell : catalog().backRow[(size_t) cell]; }
+    static int ownBackOf (const ui::String& name)
+    {
+        return sealed (name) ? 0 : catalog().open.contains (name) ? 2 : catalog().half.contains (name) ? 3 : 1;
+    }
+    static int ownBack (int cab) { return ownBackOf (cabs()[(size_t) cab].name); }
     static int backOf (int cab, const Setup& s) { return s.back >= 0 ? s.back : ownBack (cab); }
+
+    /** THE BOX'S SPEAKER, the guitar's, as its row under the back is marked: the box's own (ownSpeaker) until one is
+        turned, and that one stays from box to box, as the back does. -1 where the catalog offers none. */
+    static bool hasSpeakers() { return ! catalog().speakers.isEmpty(); }
+    static int ownSpeaker (int cab) { return cab < 0 ? -1 : catalog().speakers.indexOf (cabs()[(size_t) cab].speaker); }
+    static int speakerOf (int cab, const Setup& s) { return s.speaker >= 0 ? s.speaker : ownSpeaker (cab); }
 
     /** Where a box's port is drawn: the table's, or the one a sealed box is given when turned ported — in the middle of
         its foot (synth::portAtFoot). */
@@ -223,6 +268,8 @@ public:
     {
         if (s.back < 0 && from >= 0)
             s.back = ownBack (from);
+        if (s.speaker < 0 && from >= 0)
+            s.speaker = ownSpeaker (from);
         if (from < 0 || cabs()[(size_t) from].hornOn != cabs()[(size_t) to].hornOn)
             s.a.horn = cabs()[(size_t) to].hornOn;
         if (s.a.mic.isEmpty())
@@ -237,7 +284,8 @@ public:
         const auto spot = [&s] (const Mic& m)
         { return Spot { (float) m.x, (float) m.y, (float) m.distance, s.horn, ui::String (m.model), (float) m.angle, (float) s.hornDb }; };
         return { indexOf (ui::String (s.box)), { spot (s.a), spot (s.b), (float) s.blend, s.align, s.invert, s.a.on, s.b.on, s.back,
-                                                   (float) s.shiftMs } };
+                                                   (float) s.shiftMs, catalog().speakers.indexOf (ui::String (s.speaker)), s.wall,
+                                                   ! s.cone.empty() } };
     }
 
     /** A STATE AS A LINE READS IT: its box's size, its back where turned from the box's own, and the mics heard —
@@ -247,8 +295,11 @@ public:
         const int at = indexOf (ui::String (s.box));
         const auto word = [at] (const Mic& m)
         { return (m.model.empty() ? at >= 0 ? cabs()[(size_t) at].mic : ui::String() : ui::String (m.model)).toUpperCase(); };
+        const int speaker = catalog().speakers.indexOf (ui::String (s.speaker));   // the guitar's, where turned from the box's own
         const auto box = at < 0 ? ui::String (s.box)
-                       : wordOf (at) + (s.back >= 0 && s.back != ownBack (at) ? " " + ui::String (backWords[s.back]) : ui::String());
+                       : wordOf (at) + (s.back >= 0 && s.back != ownBack (at) ? " " + ui::String (backWords[s.back]) : ui::String())
+                             + (speaker >= 0 && speaker != ownSpeaker (at) ? " " + catalog().speakerWords[speaker] : ui::String())
+                             + (s.wall ? " WALL" : "") + (s.cone.empty() ? ui::String() : " " + ui::String (s.cone).toUpperCase());
         return box + ui::String::fromUTF8 (" \xc2\xb7 ")
              + (s.a.on ? word (s.a) : ui::String()) + (s.a.on && s.b.on ? "+" : "") + (s.b.on ? word (s.b) : ui::String());
     }
@@ -259,6 +310,11 @@ public:
         State s;
         s.box = cabs()[(size_t) cab].name.toStdString();
         s.back = su.back;
+        if (su.speaker >= 0 && su.speaker < catalog().speakers.size())
+            s.speaker = catalog().speakers[su.speaker].toStdString();
+        s.wall = su.wall;
+        if (su.cone && ! catalog().coneVariant.isEmpty())
+            s.cone = catalog().coneVariant.toStdString();
         s.horn = su.a.horn;
         s.hornDb = su.a.hornDb;
         s.a = mic (su.a, su.aOn);
@@ -416,7 +472,7 @@ public:
         else if (drag == Drag::distance)
         {
             const auto t = dragTrack;
-            m.distance = minCm * std::pow (maxCm / minCm, ui::jlimit (0.0f, 1.0f, (t.getBottom() - e.position.y) / t.getHeight())) / 100.0f;
+            m.distance = minCm * std::pow (maxCm() / minCm, ui::jlimit (0.0f, 1.0f, (t.getBottom() - e.position.y) / t.getHeight())) / 100.0f;
         }
         else if (drag == Drag::angle)
             m.angle = maxAngle * along (angleTrack (dragMic), e.position.x);
@@ -464,7 +520,8 @@ public:
 
 private:
     static constexpr float maxReach = 1.1f;    // how far from the cap the mic may go, in radii: just past the rim, in sight
-    static constexpr float minCm = 1.0f, maxCm = 30.0f, maxAngle = 60.0f;
+    static constexpr float minCm = 1.0f, maxAngle = 60.0f;
+    static float maxCm() { return catalog().farthestCm; }
     static constexpr int leftW = 460, gutter = 14;   // the pile's half; the hair between the halves
     static constexpr int footH = footRowH, responseH = 208;  // the foot's row under it all; the response's band over it
     int footHeight() const { return onClose != nullptr || showDefault ? footH : 0; }
@@ -476,7 +533,7 @@ private:
 
     /** WHAT A CLICK AT A POINT WORKS — the one thing both the hand's light and its press go by (hotAt), so what is lit is
         what a click does. */
-    enum class Part { none, download, downloadFormat, back, cab, cabHorn, horn, distance, place, micRow, angle, shift, mic, close, reset, find,
+    enum class Part { none, download, downloadFormat, back, speaker, speakerCone, wall, cab, cabHorn, horn, distance, place, micRow, angle, shift, mic, close, reset, find,
                       align, invert, blend };
     struct Hot
     {
@@ -558,8 +615,11 @@ private:
     // Over it the chosen box's back, in the room the pile leaves there (the owner, 05.11); under it the box's size.
     static constexpr int backTop = 6, backIconH = 40, backWordH = 16, nameH = footH;
     static constexpr int pileTop = backTop + backIconH + 2 + backWordH + 6;
+    // ...and under the back, where the catalog offers speakers, their row: the pile a row lower.
+    static constexpr int speakerRowH = 24;
+    static int pileTopNow() { return pileTop + (hasSpeakers() ? speakerRowH : 0); }
 
-    ui::Rectangle<int> pileArea() const { return { 0, pileTop, leftW, bodyH() - pileTop - 2 }; }
+    ui::Rectangle<int> pileArea() const { return { 0, pileTopNow(), leftW, bodyH() - pileTopNow() - 2 }; }
 
     /** The line under the pile: DOWNLOAD IR at its right. */
     ui::Rectangle<int> nameRow() const { return { 0, getHeight() - nameH + 4, leftW, nameH - 4 }; }
@@ -585,23 +645,56 @@ private:
     /** THE BACK over the pile, centred: BACK, then a cell each — the box cut through from the side (paintBack), its word
         under it. */
     static constexpr float backCellW = 84.0f, backCellGap = 18.0f, backLabelGap = 16.0f;
+    static float backGap() { return backs() > 3 ? 8.0f : backCellGap; }   // four cells closer, to stay in the half
 
     ui::Rectangle<float> backWordArea() const
     {
         const float label = ui::look().trackedWidth ("BACK", ui::look().font (13.0f), 0.08f) + 4.0f;
-        const float total = label + backLabelGap + (float) backs * backCellW + (float) (backs - 1) * backCellGap;
+        const float total = label + backLabelGap + (float) backs() * backCellW + (float) (backs() - 1) * backGap();
         return { 0.5f * ((float) leftW - total), (float) backTop, label, (float) backIconH };
+    }
+
+    /** WALL, the guitar's: in the back's label column, on its words' line, under BACK. */
+    ui::Rectangle<float> wallArea() const
+    {
+        const auto label = backWordArea();
+        return { label.getX(), (float) (backTop + backIconH + 2), label.getWidth(), (float) backWordH };
     }
 
     ui::Rectangle<float> backCell (int i) const
     {
-        const float x = backWordArea().getRight() + backLabelGap + (float) i * (backCellW + backCellGap);
+        const float x = backWordArea().getRight() + backLabelGap + (float) i * (backCellW + backGap());
         return { x, (float) backTop, backCellW, (float) (backIconH + 2 + backWordH) };
+    }
+
+    /** THE SPEAKERS under the back, the guitar's: SPEAKER, then a word each, the row centred as the back's is. */
+    static constexpr float speakerGap = 12.0f;
+
+    ui::Rectangle<float> speakerWordArea() const
+    {
+        const auto font = ui::look().font (13.0f);
+        float total = ui::look().trackedWidth ("SPEAKER", font, 0.08f) + 4.0f + backLabelGap;
+        for (const auto& w : catalog().speakerWords)
+            total += ui::look().trackedWidth (w, font, 0.06f) + speakerGap;
+        total -= speakerGap;
+        return { 0.5f * ((float) leftW - total), (float) pileTop - 2.0f, ui::look().trackedWidth ("SPEAKER", font, 0.08f) + 4.0f,
+                 (float) speakerRowH - 4.0f };
+    }
+
+    ui::Rectangle<float> speakerCell (int i) const
+    {
+        const auto font = ui::look().font (13.0f);
+        float x = speakerWordArea().getRight() + backLabelGap;
+        for (int k = 0; k < i; ++k)
+            x += ui::look().trackedWidth (catalog().speakerWords[k], font, 0.06f) + speakerGap;
+        return { x, speakerWordArea().getY(), ui::look().trackedWidth (catalog().speakerWords[i], font, 0.06f),
+                 speakerWordArea().getHeight() };
     }
 
     /** A BOX CUT THROUGH FROM THE SIDE, as its back is: the baffle at the left with the speaker on it in profile, its cone
         narrowing in to the magnet, the top and the bottom, and at the right the back — whole (CLOSED); whole, the port's
-        tube in from the baffle under the speaker (PORTED); gone but for a lip at the top, the sound out of it (OPEN). */
+        tube in from the baffle under the speaker (PORTED); gone but for a lip at the top, the sound out of it (OPEN); its
+        upper half, the sound out of the lower (HALF, the guitar's). */
     static void paintBack (ui::Graphics& g, int kind, ui::Rectangle<float> b, ui::Colour colour)
     {
         const float x0 = b.getX(), x1 = b.getRight(), y0 = b.getY(), y1 = b.getBottom(), w = b.getWidth(), h = b.getHeight();
@@ -621,7 +714,15 @@ private:
         else
             g.drawLine (x0, y0, x0, y1, baffle);
 
-        if (kind != 2)
+        if (kind == 3)
+        {
+            g.drawLine (x1, y0, x1, y0 + 0.5f * h, line);
+            ui::Path out;
+            out.addCentredArc (x1 - 1.0f, y0 + 0.78f * h, 5.0f, 5.0f, 0.0f, 0.5f * ui::MathConstants<float>::pi - 0.7f,
+                               0.5f * ui::MathConstants<float>::pi + 0.7f, true);
+            g.strokePath (out, ui::PathStrokeType (line));
+        }
+        else if (kind != 2)
             g.drawLine (x1, y0, x1, y1, line);
         else
         {
@@ -795,9 +896,19 @@ private:
         {
             // The chosen box's back, a cell each.
             if (chosen >= 0)
-                for (int i = 0; i < backs; ++i)
-                    if (backCell (i).expanded (backCellGap / 2, 2.0f).contains (p))
+                for (int i = 0; i < backs(); ++i)
+                    if (backCell (i).expanded (backGap() / 2, 2.0f).contains (p))
                         return { Part::back, -1, i };
+            // ...the wall behind it, where the catalog has the switch...
+            if (chosen >= 0 && catalog().wallSwitch && wallArea().expanded (4.0f, 2.0f).contains (p))
+                return { Part::wall };
+            // ...and its speaker, where it has a row of them — SPEAKER itself the cone's switch, where there is a variant.
+            if (chosen >= 0 && hasSpeakers() && catalog().coneVariant.isNotEmpty() && speakerWordArea().expanded (4.0f, 2.0f).contains (p))
+                return { Part::speakerCone };
+            if (chosen >= 0 && hasSpeakers())
+                for (int i = 0; i < catalog().speakers.size(); ++i)
+                    if (speakerCell (i).expanded (speakerGap / 2, 2.0f).contains (p))
+                        return { Part::speaker, -1, i };
 
             const int at = cabAt (p);
             if (at < 0)
@@ -875,7 +986,25 @@ private:
 
             // The back: kept as turned, its own one too, so every box after comes with it.
             case Part::back:
-                setup_.back = h.i;
+                setup_.back = backAt (h.i);
+                send();
+                return;
+
+            // The speakers' other cone, on and off; kept from box to box as the speaker is.
+            case Part::speakerCone:
+                setup_.cone = ! setup_.cone;
+                send();
+                return;
+
+            // The wall behind the box, on and off; kept from box to box as the back is.
+            case Part::wall:
+                setup_.wall = ! setup_.wall;
+                send();
+                return;
+
+            // The speaker, kept as the back is.
+            case Part::speaker:
+                setup_.speaker = h.i;
                 send();
                 return;
 
@@ -906,7 +1035,7 @@ private:
                 return;
 
             case Part::place:
-                putAt (h.m, places[h.i]);
+                putAt (h.m, placeAt (h.i));
                 return;
 
             case Part::micRow:
@@ -1018,7 +1147,7 @@ private:
         g.setColour (ui::look().hair);
         g.fillRect (ui::Rectangle<float> ((float) area.getX(), (float) area.getBottom() - 1.0f, (float) area.getWidth(), 1.0f));
         // The back over the pile kept apart from it, as the halves are, by a hair across up to theirs (the owner, 05.11).
-        g.fillRect (ui::Rectangle<float> (0.0f, (float) pileTop - 3.0f, (float) leftW + 0.5f * gutter, 1.0f));
+        g.fillRect (ui::Rectangle<float> (0.0f, (float) pileTopNow() - 3.0f, (float) leftW + 0.5f * gutter, 1.0f));
 
         for (const auto& [index, box] : layOut())
             paintCab (g, cabs()[(size_t) index], box, setup_, index == chosen, index == hoverCab(), 1.0f, false,
@@ -1048,9 +1177,10 @@ private:
         {
             g.setColour (ui::look().txFaint);
             ui::look().drawTracked (g, "BACK", backWordArea(), font, 0.08f, ui::Justification::centredLeft);
-            for (int i = 0; i < backs; ++i)
+            for (int i = 0; i < backs(); ++i)
             {
-                const bool on = i == backOf (chosen, setup_), over = ! on && isHot (Part::back, -1, i);
+                const int kind = backAt (i);
+                const bool on = kind == backOf (chosen, setup_), over = ! on && isHot (Part::back, -1, i);
                 auto cell = backCell (i);
                 if (over)   // framed as a box under the hand is
                 {
@@ -1058,16 +1188,50 @@ private:
                     g.drawRoundedRectangle (cell.expanded (6.0f, 2.0f), 3.0f, 1.0f);
                 }
                 const auto word = cell.removeFromBottom ((float) backWordH);
-                paintBack (g, i, cell.withHeight ((float) backIconH).withSizeKeepingCentre (56.0f, 34.0f),
+                paintBack (g, kind, cell.withHeight ((float) backIconH).withSizeKeepingCentre (56.0f, 34.0f),
                            on ? ui::look().orange : ui::look().violet.withAlpha (over ? 0.9f : 0.6f));
                 g.setColour (on ? ui::look().orange : over ? ui::look().tx : ui::look().txDim);
-                ui::look().drawTracked (g, backWords[i], word, font, 0.06f, ui::Justification::centred);
+                ui::look().drawTracked (g, backWords[kind], word, font, 0.06f, ui::Justification::centred);
                 // The box's own back, a dot before its word: where DEFAULT goes back to.
-                if (i == ownBack (chosen))
+                if (kind == ownBack (chosen))
                 {
-                    const float w = ui::look().trackedWidth (backWords[i], font, 0.06f);
+                    const float w = ui::look().trackedWidth (backWords[kind], font, 0.06f);
                     g.setColour (ui::look().txDim);
                     g.fillEllipse (ui::Rectangle<float> (4.0f, 4.0f).withCentre ({ word.getCentreX() - 0.5f * w - 8.0f, word.getCentreY() }));
+                }
+            }
+        }
+
+        // WALL under BACK, where the catalog has it: orange on, dim off, faint with the back closed — nothing gets out there.
+        if (chosen >= 0 && catalog().wallSwitch)
+        {
+            const bool over = isHot (Part::wall), closed = backOf (chosen, setup_) == 0;
+            g.setColour (setup_.wall ? (closed ? ui::look().orange.withAlpha (0.45f) : ui::look().orange)
+                                     : over ? ui::look().tx : closed ? ui::look().txFaint : ui::look().txDim);
+            ui::look().drawTracked (g, "WALL", wallArea(), font, 0.08f, ui::Justification::centredLeft);
+        }
+
+        // Under it the speakers, where the catalog has them: SPEAKER, then their words, the box's own dotted as its back is.
+        if (chosen >= 0 && hasSpeakers())
+        {
+            // SPEAKER, the cone's switch where the catalog has a variant: orange with it on, lit under the hand.
+            g.setColour (setup_.cone ? ui::look().orange : isHot (Part::speakerCone) ? ui::look().tx : ui::look().txFaint);
+            ui::look().drawTracked (g, "SPEAKER", speakerWordArea(), font, 0.08f, ui::Justification::centredLeft);
+            for (int i = 0; i < catalog().speakers.size(); ++i)
+            {
+                const bool on = i == speakerOf (chosen, setup_), over = ! on && isHot (Part::speaker, -1, i);
+                const auto cell = speakerCell (i);
+                if (over)
+                {
+                    g.setColour (ui::look().violet.withAlpha (0.7f));
+                    g.drawRoundedRectangle (cell.expanded (6.0f, 0.0f), 3.0f, 1.0f);
+                }
+                g.setColour (on ? ui::look().orange : over ? ui::look().tx : ui::look().txDim);
+                ui::look().drawTracked (g, catalog().speakerWords[i], cell, font, 0.06f, ui::Justification::centred);
+                if (i == ownSpeaker (chosen))
+                {
+                    g.setColour (ui::look().txDim);
+                    g.fillEllipse (ui::Rectangle<float> (4.0f, 4.0f).withCentre ({ cell.getX() - 7.0f, cell.getCentreY() }));
                 }
             }
         }
@@ -1092,7 +1256,7 @@ public:
         g.drawRoundedRectangle (box, c.family == 1 ? 4.0f : 2.0f, orange ? 1.5f : 1.0f);
 
         // The port where the back the chosen one is turned to has one: none closed, at its foot on a sealed box ported.
-        if (const int back = isChosen ? setup.back : -1; back < 0 || back == (sealed (c.name) ? 0 : 1) ? c.port : back == 1)
+        if (const int back = isChosen ? setup.back : -1; back < 0 || back == ownBackOf (c.name) ? c.port : back == 1)
         {
             const auto at = portOf (c);
             g.setColour (ui::Colours::black);
@@ -1301,7 +1465,11 @@ private:
         return { distX (m) - 3.0f, top, 6.0f, bottom - top };
     }
 
-    static ui::String cmOf (float distance) { return ui::String (ui::roundToInt (distance * 100.0f)) + " cm"; }
+    static ui::String cmOf (float distance)   // a metre and on, in metres: "1.2 m"
+    {
+        const int cm = ui::roundToInt (distance * 100.0f);
+        return cm >= 100 ? ui::String (cm / 100) + "." + ui::String ((cm % 100) / 10) + " m" : ui::String (cm) + " cm";
+    }
 
     /** ...and by the mic on the speaker, under its spot — a word to read, no slider (the owner, 05.11). */
     ui::Rectangle<float> distLabel (int m) const
@@ -1409,6 +1577,8 @@ private:
     struct Place { const char* word; float r, distance, angle; };
     static constexpr Place places[] { { "CAP", 0.0f, 0.05f, 0.0f }, { "EDGE", 0.8f, 0.04f, 0.0f },
                                       { "OFF", 0.5f, 0.05f, 35.0f }, { "ROOM", 0.0f, 0.30f, 0.0f } };
+    /** ...ROOM as far as the catalog says (the guitar's a metre). */
+    static Place placeAt (int i) { auto p = places[i]; if (i == 3) p.distance = catalog().roomM; return p; }
     void putAt (int m, const Place& p)
     {
         takeUp (m);
@@ -1441,7 +1611,7 @@ private:
 
     static float nearness (float distance)   // 0 at the cone, 1 at 30 cm
     {
-        return std::log (ui::jlimit (minCm, maxCm, distance * 100.0f) / minCm) / std::log (maxCm / minCm);
+        return std::log (ui::jlimit (minCm, maxCm(), distance * 100.0f) / minCm) / std::log (maxCm() / minCm);
     }
 
     bool heard (int m) const { return m == 0 ? setup_.aOn : setup_.bOn; }
@@ -1526,10 +1696,10 @@ private:
         for (int i = 0; i < 4; ++i)
         {
             const bool over = isHot (Part::place, m, i);
-            g.setColour ((standsAt (sp, places[i]) ? (over ? colour.brighter (0.3f) : colour) : over ? ui::look().tx : ui::look().txDim)
+            g.setColour ((standsAt (sp, placeAt (i)) ? (over ? colour.brighter (0.3f) : colour) : over ? ui::look().tx : ui::look().txDim)
                              .withMultipliedAlpha (dim));
             auto cell = placeArea (m, i).toFloat();
-            ui::look().drawTracked (g, places[i].word, m == 0 ? cell : cell.withTrimmedRight (4.0f), font, 0.06f, side);
+            ui::look().drawTracked (g, placeAt (i).word, m == 0 ? cell : cell.withTrimmedRight (4.0f), font, 0.06f, side);
         }
 
         // Its angle, a word and its value over a track — the value on the side away from the word.
