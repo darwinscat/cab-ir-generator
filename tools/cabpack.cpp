@@ -173,7 +173,7 @@ namespace
             if (! m.on) return std::string ("off\t\t\t\t");
             return m.model + "\t" + number (m.x, 3) + "\t" + number (m.y, 3) + "\t" + number (m.distance, 3) + "\t" + number (m.angle, 1);
         };
-        return it.file + "\t" + it.style + "\t" + it.name + "\t" + Panel::wordOf (at).toStdString() + "\t" + backWord (back) + "\t"
+        return it.file + "\t" + it.style + "\t" + it.name + "\t" + sizeOf (it.state.box) + "\t" + backWord (back) + "\t"
              + hornWord (s) + "\t" + mic (s.a) + "\t" + mic (s.b) + "\t" + number (s.blend, 3) + "\t" + (s.align ? "on" : "off") + "\t"
              + (s.invert ? "inverted" : "normal") + "\t" + number (s.shiftMs, 3) + "\t" + Panel::labelOf (s).toStdString() + "\t"
              + linkTo (s) + "\n";
