@@ -166,9 +166,9 @@ public:
         // Where the response's line reddens with a pit, dB — the bass's 3; the guitar's 5, its speakers' own dips deeper
         // (the owner, 07.11). The table says the same (pit_red_db, synth::pitRedOf) for FIND and the tools.
         float pitRedDb = 3.0f;
-        // Whose outline stands at the response's left, so it reads at a glance which one this is (the owner, 07.11):
-        // false the bass's, true the guitar's.
-        bool guitarOutline = false;
+        // Its instrument's name, big and outlined at the response's top left, so it reads at a glance which builder this
+        // is (the owner, 07.11).
+        ui::String instrumentWord = "BASS";
     };
 
     static const Catalog& bassCatalog()
@@ -2353,109 +2353,21 @@ private:
         return responseArea().toFloat().withTrimmedLeft (36.0f).withTrimmedRight (12.0f).withTrimmedTop (9.0f).withTrimmedBottom (20.0f);
     }
 
-    /** THE INSTRUMENT, OUTLINED, at the response's left, upright, under its curve — a guitar's, its body with two horns
-        and three pickups, or a bass's, its body broader, its neck longer and its pickup split — so it reads at a glance
-        which builder this is (the owner, 07.11). Our own outlines, drawn smooth through their points (closedSpline), one
-        scale for both: the bass the taller. */
-    void paintOutline (ui::Graphics& g, ui::Rectangle<float> plot) const
+    /** THE INSTRUMENT'S NAME at the response's top left, big, its letters outlined — BASS, GUITAR — so it reads at a glance
+        which builder this is (the owner, 07.11): its line drawn round it, its inside the panel's again, under the comb's
+        colours and the grid. */
+    void paintInstrument (ui::Graphics& g, ui::Rectangle<float> plot) const
     {
-        using P = ui::Point<float>;
-        const bool guitar = catalog().guitarOutline;
-        // Units: the body's width about 1, its middle the origin, up positive; the neck from the body to the nut, the head over it.
-        static const std::vector<P> guitarBody { { 0.0f, -0.66f }, { 0.28f, -0.62f }, { 0.45f, -0.48f }, { 0.50f, -0.25f }, { 0.44f, -0.04f },
-            { 0.40f, 0.10f }, { 0.42f, 0.28f }, { 0.37f, 0.44f }, { 0.28f, 0.43f }, { 0.20f, 0.29f }, { 0.12f, 0.24f }, { -0.12f, 0.26f },
-            { -0.20f, 0.35f }, { -0.27f, 0.56f }, { -0.36f, 0.57f }, { -0.42f, 0.40f }, { -0.44f, 0.18f }, { -0.42f, 0.0f },
-            { -0.48f, -0.22f }, { -0.46f, -0.46f }, { -0.30f, -0.62f } };
-        static const std::vector<P> bassBody { { 0.0f, -0.70f }, { 0.30f, -0.66f }, { 0.48f, -0.50f }, { 0.53f, -0.26f }, { 0.46f, -0.04f },
-            { 0.41f, 0.10f }, { 0.43f, 0.26f }, { 0.38f, 0.40f }, { 0.29f, 0.40f }, { 0.21f, 0.28f }, { 0.12f, 0.24f }, { -0.12f, 0.26f },
-            { -0.21f, 0.36f }, { -0.30f, 0.60f }, { -0.40f, 0.61f }, { -0.46f, 0.42f }, { -0.47f, 0.18f }, { -0.44f, 0.0f },
-            { -0.51f, -0.24f }, { -0.49f, -0.49f }, { -0.32f, -0.66f } };
-        static const std::vector<P> guitarHead { { 0.065f, 0.0f }, { 0.09f, 0.20f }, { 0.10f, 0.40f }, { 0.06f, 0.51f }, { -0.04f, 0.52f },
-            { -0.16f, 0.47f }, { -0.21f, 0.37f }, { -0.13f, 0.29f }, { -0.08f, 0.20f }, { -0.065f, 0.0f } };
-        static const std::vector<P> bassHead { { 0.07f, 0.0f }, { 0.10f, 0.20f }, { 0.11f, 0.42f }, { 0.07f, 0.55f }, { -0.05f, 0.57f },
-            { -0.20f, 0.52f }, { -0.26f, 0.40f }, { -0.15f, 0.30f }, { -0.09f, 0.20f }, { -0.07f, 0.0f } };
-        const auto& body = guitar ? guitarBody : bassBody;
-        const auto& head = guitar ? guitarHead : bassHead;
-        const float neckFrom = 0.20f, nut = guitar ? 1.75f : 2.15f, bottom = guitar ? -0.66f : -0.70f;
-        const float neckBody = guitar ? 0.085f : 0.09f, neckNut = guitar ? 0.065f : 0.07f;   // the neck's half width, at the body and the nut
-        constexpr float tallest = 2.15f + 0.57f + 0.70f;   // the bass, nut to the head's top and down to the body's foot
-
-        const float s = (plot.getHeight() - 10.0f) / tallest;   // px a unit
-        const P at { plot.getX() + 14.0f + 0.53f * s, plot.getBottom() - 4.0f + bottom * s };   // the body's middle, its foot on the floor
-        const auto onScreen = [&] (P u) { return P (at.x + u.x * s, at.y - u.y * s); };
-
+        const auto big = ui::look().font (instrumentSize);
+        const ui::Rectangle<float> r (plot.getX() + 14.0f, plot.getY() + 6.0f, plot.getWidth() * 0.5f, instrumentSize + 6.0f);
         g.setColour (ui::look().violet.withAlpha (0.55f));
-        const ui::PathStrokeType line (1.3f, ui::PathStrokeType::curved, ui::PathStrokeType::rounded);
-        // The body round, the neck's sides over its pocket, the head round from the nut.
-        g.strokePath (closedSpline (body, onScreen), line);
-        ui::Path neck;
-        neck.startNewSubPath (onScreen ({ neckBody, neckFrom }));
-        neck.lineTo (onScreen ({ neckNut, nut }));
-        neck.startNewSubPath (onScreen ({ -neckBody, neckFrom }));
-        neck.lineTo (onScreen ({ -neckNut, nut }));
-        neck.startNewSubPath (onScreen ({ -neckNut, nut }));
-        neck.lineTo (onScreen ({ neckNut, nut }));
-        g.strokePath (neck, line);
-        std::vector<P> headAt;
-        for (const auto& u : head)
-            headAt.push_back ({ u.x, u.y + nut });
-        g.strokePath (closedSpline (headAt, onScreen, false), line);
-
-        // Its pickups and its bridge: three across the guitar's, the last slanted; the bass's split, its halves offset.
-        g.setColour (ui::look().lilac.withAlpha (0.5f));
-        ui::Path parts;
-        const auto bar = [&] (P a, P b, float half)   // a pickup from a to b, `half` its half height
-        {
-            const P d (b.x - a.x, b.y - a.y);
-            const float len = std::hypot (d.x, d.y), nx = -d.y / len * half, ny = d.x / len * half;
-            parts.startNewSubPath (onScreen ({ a.x + nx, a.y + ny }));
-            parts.lineTo (onScreen ({ b.x + nx, b.y + ny }));
-            parts.lineTo (onScreen ({ b.x - nx, b.y - ny }));
-            parts.lineTo (onScreen ({ a.x - nx, a.y - ny }));
-            parts.lineTo (onScreen ({ a.x + nx, a.y + ny }));
-        };
-        if (guitar)
-        {
-            bar ({ -0.12f, 0.06f }, { 0.12f, 0.06f }, 0.025f);
-            bar ({ -0.12f, -0.12f }, { 0.12f, -0.12f }, 0.025f);
-            bar ({ -0.12f, -0.27f }, { 0.12f, -0.33f }, 0.025f);
-            bar ({ -0.13f, -0.46f }, { 0.13f, -0.46f }, 0.03f);
-        }
-        else
-        {
-            bar ({ -0.13f, -0.06f }, { 0.0f, -0.06f }, 0.035f);
-            bar ({ 0.0f, -0.15f }, { 0.13f, -0.15f }, 0.035f);
-            bar ({ -0.14f, -0.48f }, { 0.14f, -0.48f }, 0.035f);
-        }
-        g.strokePath (parts, ui::PathStrokeType (1.1f, ui::PathStrokeType::curved, ui::PathStrokeType::rounded));
+        for (const auto d : { ui::Point<float> (-1, -1), ui::Point<float> (0, -1), ui::Point<float> (1, -1), ui::Point<float> (-1, 0),
+                              ui::Point<float> (1, 0), ui::Point<float> (-1, 1), ui::Point<float> (0, 1), ui::Point<float> (1, 1) })
+            ui::look().drawTracked (g, catalog().instrumentWord, r.translated (d.x, d.y), big, 0.08f, ui::Justification::centredLeft);
+        g.setColour (ui::look().panel);
+        ui::look().drawTracked (g, catalog().instrumentWord, r, big, 0.08f, ui::Justification::centredLeft);
     }
-
-    /** A smooth line through `points` (Catmull-Rom, eight steps a span), mapped by `onScreen` — round, or open from the
-        first to the last. */
-    template <typename Map>
-    static ui::Path closedSpline (const std::vector<ui::Point<float>>& points, Map onScreen, bool closed = true)
-    {
-        ui::Path path;
-        const int n = (int) points.size();
-        const auto pt = [&] (int i) { return points[(size_t) (closed ? (i % n + n) % n : ui::jlimit (0, n - 1, i))]; };
-        const int spans = closed ? n : n - 1;
-        for (int i = 0; i < spans; ++i)
-        {
-            const auto p0 = pt (i - 1), p1 = pt (i), p2 = pt (i + 1), p3 = pt (i + 2);
-            for (int k = i == 0 ? 0 : 1; k <= 8; ++k)
-            {
-                const float t = (float) k / 8.0f, t2 = t * t, t3 = t2 * t;
-                const auto c = [&] (float a, float b, float c2, float d)
-                { return 0.5f * (2.0f * b + (-a + c2) * t + (2.0f * a - 5.0f * b + 4.0f * c2 - d) * t2 + (-a + 3.0f * b - 3.0f * c2 + d) * t3); };
-                const auto q = onScreen (ui::Point<float> (c (p0.x, p1.x, p2.x, p3.x), c (p0.y, p1.y, p2.y, p3.y)));
-                if (i == 0 && k == 0)
-                    path.startNewSubPath (q);
-                else
-                    path.lineTo (q);
-            }
-        }
-        return path;
-    }
+    static constexpr float instrumentSize = 34.0f;
 
     void paintResponse (ui::Graphics& g) const
     {
@@ -2467,6 +2379,8 @@ private:
 
         const auto xOf = [p] (float hz) { return p.getX() + p.getWidth() * std::log (hz / 30.0f) / std::log (12000.0f / 30.0f); };
         const auto yOf = [p] (float db) { return p.getY() + (responseTop - db) / (responseTop - responseBottom) * p.getHeight(); };
+
+        paintInstrument (g, p);
 
         // Under it all, with two mics heard, where they meet (the owner, 05.11): green where they add in phase, red
         // where they cancel — the stronger, the deeper, full at 6 dB.
@@ -2501,8 +2415,6 @@ private:
             g.setColour (ui::look().txFaint);
             ui::look().drawTracked (g, l.word, { area.getX() + 2.0f, y - 8.0f, 28.0f, 16.0f }, font, 0.0f, ui::Justification::centredRight);
         }
-
-        paintOutline (g, p);
 
         const auto curve = [&] (const std::vector<float>& db, ui::Colour colour, float width, int from = 0, int to = responsePoints - 1)
         {

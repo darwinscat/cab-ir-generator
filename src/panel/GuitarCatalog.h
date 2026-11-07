@@ -44,7 +44,7 @@ inline const Panel::Catalog& guitarCatalog()
       30.0f, 0.30f,   // the mic as far as the bass's, 30 cm, ROOM there too — no room round the box (the owner, 07.11)
       {}, {},         // no ROOM row
       5.0f,     // the line reddens with a pit from 5 dB (the table's pit_red_db, the same)
-      true };   // a guitar's outline at the response's left
+      "GUITAR" };   // at the response's top left
     return guitar;
 }
 
