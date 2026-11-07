@@ -2709,8 +2709,8 @@ private:
         }
     }
 
-    /** The "?" — a ring, lit under the hand and while its window is out, its line orange once a click keeps it — and over
-        everything the window out, its text at 13 px. */
+    /** The "?" — an orange ring, so it is seen (the owner, 07.11), brighter under the hand and while its window is out, and
+        thicker once a click keeps it — and over everything the window out, its text at 13 px. */
     void paintHelp (ui::Graphics& g) const
     {
         const auto font = ui::look().font (helpTextSize);
@@ -2720,9 +2720,9 @@ private:
             const bool open = helpOpen == i, lit = open || isHot (Part::help, -1, i);
             g.setColour (ui::look().panel2);
             g.fillEllipse (m);
-            g.setColour (open && helpPinned ? ui::look().orange : lit ? ui::look().lilac : ui::look().txFaint);
-            g.drawEllipse (m, 1.2f);
-            g.setColour (lit ? ui::look().tx : ui::look().txDim);
+            const auto ink = lit ? ui::look().orange.brighter (0.3f) : ui::look().orange;
+            g.setColour (ink);
+            g.drawEllipse (m.reduced (open && helpPinned ? 0.3f : 0.0f), open && helpPinned ? 1.8f : 1.3f);
             ui::look().drawTracked (g, "?", m, font, 0.0f, ui::Justification::centred);
         }
         if (helpOpen < 0)
