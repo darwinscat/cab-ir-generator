@@ -147,6 +147,8 @@ public:
         // The speakers' other cone, its table's "speaker-<name>-<variant>" sections — SPEAKER itself the switch, lit
         // where it is on (the guitar's "paper"); empty, none.
         ui::String coneVariant;
+        // How far a mic goes and where ROOM puts it: the bass's 30 cm, the guitar's a metre and a half, ROOM at one.
+        float farthestCm = 30.0f, roomM = 0.30f;
     };
 
     static const Catalog& bassCatalog()
@@ -470,7 +472,7 @@ public:
         else if (drag == Drag::distance)
         {
             const auto t = dragTrack;
-            m.distance = minCm * std::pow (maxCm / minCm, ui::jlimit (0.0f, 1.0f, (t.getBottom() - e.position.y) / t.getHeight())) / 100.0f;
+            m.distance = minCm * std::pow (maxCm() / minCm, ui::jlimit (0.0f, 1.0f, (t.getBottom() - e.position.y) / t.getHeight())) / 100.0f;
         }
         else if (drag == Drag::angle)
             m.angle = maxAngle * along (angleTrack (dragMic), e.position.x);
@@ -518,7 +520,8 @@ public:
 
 private:
     static constexpr float maxReach = 1.1f;    // how far from the cap the mic may go, in radii: just past the rim, in sight
-    static constexpr float minCm = 1.0f, maxCm = 30.0f, maxAngle = 60.0f;
+    static constexpr float minCm = 1.0f, maxAngle = 60.0f;
+    static float maxCm() { return catalog().farthestCm; }
     static constexpr int leftW = 460, gutter = 14;   // the pile's half; the hair between the halves
     static constexpr int footH = footRowH, responseH = 208;  // the foot's row under it all; the response's band over it
     int footHeight() const { return onClose != nullptr || showDefault ? footH : 0; }
@@ -1032,7 +1035,7 @@ private:
                 return;
 
             case Part::place:
-                putAt (h.m, places[h.i]);
+                putAt (h.m, placeAt (h.i));
                 return;
 
             case Part::micRow:
@@ -1462,7 +1465,11 @@ private:
         return { distX (m) - 3.0f, top, 6.0f, bottom - top };
     }
 
-    static ui::String cmOf (float distance) { return ui::String (ui::roundToInt (distance * 100.0f)) + " cm"; }
+    static ui::String cmOf (float distance)   // a metre and on, in metres: "1.2 m"
+    {
+        const int cm = ui::roundToInt (distance * 100.0f);
+        return cm >= 100 ? ui::String (cm / 100) + "." + ui::String ((cm % 100) / 10) + " m" : ui::String (cm) + " cm";
+    }
 
     /** ...and by the mic on the speaker, under its spot — a word to read, no slider (the owner, 05.11). */
     ui::Rectangle<float> distLabel (int m) const
@@ -1570,6 +1577,8 @@ private:
     struct Place { const char* word; float r, distance, angle; };
     static constexpr Place places[] { { "CAP", 0.0f, 0.05f, 0.0f }, { "EDGE", 0.8f, 0.04f, 0.0f },
                                       { "OFF", 0.5f, 0.05f, 35.0f }, { "ROOM", 0.0f, 0.30f, 0.0f } };
+    /** ...ROOM as far as the catalog says (the guitar's a metre). */
+    static Place placeAt (int i) { auto p = places[i]; if (i == 3) p.distance = catalog().roomM; return p; }
     void putAt (int m, const Place& p)
     {
         takeUp (m);
@@ -1602,7 +1611,7 @@ private:
 
     static float nearness (float distance)   // 0 at the cone, 1 at 30 cm
     {
-        return std::log (ui::jlimit (minCm, maxCm, distance * 100.0f) / minCm) / std::log (maxCm / minCm);
+        return std::log (ui::jlimit (minCm, maxCm(), distance * 100.0f) / minCm) / std::log (maxCm() / minCm);
     }
 
     bool heard (int m) const { return m == 0 ? setup_.aOn : setup_.bOn; }
@@ -1687,10 +1696,10 @@ private:
         for (int i = 0; i < 4; ++i)
         {
             const bool over = isHot (Part::place, m, i);
-            g.setColour ((standsAt (sp, places[i]) ? (over ? colour.brighter (0.3f) : colour) : over ? ui::look().tx : ui::look().txDim)
+            g.setColour ((standsAt (sp, placeAt (i)) ? (over ? colour.brighter (0.3f) : colour) : over ? ui::look().tx : ui::look().txDim)
                              .withMultipliedAlpha (dim));
             auto cell = placeArea (m, i).toFloat();
-            ui::look().drawTracked (g, places[i].word, m == 0 ? cell : cell.withTrimmedRight (4.0f), font, 0.06f, side);
+            ui::look().drawTracked (g, placeAt (i).word, m == 0 ? cell : cell.withTrimmedRight (4.0f), font, 0.06f, side);
         }
 
         // Its angle, a word and its value over a track — the value on the side away from the word.

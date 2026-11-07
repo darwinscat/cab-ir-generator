@@ -138,7 +138,7 @@ inline std::optional<State> fromLink (std::string_view text)
         m.model = f[0] == "own" ? std::string() : f[0];
         m.x = std::clamp (x, -1.2, 1.2);
         m.y = std::clamp (y, -1.2, 1.2);
-        m.distance = std::round (std::clamp (cm, 1.0, 30.0) * 10.0) / 1000.0;   // tenths of a cm: the TOML's own metres
+        m.distance = std::round (std::clamp (cm, 1.0, (double) Panel::catalog().farthestCm) * 10.0) / 1000.0;   // tenths of a cm: the TOML's own metres
         m.angle = std::clamp (angle, 0.0, 90.0);
         return true;
     };

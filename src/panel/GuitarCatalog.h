@@ -40,7 +40,8 @@ inline const Panel::Catalog& guitarCatalog()
       { "2x12-vertical" },
       { 0, 3, 2, 1 },
       true,
-      "paper" };
+      "paper",
+      150.0f, 1.0f };
     return guitar;
 }
 
