@@ -893,20 +893,21 @@ bool MainComponent::keyPressed (const juce::KeyPress& key)
 
 // ---------------------------------------------------------------- the header
 // One row: the brand — the cat, the mark, the name with the byline under its last word, as the family's headers carry
-// them — then the preset, then UNDO, REDO and A/B/C/D (the owner, 05.11).
+// them — then the preset, then UNDO, REDO and A/B/C/D (the owner, 05.11); A/B/C/D and the gaps between close, so the
+// preset has room for a long name beside the guitar's longer one (the owner, 07.11).
 juce::Rectangle<int> MainComponent::brandRow() const   { return header(); }
 juce::Rectangle<int> MainComponent::registerArea (int i) const
 {
     const auto b = brandRow();
-    return { b.getRight() - 10 - (4 - i) * 34 + 4, b.getCentreY() - 15, 30, 30 };
+    return { b.getRight() - 6 - (4 - i) * 28 + 2, b.getCentreY() - 13, 26, 26 };
 }
-juce::Rectangle<int> MainComponent::redoArea() const   { return registerArea (0).translated (-46, 0); }
-juce::Rectangle<int> MainComponent::undoArea() const   { return redoArea().translated (-36, 0); }
+juce::Rectangle<int> MainComponent::redoArea() const   { return registerArea (0).withY (brandRow().getCentreY() - 15).withHeight (30).withWidth (30).translated (-34, 0); }
+juce::Rectangle<int> MainComponent::undoArea() const   { return redoArea().translated (-32, 0); }
 juce::Rectangle<int> MainComponent::prevArea() const
 {
-    return { brandLink().getRight() + 14, brandRow().getCentreY() - 15, 30, 30 };
+    return { brandLink().getRight() + 10, brandRow().getCentreY() - 15, 30, 30 };
 }
-juce::Rectangle<int> MainComponent::nextArea() const   { return prevArea().withX (undoArea().getX() - 18 - 30); }
+juce::Rectangle<int> MainComponent::nextArea() const   { return prevArea().withX (undoArea().getX() - 10 - 30); }
 juce::Rectangle<int> MainComponent::presetArea() const
 {
     return { prevArea().getRight() + 6, prevArea().getY(), nextArea().getX() - 6 - prevArea().getRight() - 6, prevArea().getHeight() };
@@ -1036,8 +1037,18 @@ void MainComponent::paint (juce::Graphics& g)
         g.setColour (look().txFaint);
         g.drawRoundedRectangle (pr, 4.0f, 1.0f);
         g.setColour (presetName.isEmpty() ? look().txFaint : edited ? look().txDim : look().tx);
-        look().drawTracked (g, (presetName.isEmpty() ? juce::String ("PRESETS") : presetName.toUpperCase()) + (edited && presetName.isNotEmpty() ? " *" : ""),
-                            pr.reduced (10.0f, 0.0f), font, 0.06f, juce::Justification::centredLeft);
+        // The name as it fits before the ▾: whole; else without its style (the menu says it), "2X12 INVASION"; else cut.
+        const juce::String mark = edited && presetName.isNotEmpty() ? " *" : "";
+        juce::String shown = presetName.isEmpty() ? juce::String ("PRESETS") : presetName.toUpperCase();
+        const float room = pr.getWidth() - 20.0f - 16.0f;
+        const auto fits = [&] (const juce::String& t) { return look().trackedWidth (t + mark, font, 0.06f) <= room; };
+        if (! fits (shown))
+            for (const char* by : { ": ", "\xc2\xb7 " })
+                if (shown.contains (juce::String::fromUTF8 (by)))
+                    shown = shown.fromFirstOccurrenceOf (juce::String::fromUTF8 (by), false, false).trim();
+        while (shown.length() > 1 && ! fits (shown))
+            shown = shown.dropLastCharacters (shown.endsWith ("...") ? 4 : 1).trimEnd() + "...";
+        look().drawTracked (g, shown + mark, pr.reduced (10.0f, 0.0f), font, 0.06f, juce::Justification::centredLeft);
         look().drawTracked (g, juce::String::fromUTF8 ("\xe2\x96\xbe"), pr.reduced (10.0f, 0.0f), font, 0.0f, juce::Justification::centredRight);
         button (juce::String::fromUTF8 ("\xe2\x97\x80"), prevArea(), false);
         button (juce::String::fromUTF8 ("\xe2\x96\xb6"), nextArea(), false);
