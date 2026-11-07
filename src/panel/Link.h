@@ -137,6 +137,8 @@ inline std::optional<State> fromLink (std::string_view text)
         if (f.size() < 5 || ! link::numberOf (f[1], x) || ! link::numberOf (f[2], y) || ! link::numberOf (f[3], cm)
             || ! link::numberOf (f[4], angle))
             return false;
+        if (f[0] != "own" && ! Panel::mics().contains (ui::String (f[0])))
+            return false;   // a mic the panel has none of (a link mangled on its way): no cabinet, the page's default
         m.on = true;
         m.model = f[0] == "own" ? std::string() : f[0];
         m.x = std::clamp (x, -1.2, 1.2);

@@ -2154,12 +2154,14 @@ private:
 
 /** A STATE FROM ITS TEXT, as the panel can draw and the synthesis render it: none where the text is none, or where it
     names a box the table has not — one kept by an older version under a name since changed, say (0.1.3 named the boxes by
-    size and family), which would render a box of no cones. Wherever a state comes in from outside — a run's workspace, a
+    size and family), which would render a box of no cones — or a mic the panel has not, which it has no glyph to draw
+    (a hand-made or mangled text, the site found 07.11). Wherever a state comes in from outside — a run's workspace, a
     preset file, a host's session, a page — it comes through here, and a caller falls back to its default. */
 inline std::optional<State> knownState (const std::string& toml)
 {
     auto s = fromToml (toml);
-    if (s && Panel::indexOf (ui::String (s->box)) < 0)
+    const auto knownMic = [] (const Mic& m) { return m.model.empty() || Panel::mics().contains (ui::String (m.model)); };
+    if (s && (Panel::indexOf (ui::String (s->box)) < 0 || ! knownMic (s->a) || ! knownMic (s->b)))
         return std::nullopt;
     return s;
 }
