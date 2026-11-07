@@ -29,8 +29,8 @@ inline const Panel::Catalog& guitarCatalog()
         { "2x10-open",   0, 0.60f, 0.46f, { P (-0.14f, 0), P (0.14f, 0) }, 0.105f, false, {}, false, {}, "sm57", false, "snap" },
         { "1x10-open",   0, 0.46f, 0.40f, { P (0, 0) }, 0.105f, false, {}, false, {}, "sm57", false, "snap" },
       },
-      // The small on the big, the way a backline stands.
-      { { "4x12-closed", "1x10-open" }, { "2x12-vertical" }, { "2x12-open", "2x10-open" }, { "4x10-open", "1x12-open" } },
+      // The small on the big, the way a backline stands — the 1x10 on the tall 2x12 (the owner, 07.11).
+      { { "4x12-closed" }, { "2x12-vertical", "1x10-open" }, { "2x12-open", "2x10-open" }, { "4x10-open", "1x12-open" } },
       { "sm57", "e906", "md421", "re20", "u87", "ribbon" },
       { "SM57", "E906", "MD421", "RE20", "U87", "RIBB" },
       { "4x12-closed" },
