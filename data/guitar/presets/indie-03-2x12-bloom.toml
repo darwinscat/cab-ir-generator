@@ -5,10 +5,9 @@ box = "2x12-open"
 back = "open"
 speaker = "dark"
 cone = "paper"
-room = "studio"
 horn = false
 horn_db = 0
-blend = 0.300
+blend = 0.450
 align = true
 invert = false
 
@@ -23,8 +22,8 @@ angle = 0.0
 [mic.b]
 on = true
 model = "u87"
-x = 0.900
-y = -0.350
-distance = 1.000
-angle = 0.0
-shift = -0.075
+x = -0.375
+y = 0.075
+distance = 0.162
+angle = 20.0
+shift = 0.000

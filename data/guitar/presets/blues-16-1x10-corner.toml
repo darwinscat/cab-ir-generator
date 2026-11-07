@@ -4,10 +4,9 @@ cabir = 1
 box = "1x10-open"
 back = "open"
 speaker = "snap"
-room = "booth"
 horn = false
 horn_db = 0
-blend = 0.300
+blend = 0.150
 align = true
 invert = false
 
@@ -22,8 +21,8 @@ angle = 0.0
 [mic.b]
 on = true
 model = "u87"
-x = -0.600
-y = -0.350
-distance = 1.000
+x = -0.975
+y = 0.350
+distance = 0.300
 angle = 0.0
-shift = 0.000
+shift = -0.200
