@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of Cab IR Generator — see LICENSE.
 
 #include "MainComponent.h"
+#include "Flavour.h"
 
 #include <BinaryData.h>
 #include <RiffData.h>
@@ -39,18 +40,11 @@ namespace
     }
 
     /** The product's page on the site, where every link the app offers leads (the owner, 05.11: none to GitHub). */
-    const juce::String productUrl = "https://darwinscat.com/felitronics/cab-ir-generator?utm_source=cab-ir-generator&utm_medium=app";
+    const juce::String productUrl = juce::String ("https://darwinscat.com/felitronics/cab-ir-generator?utm_source=") + flavour::utmSource + "&utm_medium=app";
 
-    /** THE RIFFS THE APP CARRIES: Oleh's bass, played DI — the preamp already in it, so it goes straight into the cabinet —
-        each a seamless loop (mono, 48 kHz, 24-bit FLAC), in the menu's order. The first plays until another is picked. */
-    struct Riff { const char* file; const char* title; };
-    constexpr Riff riffs[] { { "11yl.flac",              "Eleven Light Years" },
-                             { "fifth-dimension-1.flac", "Fifth Dimension 1" },
-                             { "fifth-dimension-2.flac", "Fifth Dimension 2" },
-                             { "deep-space-1.flac",      "Deep Space is My Home 1" },
-                             { "deep-space-2.flac",      "Deep Space is My Home 2" },
-                             { "im-projection.flac",     "I am Projection" } };
-    constexpr int numRiffs = (int) std::size (riffs);
+    // The riffs the app carries (Flavour.h).
+    using flavour::riffs;
+    using flavour::numRiffs;
     const juce::String riffKey = "riff:";   // the setting's prefix for one of these, else a file's path
 
     const char* riffBytes (int i, int& size)
@@ -65,7 +59,7 @@ namespace
     juce::PropertiesFile::Options storage()
     {
         juce::PropertiesFile::Options o;
-        o.applicationName     = "Cab IR Generator";
+        o.applicationName     = flavour::product;
         o.filenameSuffix      = ".settings";
         o.folderName          = "Darwin's Cat";
         o.osxLibrarySubFolder = "Application Support";
@@ -81,7 +75,7 @@ namespace
     felitronics::appkit::VersionBadge::Config about()
     {
         felitronics::appkit::VersionBadge::Config c;
-        c.productName = "Cab IR Generator";
+        c.productName = flavour::product;
         c.productUrl  = productUrl;
         c.gitHash     = CABIR_GIT_HASH;
         c.os          = juce::SystemStats::getOperatingSystemName();
@@ -104,7 +98,7 @@ namespace
 }
 
 MainComponent::MainComponent()
-    : checker ({ .ownerRepo = "darwinscat/cab-ir-generator", .productName = "Cab IR Generator", .currentVersion = CABIR_VERSION,
+    : checker ({ .ownerRepo = "darwinscat/cab-ir-generator", .productName = flavour::product, .currentVersion = CABIR_VERSION,
                  .settings = [this] { return properties.getUserSettings(); } }),
       badge (checker, about(), "Standalone"),
       history (felitronics::appkit::CompareHistory::Mode::PerRegister,
@@ -235,16 +229,7 @@ void MainComponent::render (const State& s, bool live)
 
 State MainComponent::defaultState()
 {
-    // A 4x10, ported as eight boxes of the ten are, an MD421 close and a U47 at 12 cm where the two comb least: green
-    // from 40 Hz to 12 kHz (synth::quietPlaceForB found the place; the owner, 05.11).
-    State s;
-    s.box = "4x10-classic";
-    s.back = 1;
-    s.a = { true, "md421", -0.3, 0.0, 0.05, 0.0 };
-    s.b = { true, "u47", -0.65, 0.0, 0.12, 0.0 };
-    s.blend = 0.35;
-    s.align = true;
-    return s;
+    return flavour::defaultState();
 }
 
 int MainComponent::writeStills (const juce::File& folder, float scale)
@@ -441,7 +426,7 @@ void MainComponent::show (const State& s)
 juce::File MainComponent::presetFolder()
 {
     return juce::File::getSpecialLocation (juce::File::userDocumentsDirectory)
-        .getChildFile ("Darwin's Cat").getChildFile ("Cab IR Generator").getChildFile ("Presets");
+        .getChildFile ("Darwin's Cat").getChildFile (flavour::product).getChildFile ("Presets");
 }
 
 namespace
@@ -656,7 +641,7 @@ void MainComponent::showSamples()
 
 void MainComponent::openSample()
 {
-    chooser = std::make_unique<juce::FileChooser> ("A bass sample", juce::File::getSpecialLocation (juce::File::userMusicDirectory),
+    chooser = std::make_unique<juce::FileChooser> (flavour::samplePrompt, juce::File::getSpecialLocation (juce::File::userMusicDirectory),
                                                    "*.wav;*.aif;*.aiff;*.flac");
     chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
                           [this] (const juce::FileChooser& c) { if (c.getResult().existsAsFile()) loadSample (c.getResult()); });
@@ -684,8 +669,9 @@ synth::WavMeta MainComponent::metaOf (const State& s) const
     // line says it; the link that opens it on the page; and its TOML, named the same.
     synth::WavMeta meta;
     meta.name = (presetName.isNotEmpty() && toToml (s) == presetText ? presetName : CabPicker::labelOf (s)).toStdString();
-    meta.software = std::string ("Cab IR Generator ") + CABIR_VERSION;
-    meta.comment = std::string (pageAddress) + "#" + linkOf (s);
+    meta.software = std::string (flavour::product) + " " + CABIR_VERSION;
+    // The guitar's has no page yet: its link alone, the state it opens.
+    meta.comment = (flavour::guitar ? std::string() : std::string (pageAddress)) + "#" + linkOf (s);
     meta.preset = "name = \"" + meta.name + "\"\n\n" + toToml (s);
     return meta;
 }
@@ -808,7 +794,7 @@ juce::Rectangle<int> MainComponent::presetArea() const
 juce::Rectangle<int> MainComponent::brandLink() const
 {
     const float h = (float) brandH;
-    const float right = h * 2.0f + 18.0f + look().trackedWidth ("Cab IR Generator", look().font (h * nameShare), 0.0f) + 6.0f;
+    const float right = h * 2.0f + 18.0f + look().trackedWidth (flavour::product, look().font (h * nameShare), 0.0f) + 6.0f;
     return { 0, 0, juce::roundToInt (right), brandH };
 }
 
@@ -872,9 +858,9 @@ void MainComponent::paint (juce::Graphics& g)
             mark->drawWithin (g, juce::Rectangle<float> (h + 6.0f, 4.0f, h - 8.0f, h - 8.0f), juce::RectanglePlacement::centred, 1.0f);
         // The name high, the byline under it, its right edge under the name's last word.
         const auto name = look().font (h * nameShare), by = look().font (h * 0.25f);
-        const float x = h * 2.0f + 18.0f, nameW = look().trackedWidth ("Cab IR Generator", name, 0.0f);
+        const float x = h * 2.0f + 18.0f, nameW = look().trackedWidth (flavour::product, name, 0.0f);
         g.setColour (brandHover ? juce::Colours::white : look().tx);
-        look().drawTracked (g, "Cab IR Generator", { x, b.getY() + 5.0f, nameW + 4.0f, h * 0.5f }, name, 0.0f, juce::Justification::centredLeft);
+        look().drawTracked (g, flavour::product, { x, b.getY() + 5.0f, nameW + 4.0f, h * 0.5f }, name, 0.0f, juce::Justification::centredLeft);
         g.setColour (brandHover ? look().violet.brighter (0.3f) : look().violet);
         look().drawTracked (g, "by Darwin's Cat", { x, b.getY() + h * 0.54f, nameW, h * 0.36f }, by, 0.0f, juce::Justification::centredRight);
 
@@ -955,7 +941,7 @@ void MainComponent::paint (juce::Graphics& g)
     g.setColour (look().txFaint);
     g.drawRoundedRectangle (sa, 4.0f, 1.0f);
     g.setColour (engine.hasSample() ? look().tx : look().txFaint);
-    look().drawTracked (g, engine.hasSample() ? engine.sampleName().toUpperCase() : juce::String ("DROP A BASS SAMPLE ON THE WINDOW"),
+    look().drawTracked (g, engine.hasSample() ? engine.sampleName().toUpperCase() : juce::String ("DROP A ") + flavour::sampleWord + " SAMPLE ON THE WINDOW",
                         sa.reduced (10.0f, 0.0f), font, 0.06f, juce::Justification::centredLeft);
     look().drawTracked (g, juce::String::fromUTF8 ("\xe2\x96\xbe"), sa.reduced (10.0f, 0.0f), font, 0.0f, juce::Justification::centredRight);
 
