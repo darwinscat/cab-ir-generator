@@ -2364,7 +2364,7 @@ private:
         g.setColour (ui::look().violet.withAlpha (instrumentAlpha + (instrumentAlphaOver - instrumentAlpha) * e));
         ui::look().drawTracked (g, catalog().instrumentWord, plot, ui::look().font (instrumentSize), 0.08f, ui::Justification::centred);
     }
-    static constexpr float instrumentSize = 102.0f, instrumentAlpha = 0.09f, instrumentAlphaOver = 0.16f;
+    static constexpr float instrumentSize = 102.0f, instrumentAlpha = 0.11f, instrumentAlphaOver = 0.22f;
 
     /** The hand over the response, and the watermark brightening toward it: 0 none .. 1 whole, a quarter of a second. */
     bool overResponse = false;
