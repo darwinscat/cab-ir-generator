@@ -174,6 +174,10 @@ if(CABIR_APP)
             DESCRIPTION   "${APP_DESCRIPTION}"
             COMPANY_NAME  "Darwin's Cat"
             BUNDLE_ID     ${APP_BUNDLE}
+            # INPUT plays an audio interface through the cabinet: macOS asks the first time it is picked, and a signed
+            # build carries the audio-input entitlement (app/standalone.entitlements).
+            MICROPHONE_PERMISSION_ENABLED TRUE
+            MICROPHONE_PERMISSION_TEXT    "INPUT plays your instrument through the cabinet."
             ICON_BIG      "${CMAKE_CURRENT_SOURCE_DIR}/${logo}/icon.png"   # the logo's mark, drawn from mark.svg
             VERSION       ${PROJECT_VERSION})
         target_sources(${target} PRIVATE app/Main.cpp app/MainComponent.cpp app/Engine.cpp)

@@ -49,6 +49,7 @@ namespace
     using flavour::riffs;
     using flavour::numRiffs;
     const juce::String riffKey = "riff:";   // the setting's prefix for one of these, else a file's path
+    const juce::String inputKey = "input:"; // ...or the setting for the live input
 
     const char* riffBytes (int i, int& size)
     {
@@ -159,6 +160,7 @@ MainComponent::MainComponent (Session* host)
         const auto audio = juce::parseXML (properties.getUserSettings()->getValue ("audio"));
         engine->devices.initialise (0, 2, audio.get(), true);
         engine->devices.addAudioCallback (engine.get());
+        engine->devices.addChangeListener (this);
     }
 
     // DOWNLOAD IR's format the last run chose, else 48 kHz, 24 bit, the whole IR.
@@ -173,10 +175,12 @@ MainComponent::MainComponent (Session* host)
         picker.setDownloadNote (juce::String::fromUTF8 (formatNote (format).c_str()));
     }
 
-    // The sample the last run played — a riff of ours or a file — else the first riff.
+    // The sample the last run played — a riff of ours, a file, or the live input (silent until played) — else the first riff.
     if (engine != nullptr)
     {
         const auto last = properties.getUserSettings()->getValue ("sample");
+        if (last == inputKey)
+            useInput();
         int riff = 0;
         for (int i = 0; i < numRiffs; ++i)
             if (last == riffKey + riffs[i].file)
@@ -206,6 +210,7 @@ MainComponent::~MainComponent()
     }
     else
     {
+        engine->devices.removeChangeListener (this);
         if (const auto xml = engine->devices.createStateXml())
             properties.getUserSettings()->setValue ("audio", xml->toString());
         properties.getUserSettings()->setValue ("workspace", history.toTree().toXmlString());
@@ -250,9 +255,12 @@ void MainComponent::keepSession()
         session->keepWorkspace (history.toTree().toXmlString(), toToml (state));
 }
 
-void MainComponent::changeListenerCallback (juce::ChangeBroadcaster*)
+void MainComponent::changeListenerCallback (juce::ChangeBroadcaster* from)
 {
-    loadWorkspace (session->workspace());
+    if (session != nullptr && from == session)
+        loadWorkspace (session->workspace());
+    else
+        repaint (strip());   // the app's audio device changed: the input the strip names
 }
 
 void MainComponent::render (const State& s, bool live)
@@ -695,9 +703,23 @@ void MainComponent::loadRiff (int i)
     repaint (strip());
 }
 
+void MainComponent::useInput()
+{
+    if (engine == nullptr)
+        return;
+    engine->useInput();   // silent until PLAY: a laptop's own mic beside its speakers would howl
+    properties.getUserSettings()->setValue ("sample", inputKey);
+    riffNow = -1;
+    repaint (strip());
+}
+
 void MainComponent::showSamples()
 {
+    // The live input first, the instrument through the cabinet as through an amp's (the owner, 07.11); then our riffs.
     juce::PopupMenu menu;
+    constexpr int inputId = 2000;
+    menu.addItem (inputId, "INPUT (AUDIO INTERFACE)", true, engine->usingInput());
+    menu.addSeparator();
     for (int i = 0; i < numRiffs; ++i)
         menu.addItem (i + 1, riffs[i].title, true, i == riffNow);
     menu.addSeparator();
@@ -706,7 +728,9 @@ void MainComponent::showSamples()
     menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this).withTargetScreenArea (localAreaToGlobal (sampleArea())),
                         [this] (int id)
                         {
-                            if (id == fileId)
+                            if (id == inputId)
+                                useInput();
+                            else if (id == fileId)
                                 openSample();
                             else if (id >= 1 && id <= numRiffs)
                                 loadRiff (id - 1);
@@ -729,11 +753,12 @@ void MainComponent::filesDropped (const juce::StringArray& files, int, int)
 
 void MainComponent::showAudio()
 {
+    // The output, and the input INPUT plays: a device and its channels, the first one open heard.
     felitronics::appkit::AudioSettingsPanel::Options o;
     o.minInputs = 0;
-    o.maxInputs = 0;
+    o.maxInputs = 2;
     auto panel = std::make_unique<felitronics::appkit::AudioSettingsPanel> (engine->devices, o);
-    panel->setSize (460, 260);
+    panel->setSize (460, 380);
     juce::CallOutBox::launchAsynchronously (std::move (panel), audioArea().translated (0, 0), this);
 }
 
@@ -1017,7 +1042,10 @@ void MainComponent::paint (juce::Graphics& g)
         g.setColour (look().txFaint);
         g.drawRoundedRectangle (sa, 4.0f, 1.0f);
         g.setColour (engine->hasSample() ? look().tx : look().txFaint);
-        look().drawTracked (g, engine->hasSample() ? engine->sampleName().toUpperCase() : juce::String ("DROP A ") + flavour::sampleWord + " SAMPLE ON THE WINDOW",
+        const auto source = engine->usingInput() ? "INPUT: " + (engine->inputName().isNotEmpty() ? engine->inputName().toUpperCase() : juce::String ("NONE, SEE AUDIO"))
+                          : engine->hasSample()  ? engine->sampleName().toUpperCase()
+                                                 : juce::String ("DROP A ") + flavour::sampleWord + " SAMPLE ON THE WINDOW";
+        look().drawTracked (g, source,
                             sa.reduced (10.0f, 0.0f), font, 0.06f, juce::Justification::centredLeft);
         look().drawTracked (g, juce::String::fromUTF8 ("\xe2\x96\xbe"), sa.reduced (10.0f, 0.0f), font, 0.0f, juce::Justification::centredRight);
     }

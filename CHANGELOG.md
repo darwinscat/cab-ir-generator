@@ -19,6 +19,9 @@ All notable changes to **Orbit Bass Cab Builder** and **Orbit Guitar Cab Builder
   mono or stereo, with no latency. The DAW's project keeps A/B/C/D with their histories and the window's size, and the
   cabinet plays with the window closed. HEAR, FIND, the presets (the app's own, from the same folder) and DOWNLOAD IR
   are there; the sample player is the app's alone.
+- **INPUT in the apps**: an audio interface played live through the cabinet, no DAW needed. It is the first item of
+  the sample menu, silent until PLAY (Space), so a laptop's own mic by its speakers never howls; AUDIO picks the input
+  device and its channel, the first one open heard. macOS asks for the microphone the first time it is picked.
 
 ### Changed
 - **The names: Orbit Bass Cab Builder** (Cab IR Generator until now) **and Orbit Guitar Cab Builder** — the apps, their

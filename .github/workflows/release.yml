@@ -98,8 +98,8 @@ jobs:
             return 1
           }
 
-          # The app plays out and reads no input, so the hardened runtime needs no entitlements.
-          codesign --force --options runtime --timestamp --sign "$APP_ID" "$APP"
+          # The app reads the audio interface when INPUT is picked: the hardened runtime needs the audio-input entitlement.
+          codesign --force --options runtime --timestamp --entitlements app/standalone.entitlements --sign "$APP_ID" "$APP"
           codesign --verify --strict --verbose=1 "$APP"
 
           # The app notarized and stapled on its own, so a copy dragged out of the image carries its ticket.

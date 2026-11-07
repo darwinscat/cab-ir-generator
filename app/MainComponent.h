@@ -101,7 +101,7 @@ private:
     void carryFormerName();                        // a first run under the new name: the old one's settings and presets copied
     void loadWorkspace (const juce::String& xml);  // A/B/C/D as kept, else the default alone
     void keepSession();                            // ...and, in a plugin, the workspace handed to its session
-    void changeListenerCallback (juce::ChangeBroadcaster*) override;   // the host handed the session a project
+    void changeListenerCallback (juce::ChangeBroadcaster*) override;   // the host handed the session a project; the device changed
     void findPlace (const State&, bool thorough = false);   // B where it combs least with A, or one mic where it has no pit
     void show (const State&);                      // ...and one put on the panel from elsewhere (undo, A/B/C/D, a preset)
     void showPresets();
@@ -113,6 +113,7 @@ private:
     void openSample();
     void loadSample (const juce::File&);
     void loadRiff (int);                           // one of the riffs the app carries, by its place in the menu
+    void useInput();                               // the live input instead, silent until played
     void showSamples();
     void showAudio();
     void download();

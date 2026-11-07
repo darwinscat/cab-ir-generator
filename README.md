@@ -60,7 +60,8 @@ phase and where they cancel; the response before your last change stays as a fai
 **Presets.** 160 of them in eight styles — Funk, Jazz, Metal, Modern, Motown, Punk, Reggae and Rock;
 the arrows beside the menu (and the arrow keys) step through them.
 
-**Listening.** A few bass riffs come with the app, or drop a sample of your own on the window. **Space**
+**Listening.** A few bass riffs come with the app, or drop a sample of your own on the window — or pick
+**INPUT** and play your instrument live through the cabinet from an audio interface, silent until PLAY. **Space**
 plays and stops. **HEAR** chooses what you listen through: **A+B**, **A** or **B** alone as it stands in
 the pair, or **BYPASS**, the sample with no cabinet at all — for listening only, nothing of the preset
 changes. **AUDIO** picks the output device.
