@@ -9,6 +9,9 @@ floor_gap_m = 0
 floor_reflection = 0.9
 length_ms = 100
 tail_fade_ms = 15
+# Where the panel's line reddens with a pit, and FIND and the presets' tools judge one: 5 dB, the speakers' own dips
+# running deeper than a bass's (the owner, 07.11; the panel's catalog says the same, GuitarCatalog.h).
+pit_red_db = 5
 cone_fixed_mass_fraction = 0.4
 mode_spacing_jitter_fraction = 0.3
 mode_axisymmetric_share = 0.8

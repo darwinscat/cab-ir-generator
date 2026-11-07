@@ -43,7 +43,8 @@ inline const Panel::Catalog& guitarCatalog()
       "paper",
       150.0f, 1.0f,
       { "booth", "studio", "live" },   // the rooms round the box (its table's room-<name>), OFF before them
-      { "BOOTH", "STUDIO", "LIVE" } };
+      { "BOOTH", "STUDIO", "LIVE" },
+      5.0f };   // the line reddens with a pit from 5 dB (the table's pit_red_db, the same)
     return guitar;
 }
 

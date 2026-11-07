@@ -22,7 +22,7 @@ public:
     using Judged = BSearch::Judged;   // score: the deepest pit times -10, dB — the search map's scale, full red at 6 dB
 
     MicSearch (const Table& t, const State& s, size_t size = 1 << 14)
-        : table (t), box (s.box), n (size), heard (pairOf (s).a) {}
+        : table (t), box (s.box), n (size), heard (pairOf (s).a), over (pitRedOf (t, s.box) - 3.0) {}
 
     std::vector<Place> coarse() const
     {
@@ -50,7 +50,8 @@ public:
         spot.distance = place.distance;
         const auto ir = render (cabAt (table, box, spot), n, 1);   // one thread a render: the places are spread over them
         const auto pits = pitsOf (responseOf (as24Bit (std::vector<float> (ir.begin(), ir.end())), fs));
-        return { -10.0 * (pits.empty() ? 0.0 : (double) *std::max_element (pits.begin(), pits.end())), 0.0 };
+        const double deepest = pits.empty() ? 0.0 : (double) *std::max_element (pits.begin(), pits.end());
+        return { -10.0 * std::max (0.0, deepest - over), 0.0 };   // past where the table's line reddens, as the panel draws it
     }
 
     Place best (const std::vector<Place>& first, const std::vector<Judged>& judged,
@@ -86,6 +87,7 @@ private:
     std::string box;
     size_t n;
     Spot heard;   // the one mic heard, as the synthesis renders it
+    double over;  // how much deeper than the bass's 3 dB the table's line reddens (pitRedOf): the guitar's 2
 };
 
 /** ...run on this machine's threads: the place, `tried` hearing of each as it is judged (from whichever thread). */

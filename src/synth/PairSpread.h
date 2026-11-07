@@ -33,6 +33,7 @@ namespace cabir::synth::green
 constexpr double apartRadii = 0.5;   // B at least this far across from A
 constexpr double greenDb = -3.0;     // a worst point above this: the band green
 constexpr double pitDb = 3.0;        // the response at most this far under its neighbours: where the panel's line reddens
+                                     // (the bass's; a table's own, synth::pitRedOf — the guitar's 5 — where it says one)
 
 /** How far the response falls under its own third of an octave either side, 40 Hz to 8 kHz, at its worst. */
 inline double pitOf (const std::vector<double>& db)
@@ -62,9 +63,9 @@ inline std::pair<double, double> judge (const std::vector<cd>& a, const std::vec
 }
 
 /** The narrower of the two margins: how far inside both bounds a pair stands (negative: outside one). */
-inline double margin (double worst, double pit) { return std::min (worst - greenDb, pitDb - pit); }
+inline double margin (double worst, double pit, double pitLimit = pitDb) { return std::min (worst - greenDb, pitLimit - pit); }
 
-inline bool passes (double worst, double pit) { return worst >= greenDb && pit <= pitDb; }
+inline bool passes (double worst, double pit, double pitLimit = pitDb) { return worst >= greenDb && pit <= pitLimit; }
 
 /** The pair as the panel draws it, on the app's own path: the worst comb point and the pit of what is heard. */
 inline std::pair<double, double> judgeOf (const synth::Table& table, const State& s)
@@ -91,9 +92,10 @@ inline Found spread (const synth::Table& table, const State& s, bool wide)
             if (s.blend + by >= 0.15 && s.blend + by <= 0.85)
                 blends.push_back (s.blend + by);
     // A margin past a dB is margin enough: then the least change of blend, the smaller shift, the nearer place.
-    const auto better = [&s] (const Found& c, const Found& best)
+    const double red = synth::pitRedOf (table, s.box);
+    const auto better = [&s, red] (const Found& c, const Found& best)
     {
-        const double mc = std::min (1.0, margin (c.worst, c.pit)), mb = std::min (1.0, margin (best.worst, best.pit));
+        const double mc = std::min (1.0, margin (c.worst, c.pit, red)), mb = std::min (1.0, margin (best.worst, best.pit, red));
         if (mc > mb + 0.05) return true;
         if (mc < mb - 0.05) return false;
         const double bc = std::abs (c.blend - s.blend), bb_ = std::abs (best.blend - s.blend);
@@ -181,14 +183,15 @@ struct SpreadB { Found found; std::pair<double, double> after; };
 
 inline SpreadB spreadB (const synth::Table& table, const State& s)
 {
+    const double red = synth::pitRedOf (table, s.box);
     SpreadB out { spread (table, s, false), {} };
     out.after = judgeOf (table, withB (s, out.found));
-    if (! passes (out.after.first, out.after.second))
+    if (! passes (out.after.first, out.after.second, red))
     {
         // Wider: B's distance further either way, B's share of the blend a little less.
         const auto wider = spread (table, s, true);
         const auto there = judgeOf (table, withB (s, wider));
-        if (margin (there.first, there.second) > margin (out.after.first, out.after.second))
+        if (margin (there.first, there.second, red) > margin (out.after.first, out.after.second, red))
             out = { wider, there };
     }
     return out;

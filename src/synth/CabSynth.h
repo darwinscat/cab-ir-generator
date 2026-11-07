@@ -1147,6 +1147,14 @@ inline Cab cabAt (const Table& table, const std::string& cab, const Spot& spot, 
     return c;
 }
 
+/** WHERE THE PANEL'S LINE REDDENS for a box of the table: its response this far under its neighbours, dB — the table's
+    pit_red_db (the guitar's 5: its speakers' own dips run deeper than a bass's, the owner, 07.11), else the bass's 3.
+    The panel's own is its catalog's (Panel::Catalog::pitRedDb), the same number. */
+inline double pitRedOf (const Table& table, const std::string& cab)
+{
+    return num (resolve (table, cab + " cap"), "pit_red_db", 3.0);
+}
+
 /** When the first sound reaches the mic: the nearest patch of the nearest cone, s. */
 inline double firstArrival (const Cab& c)
 {

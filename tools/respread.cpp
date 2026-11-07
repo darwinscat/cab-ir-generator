@@ -7,7 +7,7 @@
 //
 // Judged as the panel draws a cabinet: the pit, how far the heard response (a sixth of an octave, as the band draws it)
 // falls under its own third of an octave either side, 40 Hz to 8 kHz — a dip a player hears, which no comb shows, 3 dB at
-// most, where the line starts to redden (the owner, 05.11) — and with two mics where they meet (synth::combOf, 30 Hz to
+// most, where the line starts to redden (the owner, 05.11; a table's own where it says one, the guitar's 5, synth::pitRedOf) — and with two mics where they meet (synth::combOf, 30 Hz to
 // 12 kHz), its worst point green above -3 dB.
 // A single mic with a pit moves as FIND moves one (synth::MicSearch): about where it stands, the nearest place without
 // one. A pair, in two steps (the owner, 05.11): first A alone, the same way, if A by itself has a pit — B rarely fills
@@ -87,15 +87,18 @@ int main (int argc, char** argv)
     }
 
     // A single mic, and a pair's A heard alone: off its pit first, each search on all the machine's threads.
+    // Where the line reddens for a preset's box: its table's (synth::pitRedOf — the guitar's 5 dB, the bass's 3).
+    const auto limit = [&table] (const State& st) { return synth::pitRedOf (table, st.box); };
     int singles = 0, singlesMoved = 0, singlesClear = 0;
     for (auto& p : all)
     {
+        const double line = limit (p.state);
         auto alone = p.state;
         if (p.pair)
             alone.b.on = false;
         const double before = judgeOf (table, alone).second;
         double now = before;
-        if (before > pitDb)
+        if (before > line)
         {
             const auto moved = smoothed (table, alone);
             now = judgeOf (table, moved).second;
@@ -114,12 +117,12 @@ int main (int argc, char** argv)
         }
         ++singles;
         singlesMoved += now < before;
-        singlesClear += now <= pitDb;
+        singlesClear += now <= line;
         const auto& m = p.state.a.on ? p.state.a : p.state.b;
         const auto& w = p.was.a.on ? p.was.a : p.was.b;
-        if (before > pitDb)
+        if (before > line)
             std::printf ("ONE   %-34s pit %5.1f -> %5.1f   %+.2f %+.2f %4.1f cm -> %+.2f %+.2f %4.1f cm%s\n", p.name.c_str(), before, now,
-                         w.x, w.y, w.distance * 100, m.x, m.y, m.distance * 100, now <= pitDb ? "" : "  STILL RED");
+                         w.x, w.y, w.distance * 100, m.x, m.y, m.distance * 100, now <= line ? "" : "  STILL RED");
         else
             std::printf ("ONE   %-34s pit %5.1f   kept\n", p.name.c_str(), before);
     }
@@ -149,10 +152,10 @@ int main (int argc, char** argv)
     std::vector<bool> keep (all.size(), false);
     for (auto& [style, list] : stacked)
     {
-        std::stable_sort (list.begin(), list.end(), [&all] (size_t a, size_t b)
-                          { return margin (all[a].worst, all[a].pit) > margin (all[b].worst, all[b].pit); });
+        std::stable_sort (list.begin(), list.end(), [&all, &limit] (size_t a, size_t b)
+                          { return margin (all[a].worst, all[a].pit, limit (all[a].state)) > margin (all[b].worst, all[b].pit, limit (all[b].state)); });
         for (size_t k = 0, kept = 0; k < list.size() && kept < 2; ++k)
-            if (passes (all[list[k]].worst, all[list[k]].pit))
+            if (passes (all[list[k]].worst, all[list[k]].pit, limit (all[list[k]].state)))
             {
                 keep[list[k]] = true;
                 ++kept;
@@ -161,7 +164,7 @@ int main (int argc, char** argv)
 
     std::vector<size_t> moving;
     for (size_t i = 0; i < all.size(); ++i)
-        if (all[i].pair && ! keep[i] && (all[i].apart < apartRadii || ! passes (all[i].worst, all[i].pit)))
+        if (all[i].pair && ! keep[i] && (all[i].apart < apartRadii || ! passes (all[i].worst, all[i].pit, limit (all[i].state))))
             moving.push_back (i);
 
     std::vector<Found> found (all.size());
@@ -215,7 +218,7 @@ int main (int argc, char** argv)
             continue;
         }
         ++moved;
-        const bool ok = passes (after[i].first, after[i].second);
+        const bool ok = passes (after[i].first, after[i].second, limit (p.state));
         (ok ? green : red)++;
         char was[24] = "";
         if (std::abs (found[i].blend - p.state.blend) > 1e-9)
@@ -235,7 +238,7 @@ int main (int argc, char** argv)
             save (p, s);
         }
     }
-    std::printf ("%d single mics: %d moved off a pit, %d clear of 3 dB now\n", singles, singlesMoved, singlesClear);
+    std::printf ("%d single mics: %d moved off a pit, %d clear of the line now\n", singles, singlesMoved, singlesClear);
     std::printf ("%d pairs: %d with A moved first; %d kept, %d moved — %d pass, %d still fail%s\n", kept + moved, aMoved, kept, moved, green,
                  red, write ? "; written" : "");
     return 0;

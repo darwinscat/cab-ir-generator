@@ -153,6 +153,9 @@ public:
         // The rooms round the box, as the table names them (its "room-<name>" sections), and as their row writes them after
         // OFF — the guitar's; none, no row (the bass's).
         ui::StringArray rooms, roomWords;
+        // Where the response's line reddens with a pit, dB — the bass's 3; the guitar's 5, its speakers' own dips deeper
+        // (the owner, 07.11). The table says the same (pit_red_db, synth::pitRedOf) for FIND and the tools.
+        float pitRedDb = 3.0f;
     };
 
     static const Catalog& bassCatalog()
@@ -463,6 +466,8 @@ public:
         responseBefore = std::move (before);
         responseComb = std::move (comb);
         responseBad = synth::pitsOf (responseNow);
+        for (auto& b : responseBad)   // a pit judged from where this catalog's line reddens: the guitar's 5 dB, the bass's 3
+            b = ui::jmax (0.0f, b - (catalog().pitRedDb - 3.0f));
         if (responseComb.size() == responseBad.size())
             for (size_t i = 0; i < responseBad.size(); ++i)
                 responseBad[i] = ui::jmax (responseBad[i], -responseComb[i]);

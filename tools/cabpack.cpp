@@ -106,7 +106,7 @@ namespace
     {
         auto alone = s;
         alone.b.on = false;
-        if (synth::green::judgeOf (table, alone).second > synth::green::pitDb)
+        if (synth::green::judgeOf (table, alone).second > synth::pitRedOf (table, s.box))
             s.a = synth::green::smoothed (table, alone).a;
         s = synth::green::withB (s, synth::green::spreadB (table, s).found);
         if (const auto kept = fromToml (toToml (s)))
@@ -152,11 +152,13 @@ namespace
         it falls into and its two mics cancelling there — and, with two mics heard, where they meet (synth::combOf). */
     struct Curve { std::vector<float> db, bad, comb; };
 
-    Curve curveOf (const synth::PairParts& parts, double rate)
+    Curve curveOf (const synth::PairParts& parts, double rate, double pitRed)
     {
         Curve c;
         c.db = synth::responseOf (synth::as24Bit (parts.mix), rate);
         c.bad = synth::pitsOf (c.db);
+        for (auto& b : c.bad)   // a pit judged from where the table's line reddens (the guitar's 5 dB), as the panel does
+            b = std::max (0.0f, b - (float) (pitRed - 3.0));
         if (! parts.a.empty())
         {
             c.comb = synth::combOf (parts.a, parts.b, rate);
@@ -590,7 +592,7 @@ int main (int argc, char** argv)
                 const auto parts = synth::PairRenderer {}.render (table, it.state.box, synth::pairOf (it.state), r.n, r.hz);
                 const auto& ir = parts.mix;
                 if (r.drawn)
-                    curves.push_back (curveOf (parts, r.hz));
+                    curves.push_back (curveOf (parts, r.hz, synth::pitRedOf (table, it.state.box)));
                 // What each WAV says of itself (synth::WavMeta): its name, the link that opens it on the page, its preset.
                 synth::WavMeta meta;
                 meta.name = it.name;
