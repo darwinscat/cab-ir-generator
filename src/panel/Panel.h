@@ -79,13 +79,14 @@ public:
         stepMicZoom (dt);
         stepBackZoom (dt);
         stepHandles (dt);
+        stepResponseFade (dt);
     }
 
     /** True while something moves on its own: a host ticks it then, and need not otherwise. */
     bool wantsFrames() const
     {
         return ! downloadArea().isEmpty() || searchFade > 0.0f || defaultArmed || zoomMoving() || backZoomMoving()
-            || (handlesOf >= 0 && ! handHolds);
+            || (handlesOf >= 0 && ! handHolds) || responseFading();
     }
 
     /** The size it is drawn for — small enough to open over a cabin's face too. */
@@ -520,6 +521,7 @@ public:
         }
         if (backHot() >= 0)   // the cell it grows, as the hand comes on it
             backZoomI = backHot();
+        overResponse = responseArea().toFloat().contains (e.position);
         keepHandles (e.position);
         if (hot != was)
             repaint();
@@ -530,6 +532,7 @@ public:
         hot = {};
         handlesOf = -1;
         handHolds = false;
+        overResponse = false;
         repaint();
     }
 
@@ -2353,21 +2356,31 @@ private:
         return responseArea().toFloat().withTrimmedLeft (36.0f).withTrimmedRight (12.0f).withTrimmedTop (9.0f).withTrimmedBottom (20.0f);
     }
 
-    /** THE INSTRUMENT'S NAME at the response's top left, big, its letters outlined — BASS, GUITAR — so it reads at a glance
-        which builder this is (the owner, 07.11): its line drawn round it, its inside the panel's again, under the comb's
-        colours and the grid. */
+    /** THE INSTRUMENT'S NAME across the response, a watermark — BASS, GUITAR, big, solid and pale, under the curve, the
+        comb's colours and the grid — so the two builders are never taken one for the other (the owner, 07.11); paler
+        still while the hand is over the response, the curve read there. */
     void paintInstrument (ui::Graphics& g, ui::Rectangle<float> plot) const
     {
-        const auto big = ui::look().font (instrumentSize);
-        const ui::Rectangle<float> r (plot.getX() + 14.0f, plot.getY() + 6.0f, plot.getWidth() * 0.5f, instrumentSize + 6.0f);
-        g.setColour (ui::look().violet.withAlpha (0.55f));
-        for (const auto d : { ui::Point<float> (-1, -1), ui::Point<float> (0, -1), ui::Point<float> (1, -1), ui::Point<float> (-1, 0),
-                              ui::Point<float> (1, 0), ui::Point<float> (-1, 1), ui::Point<float> (0, 1), ui::Point<float> (1, 1) })
-            ui::look().drawTracked (g, catalog().instrumentWord, r.translated (d.x, d.y), big, 0.08f, ui::Justification::centredLeft);
-        g.setColour (ui::look().panel);
-        ui::look().drawTracked (g, catalog().instrumentWord, r, big, 0.08f, ui::Justification::centredLeft);
+        const float e = responseFade * responseFade * (3.0f - 2.0f * responseFade);   // eased in and out
+        g.setColour (ui::look().violet.withAlpha (instrumentAlpha * (1.0f - 0.65f * e)));
+        ui::look().drawTracked (g, catalog().instrumentWord, plot, ui::look().font (instrumentSize), 0.08f, ui::Justification::centred);
     }
-    static constexpr float instrumentSize = 34.0f;
+    static constexpr float instrumentSize = 102.0f, instrumentAlpha = 0.13f;
+
+    /** The hand over the response, and the watermark's fade toward it: 0 none .. 1 whole, a quarter of a second. */
+    bool overResponse = false;
+    float responseFade = 0.0f;
+    static constexpr float responseFadeSeconds = 0.25f;
+    bool responseFading() const { return overResponse ? responseFade < 1.0f : responseFade > 0.0f; }
+
+    void stepResponseFade (double dt)
+    {
+        if (! responseFading())
+            return;
+        const float by = (float) (dt / responseFadeSeconds);
+        responseFade = overResponse ? ui::jmin (1.0f, responseFade + by) : ui::jmax (0.0f, responseFade - by);
+        repaint (responseArea());
+    }
 
     void paintResponse (ui::Graphics& g) const
     {
