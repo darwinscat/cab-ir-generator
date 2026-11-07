@@ -1,12 +1,13 @@
-name = "HARD ROCK: 4x12 MUSCLE"
+name = "HARD ROCK: 4x10 HAYMAKER"
 style = "Hard Rock"
 cabir = 1
-box = "4x12-closed"
+box = "4x10-open"
 back = "closed"
 speaker = "mid"
+cone = "paper"
 horn = false
 horn_db = 0
-blend = 0.450
+blend = 0.350
 align = true
 invert = false
 
@@ -14,15 +15,15 @@ invert = false
 on = true
 model = "sm57"
 x = 0.450
-y = -0.300
-distance = 0.032
+y = -0.150
+distance = 0.020
 angle = 0.0
 
 [mic.b]
 on = true
-model = "md421"
-x = -0.075
-y = -0.350
-distance = 0.023
+model = "e906"
+x = -0.400
+y = 0.300
+distance = 0.025
 angle = 0.0
 shift = 0.000
