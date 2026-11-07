@@ -1198,6 +1198,21 @@ private:
         if (chosen < 0)
             return {};
 
+        // On the speaker the mics first, drawn over everything else there: a mic's distance and angle while they are out,
+        // then the mic itself — never the horn's steps, a speaker's icon or BLEND under it (the owner, 07.11).
+        if (scene().contains (p))
+        {
+            if (const int m = handlesShown(); m >= 0)
+            {
+                if (p.getDistanceFrom (angleKnob (m)) < 10.0f)
+                    return { Part::angle, m };
+                if (distHandle (m).expanded (8.0f, 6.0f).contains (p))
+                    return { Part::distance, m };
+            }
+            if (const int m = micAt (p); m >= 0)
+                return { Part::mic, m };
+        }
+
         if (! hornCorner().isEmpty())
             for (int i = 0; i < 4; ++i)
                 if (hornStepArea (i).expanded (hornGap / 2, 3.0f).contains (p))
@@ -1235,16 +1250,7 @@ private:
         if (hasSpeakers() && catalog().coneVariant.isNotEmpty() && speakerCell (-1).expanded (0.5f * speakerIconGap, 4.0f).contains (p))
             return { Part::speakerCone };
 
-        // A mic's distance and angle, while they are out on the speaker: over the mic itself, so the hand takes them.
-        if (const int m = handlesShown(); m >= 0)
-        {
-            if (p.getDistanceFrom (angleKnob (m)) < 10.0f)
-                return { Part::angle, m };
-            if (distHandle (m).expanded (8.0f, 6.0f).contains (p))
-                return { Part::distance, m };
-        }
         if (bothHeard() && blendTrack().expanded (8.0f, 6.0f).contains (p)) return { Part::blend };
-        if (const int m = micAt (p); m >= 0)                  return { Part::mic, m };
         return {};
     }
 
@@ -2188,21 +2194,7 @@ private:
                     g.drawEllipse (dot, 1.0f);
                 }
 
-            paintMicsOn (g, cab, setup_, o, R, 1.0f, drag == Drag::spot ? dragMic : hot.part == Part::mic ? hot.m : -1);
-
-            // Each heard mic's centimetres under it, the two kept apart.
-            const auto labels = distLabels();
-            for (int m = 0; m < 2; ++m)
-                if (heard (m))
-                {
-                    g.setColour (colourOf (m));
-                    ui::look().drawTracked (g, cmOf (mic (m).distance), labels[(size_t) m], font, 0.0f, ui::Justification::centred);
-                }
-
-            // The hand's mic: its distance and its angle out beside it.
-            paintHandles (g);
-
-            // The guitar's speakers along the scene's top, over the mics.
+            // The guitar's speakers along the scene's top.
             paintSpeakerRow (g);
 
             // BLEND along the speaker's foot: its track, A's orange at one end and B's lilac at the other, the knob between
@@ -2221,6 +2213,21 @@ private:
                 g.setColour ((over ? knob.brighter (0.3f) : knob).withMultipliedAlpha (dim));
                 g.fillRoundedRectangle (ui::Rectangle<float> (6.0f, 14.0f).withCentre ({ t.getX() + setup_.blend * t.getWidth(), t.getCentreY() }), 2.0f);
             }
+
+            // The mics over all of it, as a click finds them first (hotAt).
+            paintMicsOn (g, cab, setup_, o, R, 1.0f, drag == Drag::spot ? dragMic : hot.part == Part::mic ? hot.m : -1);
+
+            // Each heard mic's centimetres under it, the two kept apart.
+            const auto labels = distLabels();
+            for (int m = 0; m < 2; ++m)
+                if (heard (m))
+                {
+                    g.setColour (colourOf (m));
+                    ui::look().drawTracked (g, cmOf (mic (m).distance), labels[(size_t) m], font, 0.0f, ui::Justification::centred);
+                }
+
+            // The hand's mic: its distance and its angle out beside it.
+            paintHandles (g);
         }
 
         paintFind (g);
