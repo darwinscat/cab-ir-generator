@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: AGPL-3.0-or-later
-# Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko & Alisa Lafoks. Part of Cab IR Generator — see LICENSE.
+# Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko & Alisa Lafoks. Part of Orbit Bass Cab Builder and Orbit Guitar Cab Builder — see LICENSE.
 #
 # Builds the page's module — the synthesis behind the C ABI of src/web/CabirWeb.cpp — for a browser worker:
 #

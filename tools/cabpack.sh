@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: AGPL-3.0-or-later
-# Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko & Alisa Lafoks. Part of Cab IR Generator — see LICENSE.
+# Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko & Alisa Lafoks. Part of Orbit Bass Cab Builder and Orbit Guitar Cab Builder — see LICENSE.
 #
 # Makes the IR packs a page offers (tools/cabpack.cpp) into one folder, with what made them (BUILD-INFO) — run again
 # whenever the presets or the typical list change; the same inputs on the same machine give the same bytes. The typical

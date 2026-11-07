@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of Cab IR Generator — see LICENSE.
+// Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of Orbit Bass Cab Builder and Orbit Guitar Cab Builder — see LICENSE.
 
 // THE PANEL FOR A PAGE: the app's own panel (src/panel/Panel.h), drawn into a buffer of drawing calls a canvas plays
 // (src/web/cabir-panel.mjs plays them as the app's JUCE does), the hand's moves handed in, what it asks handed out.
