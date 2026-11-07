@@ -73,6 +73,37 @@ namespace
 
     bool guitar = false;   // the table read is the guitar's (useCatalogOf)
 
+    /** What its words name: BASS and Orbit Bass Cab Builder, or the guitar's. */
+    const char* instrument() { return guitar ? "GUITAR" : "BASS"; }
+    const char* builder() { return guitar ? "Orbit Guitar Cab Builder" : "Orbit Bass Cab Builder"; }
+
+    /** A style's folder: its name lower-cased, a space a hyphen — "classic-rock", "top-12" (the site, 07.11). */
+    std::string folderOf (const std::string& style)
+    {
+        auto f = lower (style);
+        std::replace (f.begin(), f.end(), ' ', '-');
+        return f;
+    }
+
+    /** A box's size as its folder under size/ names it: the bass's the panel's word, "8x10"; the guitar's its box without
+        -open or -closed, "4x12", the tall 2x12 kept apart from the wide one as "2x12-vertical" (the site, 07.11). */
+    std::string sizeOf (const std::string& box)
+    {
+        if (! guitar)
+            return Panel::wordOf (Panel::indexOf (ui::String (box))).toStdString();
+        for (const char* end : { "-open", "-closed" })
+            if (const auto n = std::string (end).size(); box.size() > n && box.compare (box.size() - n, n, end) == 0)
+                return box.substr (0, box.size() - n);
+        return box;
+    }
+
+    /** ...and as a title writes it: "4x12", "2x12 VERTICAL". */
+    std::string sizeTitle (const std::string& size)
+    {
+        const auto dash = size.find ('-');
+        return dash == std::string::npos ? size : size.substr (0, dash) + " " + ui::String (size.substr (dash + 1)).toUpperCase().toStdString();
+    }
+
     /** THE GUITAR'S TABLE, known by its boxes: every one of the guitar's catalog a "<box> cap" of it. Its catalog is then
         the panel's (Panel::useCatalog), before anything reads a state — else the bass's stands, and calls them unknown. */
     void useCatalogOf (const synth::Table& table)
@@ -130,7 +161,7 @@ namespace
     }
 
     /** The page's address, opening the generator on `s` (panel/Link.h) — as each WAV says it too. */
-    std::string linkTo (const State& s) { return std::string (pageAddress) + "#" + linkOf (s); }
+    std::string linkTo (const State& s) { return std::string (guitar ? guitarPageAddress : pageAddress) + "#" + linkOf (s); }
 
     std::string tsvLine (const Item& it)
     {
@@ -352,7 +383,8 @@ namespace
     }
 
     /** RESPONSES.SVG: every cabinet of a folder (chartSvg), four across, under its title — "ROCK · 20 BASS CABINETS from
-        Darwin's Cat" (the owner, 06.11), the style upper-cased or the size as it is written — what made it, and what the
+        Darwin's Cat" (the owner, 06.11), "TOP 12 · 12 GUITAR CABINETS from Darwin's Cat" the guitar's, the style
+        upper-cased or the size as it is written — what made it, and what the
         line and the bands say, a click on one opening it on the page. Nothing read under 13 px. */
     std::string responsesSvg (const std::string& title, const std::vector<Item>& items, const std::vector<Curve>& curves)
     {
@@ -362,8 +394,8 @@ namespace
         const auto f = svgNumber;
         std::string out = svgOpen (columns * cellW, head + (float) rows * cellH + 8.0f);
         out += "<text x=\"20\" y=\"32\" fill=\"#ece9f6\" font-size=\"20\" font-weight=\"600\" letter-spacing=\"1.5\" " + svgFont + ">"
-             + escaped (title) + " \xc2\xb7 " + std::to_string (items.size()) + " BASS CABINETS from Darwin's Cat</text>\n";
-        out += "<text x=\"20\" y=\"56\" fill=\"#a6a2bd\" font-size=\"13\" " + svgFont + ">Made with Orbit Bass Cab Builder " + CABIR_VERSION
+             + escaped (title) + " \xc2\xb7 " + std::to_string (items.size()) + " " + instrument() + " CABINETS from Darwin's Cat</text>\n";
+        out += "<text x=\"20\" y=\"56\" fill=\"#a6a2bd\" font-size=\"13\" " + svgFont + ">Made with " + builder() + " " + CABIR_VERSION
              + ". A click on one opens it on the page.</text>\n";
         legendSvg (out, 20, 80, true, true);
         for (size_t i = 0; i < items.size() && i < curves.size(); ++i)
@@ -519,7 +551,7 @@ int main (int argc, char** argv)
     for (const auto& p : presets)
     {
         if (auto it = presetAt (p))
-            folders[lower (it->style)].push_back (std::move (*it));
+            folders[folderOf (it->style)].push_back (std::move (*it));
         else
         {
             std::fprintf (stderr, "BAD  %s\n", p.string().c_str());
@@ -609,7 +641,7 @@ int main (int argc, char** argv)
                 // What each WAV says of itself (synth::WavMeta): its name, the link that opens it on the page, its preset.
                 synth::WavMeta meta;
                 meta.name = it.name;
-                meta.software = "Orbit Bass Cab Builder";   // no version (the owner, 06.11): a WAV's bytes change only with its sound — BUILD-INFO says the version
+                meta.software = builder();   // no version (the owner, 06.11): a WAV's bytes change only with its sound — BUILD-INFO says the version
                 meta.comment = linkTo (it.state);
                 meta.preset = it.text;
                 const auto wav = synth::wav24 (ir, (int) r.hz, &meta);
@@ -628,7 +660,7 @@ int main (int argc, char** argv)
     // live (the owner, 06.11: one store, the sizes pointing into it — a page's zip gathers them).
     std::map<std::string, std::vector<const Made*>> sizes;
     for (const auto& m : made)
-        sizes[Panel::wordOf (Panel::indexOf (ui::String (m.item->state.box))).toStdString()].push_back (&m);
+        sizes[sizeOf (m.item->state.box)].push_back (&m);
     for (const auto& [size, list] : sizes)
     {
         const auto folder = "size/" + size;
@@ -641,7 +673,7 @@ int main (int argc, char** argv)
             curves.push_back (m->curve);
             homes.push_back (m->folder);
         }
-        finish (folder, size, items, curves, &homes);
+        finish (folder, sizeTitle (size), items, curves, &homes);
     }
     std::printf ("%d IRs written, %d bad\n", written, bad);
     return bad == 0 ? 0 : 1;
