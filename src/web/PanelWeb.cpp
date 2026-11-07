@@ -10,6 +10,9 @@
 //   cabir_panel_response (now, before, comb)   the band's curves, cabir_points() floats each; null for none
 //   cabir_panel_search (x, y, score) / cabir_panel_end_search ()      FIND's map as it goes, and done
 //   cabir_panel_pointer (kind, x, y)           0 move, 1 down, 2 drag, 3 up, 4 exit, 5 double click
+//   cabir_panel_grabs (x, y)                   1 if a press there would start a drag (a mic on the speaker, its distance
+//                                              track or angle knob while shown, BLEND, B's TIME), else 0 — a touch's
+//                                              host asks it as the finger lands: the panel's touch, or the page's scroll
 //   cabir_panel_tick (seconds)                 the page's clock, while cabir_panel_wants_frames () says 1
 //   cabir_panel_paint ()                       the calls: their 32-bit words, at cabir_panel_ops (); their words' text
 //                                              in cabir_panel_text () (cabir_panel_text_size () bytes, UTF-8)
@@ -226,6 +229,7 @@ CABIR_EXPORT void cabir_panel_pointer (int kind, float x, float y)
     }
 }
 
+CABIR_EXPORT int cabir_panel_grabs (float x, float y) { return session().panel.grabs ({ x, y }) ? 1 : 0; }
 CABIR_EXPORT void cabir_panel_tick (double seconds) { session().panel.tick (seconds); }
 CABIR_EXPORT int cabir_panel_wants_frames() { return session().panel.wantsFrames() ? 1 : 0; }
 

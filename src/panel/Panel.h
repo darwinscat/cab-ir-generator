@@ -425,6 +425,15 @@ public:
         return {};
     }
 
+    /** WHETHER A PRESS AT `p` WOULD START A DRAG, as the panel stands now: a mic on the speaker, its distance track or angle
+        knob while they are out, BLEND, B's TIME — so a touch screen's host knows, as the finger lands, that this touch is
+        the panel's and not a scroll of its page. A click's things (a box, a back, a word) are not drags. */
+    bool grabs (ui::Point<float> p) const
+    {
+        const auto part = hotAt (p).part;
+        return part == Part::mic || part == Part::distance || part == Part::angle || part == Part::blend || part == Part::shift;
+    }
+
     /** DEFAULT as a button in the foot — or not, where the host offers it another way (the app's preset menu). With
         neither DEFAULT nor CLOSE the foot's row goes, and the panel is footRowH shorter. */
     bool showDefault = true;
