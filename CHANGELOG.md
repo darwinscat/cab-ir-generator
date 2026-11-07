@@ -8,7 +8,7 @@ All notable changes to **Orbit Bass Cab Builder** and **Orbit Guitar Cab Builder
 
 ## [Unreleased]
 
-## [0.2.0] — 2026-11-07 — two builders, their plugins, and a window in 16:9
+## [0.2.0] — 2026-11-08 — two builders, their plugins, and a window in 16:9
 
 ### Added
 - **Two downloads a platform, one for each builder**, each with its app and its plugins:
