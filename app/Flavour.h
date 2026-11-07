@@ -22,7 +22,7 @@ struct Riff { const char* file; const char* title; };
 inline constexpr bool guitar = true;
 inline constexpr const char* product = "Orbit Guitar Cab Builder";
 inline constexpr const char* formerly = "Guitar Cab IR Generator";
-inline constexpr const char* page = "https://darwinscat.com/felitronics/guitar-cab-ir-builder";   // its own, on the site
+inline constexpr const char* page = "https://darwinscat.com/felitronics/orbit-guitar-cab-builder";   // its own, on the site
 inline constexpr const char* utmSource = "guitar-cab-ir-generator";
 inline constexpr const char* sampleWord = "GUITAR";
 inline constexpr const char* samplePrompt = "A guitar sample";
