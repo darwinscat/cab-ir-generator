@@ -367,11 +367,16 @@ int MainComponent::writeStills (const juce::File& folder, float scale)
     shown (first);
     write ("panel-default@2x.png");
 
-    // A pair that combs: B out in the room, on a clock of its own.
+    // A pair that combs: B heard, out in the room, on a clock of its own, the two even — its zebra plain (the owner, 07.11).
     auto combing = first;
+    combing.b.on = true;   // the guitar's first has B dark
     combing.b.x = 0.4;
+    combing.b.y = 0.0;
     combing.b.distance = 0.30;
     combing.align = false;
+    combing.invert = false;
+    combing.shiftMs = 0.0;
+    combing.blend = 0.5;
     shown (combing);
     write ("panel-comb@2x.png");
 
@@ -394,13 +399,24 @@ int MainComponent::writeStills (const juce::File& folder, float scale)
     write ("panel-find@2x.png");
 
     // The whole window as the app opens on its DEFAULT — its header, the panel, its strip, 960 x 540 — twice the stills'
-    // scale, 3840 x 2160 at their 2x: a page's 16:9 picture, larger than a screen holds the window (the owner, 07.11).
+    // scale, 3840 x 2160 at their 2x: a page's 16:9 picture, larger than a screen holds the window (the owner, 07.11);
+    // and the same with the pair that combs, its zebra across the response.
     {
         MainComponent main;   // the app's own, on the stills' run's settings: the default, the first riff
-        const auto ir = renderer.render (table, first.box, synth::pairOf (first), (size_t) 1 << 14);
-        main.picker.showResponse (synth::responseOf (synth::as24Bit (ir.mix), 48000.0), {},
-                                  ir.a.empty() ? std::vector<float>() : synth::combOf (ir.a, ir.b));
-        save (folder.getChildFile ("window-default@4x.png"), main.createComponentSnapshot (main.getLocalBounds(), true, 2.0f * scale));
+        const auto window = [&] (const State& s, const char* name)
+        {
+            auto ir = renderer.render (table, s.box, synth::pairOf (s), (size_t) 1 << 14);
+            const auto [cab, setup] = CabPicker::setupOf (s);
+            main.picker.show (cab, setup);
+            main.picker.showResponse (synth::responseOf (synth::as24Bit (ir.mix), 48000.0), {},
+                                      ir.a.empty() ? std::vector<float>() : synth::combOf (ir.a, ir.b));
+            main.irMix = std::move (ir.mix);   // BYPASS's A and B live with two mics heard
+            main.irA = std::move (ir.a);
+            main.irB = std::move (ir.b);
+            save (folder.getChildFile (name), main.createComponentSnapshot (main.getLocalBounds(), true, 2.0f * scale));
+        };
+        window (first, "window-default@4x.png");
+        window (combing, "window-comb@4x.png");
     }
 
     // Each box of the pile alone, as the pile draws it unchosen, for a page's list of sizes (the owner, 05.11): one scale
