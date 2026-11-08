@@ -12,6 +12,9 @@ box_q_factor = 0.65
 # A closed box's echo, out through the cone again (CabSynth.h, Cab::echoGain): 0.65 of it each way round, 400 Hz to
 # 2 kHz — the 5-80 ms its mids keep ringing, some 11 dB under the whole at 1 kHz, as close mics hear measured cabinets.
 box_echo = 0.65/400/2000
+# The top's tail, 27 dB under the direct sound from 4 kHz up, dying away 12 ms at a time (CabSynth.h, Cab::tailTop): the
+# 5-80 ms measured cabinets keep ringing at 8-16 kHz, open and closed alike, some 28 dB under the whole.
+top_tail = -27/4000/12
 # The cap past the cone's cliff, 22 dB under the whole cone, in steeply from 8.5 kHz, falling off from 11 (CabSynth.h,
 # Cab::capTop): the shelf measured guitar cabinets keep at 7.5-10 kHz.
 cap_top = -22/8500/11000/0.7
@@ -257,7 +260,8 @@ mic_axis_tilt_deg = 0
 # THE BOXES: four twelves' sealed box, the tall half-closed 2x12, the open combos, the tens. Their cavity modes across the box (c/2W, c/2H) and
 # through it (c/2D), as an empty box rings — an open back lets the depth's go and keeps 40 % of the others (CabSynth.h,
 # render). An open back's Q against the cone's free air (open_q_factor, Cab::openQ): the small combos ring round the
-# cone's own resonance, the big open boxes hardly at all.
+# cone's own resonance, the big open boxes hardly at all. The small open combos' top rings 6 dB less than the big boxes'
+# (top_tail), as measured small combos' 8-16 kHz does.
 
 [4x12-closed cap]
 inherit = defaults, speaker-mid, mic-sm57, pos-cap
@@ -326,6 +330,7 @@ effective_radius_m = 0.125
 horn = absent
 cavity_modes = 286/5/0.16, 357/4/-0.12, 686/5/0.16
 panel_modes = 150/3/0.06
+top_tail = -33/4000/12
 [1x12-open edge]
 inherit = 1x12-open cap, pos-edge
 [1x12-open offaxis]
@@ -364,6 +369,7 @@ effective_radius_m = 0.105
 horn = absent
 cavity_modes = 286/5/0.16, 373/4/-0.12, 715/5/0.16
 panel_modes = 160/3/0.06
+top_tail = -33/4000/12
 [2x10-open edge]
 inherit = 2x10-open cap, pos-edge
 [2x10-open offaxis]
@@ -383,6 +389,7 @@ effective_radius_m = 0.105
 horn = absent
 cavity_modes = 373/5/0.16, 429/4/-0.12, 780/5/0.16
 panel_modes = 180/3/0.06
+top_tail = -33/4000/12
 [1x10-open edge]
 inherit = 1x10-open cap, pos-edge
 [1x10-open offaxis]
