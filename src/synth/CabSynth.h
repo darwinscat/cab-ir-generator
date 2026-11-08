@@ -136,8 +136,24 @@ inline void writeWav24 (const std::string& path, const std::vector<double>& x, i
 using Section = std::map<std::string, std::string>;
 using Table = std::vector<std::pair<std::string, Section>>;
 
-/** The table out of its text. */
-inline Table parseTable (const std::string& text)
+/** AN OPTION: "[option <name>: <section>]" — its keys laid over that section's own, unless <name> is among those switched
+    off; its `label` what a listener's SETUP calls it, laid over nothing. A table without one reads as it did. */
+inline bool optionOf (const std::string& section, std::string& name, std::string& target)
+{
+    if (section.rfind ("option ", 0) != 0) return false;
+    const auto colon = section.find (':');
+    if (colon == std::string::npos) return false;
+    const auto trim = [] (std::string s) {
+        const auto a = s.find_first_not_of (' '), b = s.find_last_not_of (' ');
+        return a == std::string::npos ? std::string() : s.substr (a, b - a + 1);
+    };
+    name = trim (section.substr (7, colon - 7));
+    target = trim (section.substr (colon + 1));
+    return true;
+}
+
+/** The sections as the text has them, its options among them. */
+inline Table readSections (const std::string& text)
 {
     Table out;
     std::istringstream f (text);
@@ -156,6 +172,44 @@ inline Table parseTable (const std::string& text)
         out.back().second[trim (line.substr (0, eq))] = trim (line.substr (eq + 1));
     }
     return out;
+}
+
+/** The table out of its text, its options laid in but for those in `off`. */
+inline Table parseTable (const std::string& text, const std::vector<std::string>& off = {})
+{
+    Table kept;
+    std::vector<std::pair<std::string, Section>> laid;   // each option on: its section, its keys
+    for (auto& [n, s] : readSections (text))
+    {
+        std::string name, target;
+        if (! optionOf (n, name, target))
+            kept.push_back ({ n, std::move (s) });
+        else if (std::find (off.begin(), off.end(), name) == off.end())
+            laid.push_back ({ target, std::move (s) });
+    }
+    for (auto& [target, s] : laid)
+        for (auto& [n, own] : kept)
+            if (n == target)
+                for (const auto& [k, v] : s)
+                    if (k != "label") own[k] = v;
+    return kept;
+}
+
+/** The table's options, each name once in the order it first comes, with its label (else its name). */
+inline std::vector<std::pair<std::string, std::string>> optionsOf (const std::string& text)
+{
+    std::vector<std::pair<std::string, std::string>> names;
+    for (const auto& [n, s] : readSections (text))
+    {
+        std::string name, target;
+        if (! optionOf (n, name, target)) continue;
+        const auto it = std::find_if (names.begin(), names.end(), [&] (const auto& o) { return o.first == name; });
+        if (it == names.end())
+            names.push_back ({ name, s.count ("label") ? s.at ("label") : name });
+        else if (it->second == name && s.count ("label"))
+            it->second = s.at ("label");
+    }
+    return names;
 }
 
 inline Table readTable (const std::string& path)
@@ -457,6 +511,8 @@ inline Cab build (const Section& s)
     }
     c.decoupleHz = num (s, "cone_decouple_hz", range (s, "breakup_hz", 1200, 7000).first);
     c.body = triples (s, "body_eq");
+    // top_eq: more of the speaker's voicing, past its knee — its own key, so a paper cone that sets its body_eq keeps it.
+    for (const auto& e : triples (s, "top_eq")) c.body.push_back (e);
     c.cavity = triples (s, "cavity_modes");
     if (c.cavity.empty()) c.cavity = triples (s, "cavity_modes_per_chamber");
     c.panel = triples (s, "panel_modes");

@@ -153,6 +153,19 @@ int main()
         check (cabir::formatNote ({ 44100, 16, 1024 }) == "44.1 kHz, 16 bit, 1024 samples", "the line under the button");
     }
 
+    // An option lays its keys over its section; switched off, the table is the one without it.
+    {
+        const std::string plainText = "[a]\nx = 1\ny = 2\n[b]\nz = 3\n";
+        const std::string withOption = plainText + "[option loud: a]\nlabel = LOUD\ny = 5\nw = 6\n[option loud: b]\nz = 7\n";
+        const auto on = cabir::synth::parseTable (withOption), off = cabir::synth::parseTable (withOption, { "loud" });
+        check (off == cabir::synth::parseTable (plainText), "an option switched off leaves the table as it was");
+        check (on.size() == 2 && on[0].second.at ("y") == "5" && on[0].second.at ("w") == "6" && on[1].second.at ("z") == "7"
+                   && on[0].second.count ("label") == 0,
+               "an option on lays its keys over its sections, its label left out");
+        const auto names = cabir::synth::optionsOf (withOption);
+        check (names.size() == 1 && names[0].first == "loud" && names[0].second == "LOUD", "an option named once, with its label");
+    }
+
     std::printf ("%s\n%s", failures == 0 ? "state: all passed" : "state: FAILED", text.c_str());
     return failures == 0 ? 0 : 1;
 }
