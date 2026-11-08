@@ -210,20 +210,24 @@ mic_highpass_hz = 90
 mic_presence_eq = 5500/0.8/5
 mic_top_corner_hz = 13000
 
-# The flat one made for a guitar's cabinet: a gentler proximity, a broad lift round 4 kHz, an open top.
+# The one made for a guitar's cabinet: hardly a proximity, its presence at 5 kHz, its top falling steeply from 9.5 —
+# darker than the SM57 from 8 kHz up, 5 dB at 16, as 25 measured cabinets' e906 against their SM57 at the same place.
 [mic-e906]
-proximity_strength = 0.5
+proximity_strength = 0.1
 proximity_corner_hz = 80
 mic_highpass_hz = 70
-mic_presence_eq = 4000/0.7/3
-mic_top_corner_hz = 15000
+mic_presence_eq = 5000/1/5
+mic_top_corner_hz = 0
+mic_lowpass_hz = 9500
 
+# A big dynamic's: more proximity than the SM57, its bite broad round 4 kHz, its top open past the SM57's to 16 kHz, as
+# 26 measured cabinets' MD421 against their SM57 at the same place.
 [mic-md421]
-proximity_strength = 0.6
+proximity_strength = 1.4
 proximity_corner_hz = 80
-mic_highpass_hz = 80
-mic_presence_eq = 4500/0.8/3.5
-mic_top_corner_hz = 14000
+mic_highpass_hz = 70
+mic_presence_eq = 4000/0.8/6, 15000/1.5/5
+mic_top_corner_hz = 18000
 
 [mic-re20]
 proximity_strength = 0.1
