@@ -8,6 +8,10 @@ All notable changes to **Orbit Bass Cab Builder** and **Orbit Guitar Cab Builder
 
 ## [Unreleased]
 
+### Removed
+- **The guitar's Clean style**: its twenty presets were jazz and country, far from the rock the builder is for. A clean
+  sound for rock stays in Blues and Indie, on the same open 1x12 and 2x12. 140 presets in seven styles, and the TOP 12.
+
 ## [0.2.0] — 2026-11-08 — two builders, their plugins, and a window in 16:9
 
 ### Added
