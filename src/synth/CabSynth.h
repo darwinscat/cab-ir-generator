@@ -303,6 +303,12 @@ struct Cab
     // A second section over it (woofer_lowpass_second = Hz/Q): a guitar's cone, flat to its knee and falling off a cliff
     // past it, which one second-order section cannot draw. 0, none — the bass's.
     double wooferLp2 = 0, wooferQ2 = 0.707;
+    // The cap and the coil past the cone's cliff (cap_top = dB/from Hz/top Hz/Q): they go on speaking where the paper has
+    // let go, the shelf measured guitar cabinets keep from 7.5 to 10 kHz some 25 dB under 1 kHz before falling off at
+    // their own corner. A small piston at each cone's centre, its level against the whole cone gathered there, coming in
+    // steeply from `from` — past the cone's cliff, so the two never meet where they would dig a pit — and falling off
+    // from `top`. None — the bass's, and a cliff all the way down.
+    double capTop = 0, capFrom = 8500, capHz = 11000, capQ = 0.707;
     // The paper's way past its breakup (cone_decouple_floor, the guitar's PAPER cone): what of the cone lets go keeps
     // `floor` of its motion, but scattered — each patch late by its own 0..floorJitterMs (fixed per patch, no draw) —
     // and falling off at the knee (floorHz, cone_floor_lowpass_hz, the woofer's lowpass by default). Not a piston's: it
@@ -392,6 +398,13 @@ inline Cab build (const Section& s)
     {
         c.wooferLp2 = second[0];
         c.wooferQ2 = second[1];
+    }
+    if (const auto cap = nums (str (s, "cap_top")); cap.size() >= 4)
+    {
+        c.capTop = std::pow (10.0, cap[0] / 20);
+        c.capFrom = cap[1];
+        c.capHz = cap[2];
+        c.capQ = cap[3];
     }
     c.decoupleHz = num (s, "cone_decouple_hz", range (s, "breakup_hz", 1200, 7000).first);
     c.body = triples (s, "body_eq");
@@ -855,6 +868,9 @@ inline std::vector<double> render (const Cab& c, size_t n, size_t threads = 0)
         box *= std::pow (10.0, -stepDb / 20 * (1 / (1 + (f / stepHz) * (f / stepHz))));
 
         const cd piston = lowpass2 (f, c.wooferLp, c.wooferQ) * (c.wooferLp2 > 0 ? lowpass2 (f, c.wooferLp2, c.wooferQ2) : cd (1.0));
+        // The cap past the cone's knee (Cab::capTop), against a whole cone gathered at its centre.
+        const cd capped = c.capTop > 0 ? c.capTop * highpass2 (f, c.capFrom, 0.707) * highpass2 (f, c.capFrom, 0.707) * lowpass2 (f, c.capHz, c.capQ)
+                                       : cd (0.0);
         cd sum = 0.0;
         cd roomFed = 0.0;      // a room's: the cones' whole output, what its tail is fed
         double roomKa = 0;     // ...and how the cones beam it, their moving part a piston
@@ -900,6 +916,15 @@ inline std::vector<double> render (const Cab& c, size_t n, size_t threads = 0)
                 if (c.roomW > 0)
                     whole1 += v * p.area * std::polar (1.0, 2 * pi * f * p.z / c0);
             }
+            // The cap: a small piston at the cone's centre, heard as it is — not as the paper round it lets go.
+            if (c.capTop > 0)
+                for (int img = 0; img < images; ++img)
+                {
+                    double r, dx, dy, dz;
+                    pathTo (c.drivers[d].x, mirrored (img, c.drivers[d].y), -c.depthFrac * c.radius, r, dx, dy, dz);
+                    drv += (img == 0 ? 1.0 : c.floorRefl) * capped * heard (c, mic, dx, dy, dz, f) / r
+                         * std::polar (1.0, -2 * pi * f * (r / c0 - minDelay));
+                }
             sum += drv * c.sens[d] * cone * box * coil[k];
             if (c.roomW > 0)   // the room's images of this cone, its moving part beaming as a piston
             {
