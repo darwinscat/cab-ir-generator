@@ -188,7 +188,7 @@ namespace
         Curve c;
         c.db = synth::responseOf (synth::as24Bit (parts.mix), rate);
         c.bad = synth::pitsOf (c.db);
-        for (auto& b : c.bad)   // a pit judged from where the table's line reddens (the guitar's 5 dB), as the panel does
+        for (auto& b : c.bad)   // a pit judged from where the table's line reddens (the guitar's 7 dB), as the panel does
             b = std::max (0.0f, b - (float) (pitRed - 3.0));
         if (! parts.a.empty())
         {

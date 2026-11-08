@@ -1201,7 +1201,7 @@ inline Cab cabAt (const Table& table, const std::string& cab, const Spot& spot, 
 }
 
 /** WHERE THE PANEL'S LINE REDDENS for a box of the table: its response this far under its neighbours, dB — the table's
-    pit_red_db (the guitar's 5: its speakers' own dips run deeper than a bass's, the owner, 07.11), else the bass's 3.
+    pit_red_db (the guitar's 7: its speakers' own dips run deeper than a bass's, the owner, 07.11 and 08.11), else the bass's 3.
     The panel's own is its catalog's (Panel::Catalog::pitRedDb), the same number. */
 inline double pitRedOf (const Table& table, const std::string& cab)
 {

@@ -16,9 +16,10 @@ floor_gap_m = 0
 floor_reflection = 0.9
 length_ms = 100
 tail_fade_ms = 15
-# Where the panel's line reddens with a pit, and FIND and the presets' tools judge one: 5 dB, the speakers' own dips
-# running deeper than a bass's (the owner, 07.11; the panel's catalog says the same, GuitarCatalog.h).
-pit_red_db = 5
+# Where the panel's line reddens with a pit, and FIND and the presets' tools judge one: 7 dB, the speakers' own dips
+# running deeper than a bass's — measured guitar cabinets keep one or two of 6 dB and more at 1-6 kHz, a close mic's own
+# (the owner, 07.11 at 5; 08.11 at 7; the panel's catalog says the same, GuitarCatalog.h).
+pit_red_db = 7
 # Where a pair's comb reddens from 2 kHz up: 6 dB — up there a comb is a tone of its own, the classic second mic's phase
 # colour, not a fault; under 2 kHz 3, as the bass's, where it thins the low notes (the owner, 07.11; the panel's catalog
 # says the same, GuitarCatalog.h).
