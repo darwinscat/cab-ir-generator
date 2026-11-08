@@ -1436,6 +1436,12 @@ class PairRenderer
 public:
     PairParts render (const Table& table, const std::string& cab, const Pair& p, size_t n = 1 << 14, double rate = fs)
     {
+        if (&table != lastTable)   // another table (a listener's SETUP): nothing kept from the last one is its
+        {
+            lastA = {};
+            lastB = {};
+            lastTable = &table;
+        }
         if (p.blend <= 0)
         {
             auto ca = cabAt (table, cab, p.a, rate);
@@ -1499,6 +1505,7 @@ public:
 private:
     struct Kept { std::string key; std::vector<double> ir; };
     Kept lastA, lastB;
+    const Table* lastTable = nullptr;
 
     static std::string keyOf (const std::string& cab, const Spot& s, double refDelay, size_t n, double rate)
     {
