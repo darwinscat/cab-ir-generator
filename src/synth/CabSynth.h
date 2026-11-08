@@ -351,6 +351,8 @@ struct Cab
     double diffDb = -24, diffLp = 4000;
     // mic
     double micHp = 35, micHpQ = 0.707, micLp = 12000, proxHz = 140, prox50 = 2.5, proxMax = 6, offLoss = 4;
+    // mic_off_axis = dB/full Hz: the capsule's top lost past its pattern at 90 degrees, all of it from full Hz up
+    double offAxisDb = 4, offAxisFull = 8000;
     std::vector<std::array<double, 3>> presence;
     double micD = 0.05, micOff = 0, micOffY = 0, tilt = 0;
     // Where the table's horn level (horn_at_mic_db) was taken: its section's own mic. A live mic (cabAt) moves off it,
@@ -479,6 +481,11 @@ inline Cab build (const Section& s)
     c.prox50 = num (s, "proximity_gain_at_50mm_db", 2.5);
     c.proxMax = num (s, "proximity_max_db", 6);
     c.offLoss = num (s, "mic_extra_loss_at_6k_45deg_db", 4);
+    if (const auto off = nums (str (s, "mic_off_axis")); off.size() >= 2)
+    {
+        c.offAxisDb = off[0];
+        c.offAxisFull = off[1];
+    }
     c.micD = num (s, "mic_distance_m", num (s, "mic_distance_from_cap_plane_m", 0.05));
     c.micOff = num (s, "mic_radial_offset_fraction", 0);
     c.tilt = num (s, "mic_axis_tilt_deg", 0);
@@ -621,8 +628,10 @@ inline cd heard (const Cab& c, const Mic& m, double dx, double dy, double dz, do
     if (c.figure8)   // all gradient: its proximity whole, no front-only loss at the top
         return cosT * (1.0 + prox);
     const cd pattern = 0.5 + 0.5 * cosT * (1.0 + prox);
-    const double e = theta <= 60 ? 2.5 * theta / 60 : theta <= 90 ? 2.5 + 1.5 * (theta - 60) / 30 : 4 + 2 * (theta - 90) / 90;
-    const double top = std::clamp (std::log2 (f / 1000) / 3, 0.0, 1.0);
+    // Past its pattern the capsule loses its top off its axis, 4 dB at 90 degrees from 8 kHz up unless mic_off_axis says.
+    const double e = (theta <= 60 ? 2.5 * theta / 60 : theta <= 90 ? 2.5 + 1.5 * (theta - 60) / 30 : 4 + 2 * (theta - 90) / 90)
+                   * (c.offAxisDb == 4 ? 1.0 : c.offAxisDb / 4);
+    const double top = std::clamp (std::log2 (f / 1000) / (c.offAxisFull == 8000 ? 3.0 : std::log2 (c.offAxisFull / 1000)), 0.0, 1.0);
     return pattern * std::pow (10.0, -e * top / 20);
 }
 
