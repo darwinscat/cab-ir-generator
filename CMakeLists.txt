@@ -174,6 +174,9 @@ if(CABIR_APP)
     execute_process(COMMAND git rev-parse --short HEAD WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
                     OUTPUT_VARIABLE cabirGitHash OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
 
+    # The owner's listening build: SETUP in the app's strip switches the table's options (app/Table.h). Never a release's.
+    option(CABIR_LISTEN "The owner's listening build: SETUP switches the table's options" OFF)
+
     # One app, built for each instrument (app/Flavour.h): its name, its bundle, its logo — the icon and the mark the header
     # draws, from `logo` (assets/logo, the bass's, or assets/logo/guitar) — and its data: the cabinet table, the factory's
     # presets and the riffs the player carries, from `data` (the bass's) or `data/guitar`.
@@ -202,7 +205,8 @@ if(CABIR_APP)
             CABIR_GIT_HASH="${cabirGitHash}"
             CABIR_CORE_VERSION="${cabirCoreVersion}"
             CABIR_TOML_VERSION="${cabirTomlVersion}"
-            CABIR_APPKIT_VERSION="${cabirAppkitVersion}")
+            CABIR_APPKIT_VERSION="${cabirAppkitVersion}"
+            $<$<BOOL:${CABIR_LISTEN}>:CABIR_LISTEN=1>)
         target_link_libraries(${target} PRIVATE
             ${dataTarget}
             ${riffsTarget}

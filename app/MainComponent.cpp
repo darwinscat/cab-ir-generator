@@ -3,6 +3,7 @@
 
 #include "MainComponent.h"
 #include "Flavour.h"
+#include "Table.h"
 
 #include <BinaryData.h>
 #if ! CABIR_PLUGIN
@@ -63,12 +64,8 @@ namespace
         return nullptr;
     }
 
-    /** The cabinet table, once: what the download's note reads the IR's length from. */
-    const synth::Table& cabinetTable()
-    {
-        static const auto table = synth::parseTable (std::string (BinaryData::cabinets_txt, (size_t) BinaryData::cabinets_txtSize));
-        return table;
-    }
+    /** The cabinet table: what the download's note reads the IR's length from. */
+    const synth::Table& cabinetTable() { return playedTable(); }
 
     juce::PropertiesFile::Options storage()
     {
@@ -85,6 +82,75 @@ namespace
     {
         return felitronics::appkit::brand::wordmarkFont (felitronics::appkit::brand::wordmarkTypeface(), height);
     }
+
+#if CABIR_LISTEN
+    /** THE OWNER'S SETUP: a row for each of the table's options, ticked while heard; a click turns it, and the cabinet is
+        rendered again. */
+    class SetupView : public juce::Component
+    {
+    public:
+        static constexpr int rowH = 36, top = 44, bottom = 24, width = 460;
+
+        SetupView (std::vector<std::pair<std::string, std::string>> all, std::vector<std::string> off,
+                   std::function<void (const std::vector<std::string>&)> chosen)
+            : options (std::move (all)), switchedOff (std::move (off)), onChosen (std::move (chosen))
+        {
+            setSize (width, top + rowH * (int) options.size() + bottom);
+        }
+
+        void paint (juce::Graphics& g) override
+        {
+            g.fillAll (look().panel);
+            const auto font = look().font (13.0f), name = look().font (15.0f);
+            g.setColour (look().txDim);
+            look().drawTracked (g, "TICKED, HEARD. UNTICKED, AS BEFORE (V6).", getLocalBounds().removeFromTop (top).reduced (18, 0).toFloat(),
+                                font, 0.06f, juce::Justification::centredLeft);
+            for (size_t i = 0; i < options.size(); ++i)
+            {
+                const auto row = rowArea ((int) i);
+                const bool on = isOn (i);
+                const auto box = juce::Rectangle<float> (20.0f, 20.0f).withCentre ({ (float) row.getX() + 28.0f, (float) row.getCentreY() });
+                g.setColour (look().panel2);
+                g.fillRoundedRectangle (box, 4.0f);
+                g.setColour (on ? look().orange : look().txFaint);
+                g.drawRoundedRectangle (box, 4.0f, on ? 1.6f : 1.0f);
+                if (on)
+                {
+                    juce::Path tick;
+                    tick.startNewSubPath (box.getX() + 5.0f, box.getCentreY());
+                    tick.lineTo (box.getX() + 9.0f, box.getBottom() - 5.5f);
+                    tick.lineTo (box.getRight() - 4.5f, box.getY() + 5.0f);
+                    g.strokePath (tick, juce::PathStrokeType (2.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+                }
+                g.setColour (on ? look().tx : look().txDim);
+                look().drawTracked (g, options[i].second, row.withTrimmedLeft (50).toFloat(), name, 0.06f, juce::Justification::centredLeft);
+            }
+        }
+
+        void mouseDown (const juce::MouseEvent& e) override
+        {
+            for (size_t i = 0; i < options.size(); ++i)
+                if (rowArea ((int) i).contains (e.getPosition()))
+                {
+                    const auto n = options[i].first;
+                    if (isOn (i))
+                        switchedOff.push_back (n);
+                    else
+                        switchedOff.erase (std::remove (switchedOff.begin(), switchedOff.end(), n), switchedOff.end());
+                    repaint();
+                    onChosen (switchedOff);
+                }
+        }
+
+    private:
+        std::vector<std::pair<std::string, std::string>> options;
+        std::vector<std::string> switchedOff;
+        std::function<void (const std::vector<std::string>&)> onChosen;
+
+        bool isOn (size_t i) const { return std::find (switchedOff.begin(), switchedOff.end(), options[i].first) == switchedOff.end(); }
+        juce::Rectangle<int> rowArea (int i) const { return { 0, top + i * rowH, getWidth(), rowH }; }
+    };
+#endif
 
     /** What the version window says that the badge cannot know: who we are, what this build is and was built against. */
     felitronics::appkit::VersionBadge::Config about()
@@ -136,6 +202,13 @@ MainComponent::MainComponent (Session* host)
     {
         carryFormerName();
         engine = std::make_unique<Engine>();
+#if CABIR_LISTEN
+        // The options the owner's SETUP switched off the last run, before the first cabinet is rendered.
+        std::vector<std::string> off;
+        for (const auto& n : juce::StringArray::fromTokens (properties.getUserSettings()->getValue ("optionsOff"), " ", ""))
+            off.push_back (n.toStdString());
+        PlayedTable::get().setOptionsOff (off);
+#endif
     }
     mark = markOf();
     cat = catOf();
@@ -279,7 +352,7 @@ void MainComponent::render (const State& s, bool live)
     {
         if (mine != latest.load())
             return;   // superseded before it began
-        static const auto table = synth::parseTable (std::string (BinaryData::cabinets_txt, (size_t) BinaryData::cabinets_txtSize));
+        const auto& table = playedTable();
         // The mic that did not move kept, the one that did rendered at half the size while the hand is on it.
         auto ir = renderer.render (table, s.box, synth::pairOf (s), live ? (size_t) 1 << 13 : (size_t) 1 << 14);
         auto wav = synth::wav24 (ir.mix, 48000, &meta);
@@ -322,7 +395,7 @@ int MainComponent::writeStills (const juce::File& folder, float scale)
     if (! folder.createDirectory())
         return 1;
     look().font = brandFont;
-    const auto table = synth::parseTable (std::string (BinaryData::cabinets_txt, (size_t) BinaryData::cabinets_txtSize));
+    const auto& table = playedTable();
 
     // The panel as the app has it: no foot, FIND and DOWNLOAD IR offered.
     CabPicker picker;
@@ -500,7 +573,7 @@ void MainComponent::findPlace (const State& s, bool thorough)
     std::weak_ptr<int> stillHere = alive;
     worker.addJob ([this, stillHere, s, thorough, pair, alone]
     {
-        static const auto table = synth::parseTable (std::string (BinaryData::cabinets_txt, (size_t) BinaryData::cabinets_txtSize));
+        const auto& table = playedTable();
         const auto tried = [this, stillHere] (const synth::Place& p, double score)
         {
             juce::MessageManager::callAsync ([this, stillHere, p, score]
@@ -803,6 +876,26 @@ void MainComponent::showAudio()
     juce::CallOutBox::launchAsynchronously (std::move (panel), audioArea().translated (0, 0), this);
 }
 
+#if CABIR_LISTEN
+void MainComponent::showSetup()
+{
+    auto view = std::make_unique<SetupView> (PlayedTable::options(), PlayedTable::get().optionsOff(),
+                                             [this] (const std::vector<std::string>& off) { optionsChosen (off); });
+    juce::CallOutBox::launchAsynchronously (std::move (view), setupArea(), this);
+}
+
+void MainComponent::optionsChosen (const std::vector<std::string>& off)
+{
+    // The table without the options switched off, kept for the next run, and the cabinet heard through it.
+    PlayedTable::get().setOptionsOff (off);
+    juce::StringArray words;
+    for (const auto& n : off)
+        words.add (n);
+    properties.getUserSettings()->setValue ("optionsOff", words.joinIntoString (" "));
+    render (state, false);
+}
+#endif
+
 synth::WavMeta MainComponent::metaOf (const State& s) const
 {
     // What the WAV says of itself (synth::WavMeta): the preset's name while it is the one that plays, else the cabinet as a
@@ -834,7 +927,7 @@ void MainComponent::download()
                               const auto file = c.getResult();
                               if (file == juce::File())
                                   return;
-                              static const auto table = synth::parseTable (std::string (BinaryData::cabinets_txt, (size_t) BinaryData::cabinets_txtSize));
+                              const auto& table = playedTable();
                               const auto wav = downloadWav (table, s, f, meta);
                               file.withFileExtension ("wav").replaceWithData (wav.data(), wav.size());
                           });
@@ -1107,6 +1200,9 @@ void MainComponent::paint (juce::Graphics& g)
         if (engine->hasSample())
             button (engine->isPlaying() ? "STOP" : "PLAY", playArea(), engine->isPlaying());
         button ("AUDIO", audioArea(), false);
+#if CABIR_LISTEN
+        button ("SETUP", setupArea(), false);
+#endif
 
         // The sample: a box like the preset's, its menu the riffs we carry and a file of the player's own.
         const auto sa = sampleArea().toFloat().reduced (0.5f);
@@ -1175,6 +1271,10 @@ void MainComponent::mouseDown (const juce::MouseEvent& e)
     }
     else if (engine != nullptr && audioArea().contains (p))
         showAudio();
+#if CABIR_LISTEN
+    else if (engine != nullptr && setupArea().contains (p))
+        showSetup();
+#endif
     else if (const int h = [&] { for (int i = 0; i < 3; ++i) if (hearArea (i).contains (p)) return i; return -1; }(); h >= 0)
     {
         if (h < 2 && (irA.empty() || irB.empty()))

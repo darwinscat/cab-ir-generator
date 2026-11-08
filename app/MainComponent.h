@@ -144,6 +144,14 @@ private:
     juce::Rectangle<int> hearArea (int) const;     // BYPASS's A, B, A+B
     juce::Rectangle<int> audioArea() const;
     juce::Rectangle<int> versionArea() const;
+
+#if CABIR_LISTEN
+    /** THE OWNER'S SETUP (a listening build's alone): the table's options, each ticked while heard, the cabinet rendered
+        again at each click; kept between runs. */
+    juce::Rectangle<int> setupArea() const { return audioArea().translated (-82, 0); }
+    void showSetup();
+    void optionsChosen (const std::vector<std::string>& off);
+#endif
 };
 
 } // namespace cabir::app

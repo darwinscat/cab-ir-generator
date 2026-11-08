@@ -3,6 +3,7 @@
 
 #include "Plugin.h"
 #include "Flavour.h"
+#include "Table.h"
 #include "MainComponent.h"
 
 #include <BinaryData.h>
@@ -50,11 +51,7 @@ namespace
         MainComponent main;
     };
 
-    const synth::Table& table()
-    {
-        static const auto t = synth::parseTable (std::string (BinaryData::cabinets_txt, (size_t) BinaryData::cabinets_txtSize));
-        return t;
-    }
+    const synth::Table& table() { return playedTable(); }
 }
 
 Plugin::Plugin()
