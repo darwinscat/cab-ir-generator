@@ -297,6 +297,11 @@ struct Cab
     // The sealed and the half closed; 1, the sealed box's — the bass's. And an open one's against the cone's free air
     // (open_q_factor): a small open combo rings round the cone's own resonance, a big open box hardly at all.
     double boxQ = 1, openQ = 1;
+    // The box's echo (box_echo = gain/low Hz/high Hz): what the cone's back sends into a closed box comes off its walls
+    // and out through the cone again — two depths, widths or heights round — `gain` of it each way round in the band
+    // the cone lets it through — the 5-80 ms a closed cabinet keeps ringing in its mids, which close mics hear (measured, some 11 dB
+    // under the whole at 1 kHz). A half closed back as much as it is closed; an open one none. 0, none — the bass's.
+    double echoGain = 0, echoLow = 300, echoHigh = 3000;
     double fsd = 50, qts = 0.4, vas = 30, vb = 60, perChamber = 1, chambers = 1, fb = 45, ql = 8;
     bool portRear = false, hornAtMic = false;
     double fixedMass = 0, coilHz = 0, proxStrength = 1, proxCorner = 0, micTop = 12000, depth = 0.4;
@@ -377,6 +382,12 @@ inline Cab build (const Section& s)
     c.fsd = ts[0]; c.qts = ts[1]; c.vas = ts[2];
     c.boxQ = num (s, "box_q_factor", 1);
     c.openQ = num (s, "open_q_factor", 1);
+    if (const auto echo = nums (str (s, "box_echo")); echo.size() >= 3)
+    {
+        c.echoGain = echo[0];
+        c.echoLow = echo[1];
+        c.echoHigh = echo[2];
+    }
     const auto ch = nums (str (s, "chamber", "60,1,1"));
     c.vb = ch[0]; c.perChamber = ch.size() > 1 ? ch[1] : 1; c.chambers = ch.size() > 2 ? ch[2] : 1;
     c.depth = baffle.size() > 2 ? baffle[2] : 0.4;
@@ -871,6 +882,16 @@ inline std::vector<double> render (const Cab& c, size_t n, size_t threads = 0)
                 box += c.halfClosed * m[2] * resonance (f, m[0], m[1]);
         for (auto& m : c.panel) box += m[2] * resonance (f, m[0], m[1]);
         for (auto& b : bodyEq) box *= b.at (f, c.rate);
+        // The box's echo (Cab::echoGain): every two depths, through the cone again, in its band.
+        // Off the back, the sides and the top and bottom alike, a third of it each way round: the box's three round
+        // trips spread its echo's peaks and pits, as a box's many paths do, where one delay alone would comb it.
+        if (const double g = c.echoGain * (! c.open ? 1.0 : c.half ? c.halfClosed : 0.0); g > 0)
+        {
+            const auto trip = [f] (double metres) { return std::polar (1.0, -2 * pi * f * 2 * metres / c0); };
+            const cd round = g * highpass2 (f, c.echoLow, 0.707) * lowpass2 (f, c.echoHigh, 0.707)
+                           * (trip (c.depth) + trip (c.bw) + trip (c.bh)) / 3.0;
+            box *= 1.0 / (1.0 - round);
+        }
         // The baffle step: the low end, radiating into the whole room, a few tenths of a dB under the top.
         box *= std::pow (10.0, -stepDb / 20 * (1 / (1 + (f / stepHz) * (f / stepHz))));
 
