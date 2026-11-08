@@ -23,6 +23,9 @@ top_tail = -27/4000/12
 # The cap past the cone's cliff, 22 dB under the whole cone, in steeply from 8.5 kHz, falling off from 11 (CabSynth.h,
 # Cab::capTop): the shelf measured guitar cabinets keep at 7.5-10 kHz.
 cap_top = -22/8500/11000/0.7
+# A capsule's top heard off its axis: 10 dB under its pattern at 90 degrees, growing from 1 kHz to all of it at 12 (CabSynth.h,
+# heard): a mic at the cone's edge hears the centre's top from the side, as dark as measured cabinets' edge.
+mic_off_axis = 10/12000
 floor_gap_m = 0
 floor_reflection = 0.9
 length_ms = 100
