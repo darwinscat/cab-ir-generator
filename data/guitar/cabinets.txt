@@ -261,7 +261,8 @@ mic_axis_tilt_deg = 0
 # through it (c/2D), as an empty box rings — an open back lets the depth's go and keeps 40 % of the others (CabSynth.h,
 # render). An open back's Q against the cone's free air (open_q_factor, Cab::openQ): the small combos ring round the
 # cone's own resonance, the big open boxes hardly at all. The small open combos' top rings 6 dB less than the big boxes'
-# (top_tail), as measured small combos' 8-16 kHz does.
+# (top_tail), as measured small combos' 8-16 kHz does. The two twelves', the one's and the 2x10's and 1x10's cap rings at
+# 9.5 kHz (cap_top, Q 1.4): their shelf at 9-11 kHz, which the default left 3 to 11 dB under measured cabinets'.
 
 [4x12-closed cap]
 inherit = defaults, speaker-mid, mic-sm57, pos-cap
@@ -293,6 +294,7 @@ effective_radius_m = 0.125
 horn = absent
 cavity_modes = 245/4/0.16, 315/5/-0.12, 572/5/0.16
 panel_modes = 140/3/0.06
+cap_top = -22/8500/9500/1.4
 [2x12-vertical edge]
 inherit = 2x12-vertical cap, pos-edge
 [2x12-vertical offaxis]
@@ -312,6 +314,7 @@ effective_radius_m = 0.125
 horn = absent
 cavity_modes = 245/5/0.16, 343/4/-0.12, 635/5/0.16
 panel_modes = 130/3/0.06
+cap_top = -22/8500/9500/1.4
 [2x12-open edge]
 inherit = 2x12-open cap, pos-edge
 [2x12-open offaxis]
@@ -330,6 +333,7 @@ effective_radius_m = 0.125
 horn = absent
 cavity_modes = 286/5/0.16, 357/4/-0.12, 686/5/0.16
 panel_modes = 150/3/0.06
+cap_top = -22/8500/9500/1.4
 top_tail = -33/4000/12
 [1x12-open edge]
 inherit = 1x12-open cap, pos-edge
@@ -369,6 +373,7 @@ effective_radius_m = 0.105
 horn = absent
 cavity_modes = 286/5/0.16, 373/4/-0.12, 715/5/0.16
 panel_modes = 160/3/0.06
+cap_top = -22/8500/9500/1.4
 top_tail = -33/4000/12
 [2x10-open edge]
 inherit = 2x10-open cap, pos-edge
@@ -389,6 +394,7 @@ effective_radius_m = 0.105
 horn = absent
 cavity_modes = 373/5/0.16, 429/4/-0.12, 780/5/0.16
 panel_modes = 180/3/0.06
+cap_top = -22/8500/9500/1.4
 top_tail = -33/4000/12
 [1x10-open edge]
 inherit = 1x10-open cap, pos-edge
