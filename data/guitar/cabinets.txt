@@ -418,22 +418,23 @@ inherit = 1x10-open cap, mic-u87, pos-distance
 # THE ROCK OPTIONS (08.11, for the owner's ear): each laid over its section unless his SETUP switches it off (CabSynth.h,
 # parseTable) — measured against 27 York packs, like for like, an SM57 at the sweet spot unless said.
 
-# SPEAKERS: their difference where the real twelves keep it. DARK, FLAT and MID fell off their cone's cliff before the
-# cap's shelf came in, 8 kHz 4-10 dB under every measured twelve (a 4x12's spread at 6-10 kHz 11.7 dB, York's 4); now in
-# among them, and the dark ones darker at 12-16 kHz, the bright ones brighter, as York's spread 7.6 dB there.
+# SPEAKERS: their difference where the real twelves keep it, round the same middle. DARK, FLAT and MID fell off their
+# cone's cliff before the cap's shelf came in, 8 kHz 4-10 dB under every measured twelve, SNAP and SCOOP at their top: a
+# 4x12's spread at 6-10 kHz 11.7 dB (York's 4), now 8; the dark ones darker at 12-16 kHz, the bright ones brighter, 3.9
+# there now 6 (York's 7.6). The 4x12 and closed 2x12 packs' miss 2.87 and 2.83 dB, now 2.71 and 2.70.
 [option speakers: speaker-dark]
 label = SPEAKERS
-top_eq = 6300/2/3, 8000/2/3.5, 10000/2/1.5, 16000/1.2/-5
+top_eq = 6300/2/2, 8000/2/2.5, 10000/2/1, 16000/1.2/-5
 [option speakers: speaker-flat]
-top_eq = 6300/2/2.5, 8000/2/3.5, 16000/1.2/-4
+top_eq = 6300/2/1.5, 8000/2/2.5, 16000/1.2/-4
 [option speakers: speaker-mid]
-top_eq = 8000/2/3.5, 10000/2/1, 16000/1.2/-1
+top_eq = 8000/2/1, 16000/1.2/-1
 [option speakers: speaker-bright]
-top_eq = 8000/2/1.5, 13000/1.2/2
+top_eq = 8000/2/-1, 13000/1.2/2
 [option speakers: speaker-scoop]
-top_eq = 16000/1.2/-1
+top_eq = 8000/2/-1.5, 16000/1.2/-1
 [option speakers: speaker-snap]
-top_eq = 13000/1.2/1.5
+top_eq = 8000/2/-2.5, 13000/1.2/1.5
 
 # RIBBON: the ribbon against the SM57 at the same place as 26 measured cabinets' — 4.5 dB too bright at 10 kHz and 8 at
 # 12.7, 3 too dark at 16, 1-1.5 short of body at 80-125 Hz; now within 0.7 dB rms (York's takes of one cell: 0.6).
@@ -443,7 +444,8 @@ proximity_strength = 1.0
 mic_presence_eq = 12000/1.6/-10.5, 16500/2.5/5.5
 
 # 4X12 AIR: the sealed four twelves' cap in from 6.5 kHz, not 8.5 — the hole at 8 kHz between the cone's cliff and the
-# cap's shelf, 3-7 dB under the twelve measured 4x12s, filled.
+# cap's shelf at the sweet spot, 3-7 dB under the twelve measured 4x12s, filled; the cone's edge and off axis then 2 dB
+# over them at 6-10 kHz (an ear's call: air, or fizz).
 [option air: 4x12-closed cap]
 label = 4X12 AIR
 cap_top = -22/6500/11000/0.7
