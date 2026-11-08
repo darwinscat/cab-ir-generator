@@ -1,10 +1,14 @@
 # THE GUITAR CABINETS: [<cab> <position>] sections, `key = value`, `inherit` laid under left to right — the same keys as
 # the bass's (data/cabinets.txt, src/synth/CabSynth.h). Our own boxes and speakers, not measurements of any one: tuned
-# against the shape measured guitar cabinets share, close-miked at the cap — a steep foot under 80 Hz (63 Hz some
-# 10 dB under 1 kHz), a hump 100-250 Hz, flat to 5 kHz with a few deep dips in the cone's breakup (1.5-6 kHz: 3 to 7
-# dips of 5 to 10 dB, a dip near 1.1 kHz), and a cliff past it (8 kHz 15 to 28 dB under 1 kHz).
+# against the shape measured guitar cabinets share, close-miked at the cap (27 commercial packs, each IR levelled by its
+# 400 Hz-2.5 kHz, 08.11) — a steep foot under 80 Hz (63 Hz some 7 dB under 1 kHz); a closed box's hump at 125-200 Hz
+# some 5 dB over it, an open one's hardly any there and 2-3 dB at 250-400; flat to 5 kHz with a few deep dips in the
+# cone's breakup (1.5-6 kHz: 3 to 7 dips of 5 to 10 dB, a dip near 1.1 kHz); a cliff from 5.5 kHz to a shelf some 25 dB
+# under 1 kHz at 7.5-10 kHz, then falling 17 dB an octave (16 kHz some 42 dB under).
 
 [defaults]
+# A closed back's hump at 0.55 of a sealed box's Q (CabSynth.h, Cab::boxQ): a guitar's closed box leaks and gives.
+box_q_factor = 0.55
 # The cap past the cone's cliff, 22 dB under the whole cone, in steeply from 8.5 kHz, falling off from 11 (CabSynth.h,
 # Cab::capTop): the shelf measured guitar cabinets keep at 7.5-10 kHz.
 cap_top = -22/8500/11000/0.7
@@ -30,22 +34,24 @@ driver_sensitivity_spread_db = -0.5..0.5
 driver_mode_frequency_spread_percent = -2..2
 driver_mode_residue_spread_db = -1.5..1.5
 open_back_lowpass_hz = 400
-open_back_loss = 0.6
-# An open back heard whole low down, where the box does not shadow it; the wall the WALL switch puts 40 cm behind the
-# box, giving back 80 % of the back's sound; an open back letting the box's modes across go to 40 %.
-open_back_full_below_step = 1
+# An open back's pipe damped hard (a quarter wave that rang over 160-250 Hz, which measured open combos do not), and
+# heard low down as the bass's is, half, shadowed as at the top; the wall the WALL switch puts 40 cm behind the box,
+# giving back 80 % of the back's sound; an open back letting the box's modes across go to 40 %.
+open_back_loss = 2.0
+open_back_full_below_step = 0
 back_wall_m = 0.4
 back_wall_reflection = 0.8
 open_back_cavity_share = 0.4
 
 # A GUITAR SPEAKER'S CHARACTER — its paper's breakup (the modes, their Q, how loud against the piston), its knee and
 # the cliff past it (woofer_lowpass_hz under woofer_lowpass_second), the surround's dip and the presence its breakup
-# builds (body_eq), its resonance (ts: Fs, Qts, Vas in litres).
+# builds (body_eq) — its last a broad 2.5 dB at 3.5 kHz every one of them shares, measured cabinets' attack — its
+# resonance (ts: Fs, Qts, Vas in litres).
 
 # The middle one: a thick midrange, a dip at 1.1 kHz, a presence lift at 4 kHz, the knee near 6.
 [speaker-mid]
 speaker_name = mid
-ts = 85, 0.5, 60
+ts = 85, 0.9, 60
 coil_corner_hz = 2500
 breakup_hz = 1300..7000
 mode_count = 28
@@ -56,12 +62,12 @@ cone_decouple_hz = 6000
 woofer_lowpass_hz = 5800
 woofer_envelope_Q = 2.2
 woofer_lowpass_second = 6200/0.6
-body_eq = 1150/8/-9, 2200/1.2/1, 4000/0.9/8
+body_eq = 1150/8/-9, 2200/1.2/1, 4000/0.9/8, 3500/0.7/2.5
 
 # The bright one: lighter paper, its breakup higher and its knee near 7 kHz, a chime at 3 and 4.5.
 [speaker-bright]
 speaker_name = bright
-ts = 95, 0.55, 50
+ts = 95, 1.0, 50
 coil_corner_hz = 2800
 breakup_hz = 1500..8000
 mode_count = 28
@@ -72,12 +78,12 @@ cone_decouple_hz = 6500
 woofer_lowpass_hz = 6600
 woofer_envelope_Q = 2.0
 woofer_lowpass_second = 7000/0.6
-body_eq = 1250/8/-8, 3000/1/3, 4500/1/6
+body_eq = 1250/8/-8, 3000/1/3, 4500/1/6, 3500/0.7/2.5
 
 # The dark one: heavy paper, a smooth top falling from 5 kHz, more of its low mids.
 [speaker-dark]
 speaker_name = dark
-ts = 75, 0.45, 70
+ts = 75, 0.8, 70
 coil_corner_hz = 2000
 breakup_hz = 1200..6000
 mode_count = 26
@@ -88,12 +94,12 @@ cone_decouple_hz = 5000
 woofer_lowpass_hz = 5000
 woofer_envelope_Q = 1.8
 woofer_lowpass_second = 5400/0.6
-body_eq = 1100/7/-7, 2500/1/2, 3500/1/5
+body_eq = 1100/7/-7, 2500/1/2, 3500/1/5, 3500/0.7/2.5
 
 # The snap: a ten's — small and quick, its breakup and its knee the highest.
 [speaker-snap]
 speaker_name = snap
-ts = 100, 0.5, 30
+ts = 90, 1.3, 30
 coil_corner_hz = 3000
 breakup_hz = 1800..9000
 mode_count = 26
@@ -104,12 +110,12 @@ cone_decouple_hz = 7000
 woofer_lowpass_hz = 7000
 woofer_envelope_Q = 2.0
 woofer_lowpass_second = 7500/0.6
-body_eq = 1500/8/-8, 3500/1/4, 5000/1/6
+body_eq = 1500/8/-8, 3500/1/4, 5000/1/6, 3500/0.7/2.5
 
 # The scoop: its middle dipped round 800 Hz, a bite at 2.6 kHz and a sizzle at 5, the low end tight.
 [speaker-scoop]
 speaker_name = scoop
-ts = 90, 0.4, 50
+ts = 90, 0.7, 50
 coil_corner_hz = 2800
 breakup_hz = 1500..7500
 mode_count = 28
@@ -120,12 +126,12 @@ cone_decouple_hz = 6500
 woofer_lowpass_hz = 6400
 woofer_envelope_Q = 2.2
 woofer_lowpass_second = 6800/0.6
-body_eq = 800/1.2/-5, 1300/8/-6, 2600/1.2/4, 5000/1.4/5
+body_eq = 800/1.2/-5, 1300/8/-6, 2600/1.2/4, 5000/1.4/5, 3500/0.7/2.5
 
 # The flat one: big and even, a low resonance and little breakup of its own — a loud clean speaker's.
 [speaker-flat]
 speaker_name = flat
-ts = 60, 0.35, 90
+ts = 60, 0.6, 90
 coil_corner_hz = 3500
 breakup_hz = 1400..6500
 mode_count = 20
@@ -136,7 +142,7 @@ cone_decouple_hz = 5500
 woofer_lowpass_hz = 5600
 woofer_envelope_Q = 1.4
 woofer_lowpass_second = 6000/0.6
-body_eq = 1200/6/-3, 3500/1/5
+body_eq = 1200/6/-3, 3500/1/5, 3500/0.7/2.5
 
 # THE PAPER CONE (PAPER, SPEAKER clicked): each speaker as above but for its cone past the breakup — its outer part
 # letting go where the breakup starts, keeping 80 % of its motion scattered in time (cone_decouple_floor), not moving
@@ -144,13 +150,13 @@ body_eq = 1200/6/-3, 3500/1/5
 # cap 2-3 dB brighter at 4-5 kHz for it: each one's presence that much lower, its cap where the speaker's own is.
 [speaker-mid-paper]
 inherit = speaker-mid
-body_eq = 1150/8/-9, 2200/1.2/2, 4000/0.9/5
+body_eq = 1150/8/-9, 2200/1.2/2, 4000/0.9/5, 3500/0.7/2.5
 cone_decouple_hz = 1300
 cone_decouple_floor = 0.8
 cone_floor_jitter_ms = 0.3
 [speaker-bright-paper]
 inherit = speaker-bright
-body_eq = 1250/8/-8, 3000/1/3, 4500/1/4
+body_eq = 1250/8/-8, 3000/1/3, 4500/1/4, 3500/0.7/2.5
 cone_decouple_hz = 1500
 cone_decouple_floor = 0.8
 cone_floor_jitter_ms = 0.3
@@ -158,25 +164,25 @@ cone_floor_jitter_ms = 0.3
 inherit = speaker-dark
 mode_level_rel_piston_db_first3 = 4..7
 mode_level_rel_piston_db_rest = -8..4
-body_eq = 1100/7/-7, 2500/1/3, 3500/1/3
+body_eq = 1100/7/-7, 2500/1/3, 3500/1/3, 3500/0.7/2.5
 cone_decouple_hz = 1200
 cone_decouple_floor = 0.8
 cone_floor_jitter_ms = 0.3
 [speaker-snap-paper]
 inherit = speaker-snap
-body_eq = 1500/8/-8, 2500/1.2/2, 3500/1/3, 5000/1/5
+body_eq = 1500/8/-8, 2500/1.2/2, 3500/1/3, 5000/1/5, 3500/0.7/2.5
 cone_decouple_hz = 1800
 cone_decouple_floor = 0.8
 cone_floor_jitter_ms = 0.3
 [speaker-scoop-paper]
 inherit = speaker-scoop
-body_eq = 800/1.2/-5, 1300/8/-6, 2600/1.2/4, 5000/1.4/3
+body_eq = 800/1.2/-5, 1300/8/-6, 2600/1.2/4, 5000/1.4/3, 3500/0.7/2.5
 cone_decouple_hz = 1500
 cone_decouple_floor = 0.8
 cone_floor_jitter_ms = 0.3
 [speaker-flat-paper]
 inherit = speaker-flat
-body_eq = 1200/6/-3, 3500/1/3
+body_eq = 1200/6/-3, 3500/1/3, 3500/0.7/2.5
 cone_decouple_hz = 1400
 cone_decouple_floor = 0.8
 cone_floor_jitter_ms = 0.3
@@ -246,7 +252,8 @@ mic_axis_tilt_deg = 0
 
 # THE BOXES: four twelves' sealed box, the tall half-closed 2x12, the open combos, the tens. Their cavity modes across the box (c/2W, c/2H) and
 # through it (c/2D), as an empty box rings — an open back lets the depth's go and keeps 40 % of the others (CabSynth.h,
-# render).
+# render). An open back's Q against the cone's free air (open_q_factor, Cab::openQ): the small combos ring round the
+# cone's own resonance, the big open boxes hardly at all.
 
 [4x12-closed cap]
 inherit = defaults, speaker-mid, mic-sm57, pos-cap
@@ -286,6 +293,7 @@ inherit = 2x12-vertical cap, mic-md421, pos-offaxis
 inherit = 2x12-vertical cap, mic-ribbon, pos-distance
 
 [2x12-open cap]
+open_q_factor = 0.45
 inherit = defaults, speaker-bright, mic-sm57, pos-cap
 seed = 21201
 alignment = open
@@ -322,6 +330,7 @@ inherit = 1x12-open cap, mic-md421, pos-offaxis
 inherit = 1x12-open cap, mic-u87, pos-distance
 
 [4x10-open cap]
+open_q_factor = 0.45
 inherit = defaults, speaker-snap, mic-sm57, pos-cap
 seed = 41022
 alignment = open
@@ -340,6 +349,7 @@ inherit = 4x10-open cap, mic-md421, pos-offaxis
 inherit = 4x10-open cap, mic-ribbon, pos-distance
 
 [2x10-open cap]
+open_q_factor = 1.1
 inherit = defaults, speaker-snap, mic-sm57, pos-cap
 seed = 21021
 alignment = open
@@ -358,6 +368,7 @@ inherit = 2x10-open cap, mic-md421, pos-offaxis
 inherit = 2x10-open cap, mic-u87, pos-distance
 
 [1x10-open cap]
+open_q_factor = 1.2
 inherit = defaults, speaker-snap, mic-sm57, pos-cap
 seed = 11011
 alignment = open
