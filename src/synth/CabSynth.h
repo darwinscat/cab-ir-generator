@@ -292,6 +292,11 @@ struct Cab
     double wallM = 0, wallRefl = 0;
     // What of the box's own modes an open back keeps (open_back_cavity_share): 1, the bass's, as closed.
     double openCavity = 1;
+    // A closed box's Q against a sealed one's (box_q_factor): a guitar's closed back is no sealed box — it leaks, its
+    // panels give, nothing damps it — and its hump over the cone on its air is lower than Qts sqrt(1 + alpha) says.
+    // The sealed and the half closed; 1, the sealed box's — the bass's. And an open one's against the cone's free air
+    // (open_q_factor): a small open combo rings round the cone's own resonance, a big open box hardly at all.
+    double boxQ = 1, openQ = 1;
     double fsd = 50, qts = 0.4, vas = 30, vb = 60, perChamber = 1, chambers = 1, fb = 45, ql = 8;
     bool portRear = false, hornAtMic = false;
     double fixedMass = 0, coilHz = 0, proxStrength = 1, proxCorner = 0, micTop = 12000, depth = 0.4;
@@ -370,6 +375,8 @@ inline Cab build (const Section& s)
     c.openLoss = num (s, "open_back_loss", 0.48);
     const auto ts = nums (str (s, "ts", "50,0.4,30"));
     c.fsd = ts[0]; c.qts = ts[1]; c.vas = ts[2];
+    c.boxQ = num (s, "box_q_factor", 1);
+    c.openQ = num (s, "open_q_factor", 1);
     const auto ch = nums (str (s, "chamber", "60,1,1"));
     c.vb = ch[0]; c.perChamber = ch.size() > 1 ? ch[1] : 1; c.chambers = ch.size() > 2 ? ch[2] : 1;
     c.depth = baffle.size() > 2 ? baffle[2] : 0.4;
@@ -515,7 +522,7 @@ inline void lowEnd (const Cab& c, double f, cd& cone, cd& port)
     if (c.open && ! c.half)
     {
         const double ws = 2 * pi * c.fsd;
-        cone = s * s / (s * s + s * ws / c.qts + ws * ws);
+        cone = s * s / (s * s + s * ws / (c.qts * c.openQ) + ws * ws);
         port = 0;
         return;
     }
@@ -523,7 +530,7 @@ inline void lowEnd (const Cab& c, double f, cd& cone, cd& port)
     {
         // Half closed, a leaky box: the cone stiffened by as much of the box's air as the back holds.
         const double a = c.half ? alpha * c.halfClosed : alpha;
-        const double wc = 2 * pi * c.fsd * std::sqrt (1 + a), qtc = c.qts * std::sqrt (1 + a);
+        const double wc = 2 * pi * c.fsd * std::sqrt (1 + a), qtc = c.qts * std::sqrt (1 + a) * c.boxQ;
         cone = s * s / (s * s + s * wc / qtc + wc * wc);
         port = 0;
         return;
