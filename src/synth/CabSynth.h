@@ -319,6 +319,10 @@ struct Cab
     // steeply from `from` — past the cone's cliff, so the two never meet where they would dig a pit — and falling off
     // from `top`. None — the bass's, and a cliff all the way down.
     double capTop = 0, capFrom = 8500, capHz = 11000, capQ = 0.707;
+    // The top's tail (top_tail = dB/from Hz/ms): past the cone's breakup what it sends goes on ringing — the 5-80 ms every
+    // measured cabinet keeps at 4-16 kHz, open or closed, some 28 dB under the whole — `dB` under the direct sound in
+    // every band from `from` up, rising over its first 6 ms, then dying away `ms` at a time. None — the bass's.
+    double tailTop = 0, tailFrom = 4000, tailMs = 12;
     // The paper's way past its breakup (cone_decouple_floor, the guitar's PAPER cone): what of the cone lets go keeps
     // `floor` of its motion, but scattered — each patch late by its own 0..floorJitterMs (fixed per patch, no draw) —
     // and falling off at the knee (floorHz, cone_floor_lowpass_hz, the woofer's lowpass by default). Not a piston's: it
@@ -423,6 +427,12 @@ inline Cab build (const Section& s)
         c.capFrom = cap[1];
         c.capHz = cap[2];
         c.capQ = cap[3];
+    }
+    if (const auto tail = nums (str (s, "top_tail")); tail.size() >= 3)
+    {
+        c.tailTop = std::pow (10.0, tail[0] / 20);
+        c.tailFrom = tail[1];
+        c.tailMs = tail[2];
     }
     c.decoupleHz = num (s, "cone_decouple_hz", range (s, "breakup_hz", 1200, 7000).first);
     c.body = triples (s, "body_eq");
@@ -833,6 +843,27 @@ inline std::vector<double> render (const Cab& c, size_t n, size_t threads = 0)
         tailLow = tail (c.roomAlpha);
         tailHigh = tail (c.roomAlphaHigh);
     }
+    // The top's tail (Cab::tailTop): one noise per box, the same at every place — rising from 1 ms to 6 ms, then dying
+    // away tailMs at a time — of a whole energy of one, so a bin's direct sound carries it on at tailTop of itself.
+    std::vector<cd> topTail;
+    if (c.tailTop > 0)
+    {
+        uint32_t seed = 2166136261u;
+        for (const double v : { c.bw, c.bh, c.depth, (double) c.drivers.size() })
+            seed = (seed ^ (uint32_t) std::llround (v * 1000 + 1e6)) * 16777619u;
+        topTail.assign (n, 0.0);
+        double e = 0;
+        for (size_t i = 0; i < n; ++i)
+        {
+            seed ^= seed << 13; seed ^= seed >> 17; seed ^= seed << 5;
+            const double ms = 1000.0 * (double) i / c.rate, rise = std::clamp ((ms - 1) / 5, 0.0, 1.0);
+            const double v = ((double) seed / 2147483648.0 - 1.0) * rise * std::exp (-ms / c.tailMs);
+            topTail[i] = v;
+            e += v * v;
+        }
+        for (auto& v : topTail) v /= std::sqrt (e);
+        fft (topTail, false);
+    }
     // What a room's images bring a mic: each off its walls (sqrt(1 - absorption), 1 kHz to 4 kHz from the low to the high)
     // and the floor, a piston beaming `ka` toward the mic from where it stands — behind it, the box's shadow.
     const auto roomHeard = [&] (const std::vector<RoomImage>& ims, double ka, double f) {
@@ -1075,6 +1106,10 @@ inline std::vector<double> render (const Cab& c, size_t n, size_t threads = 0)
                      * std::polar (1.0, -2 * pi * f * ((toEdge + r) / c0 - minDelay));
             }
         }
+
+        // The top's tail (Cab::tailTop): the direct sound's own spectrum, carried on late from tailFrom up.
+        if (c.tailTop > 0)
+            sum += topTail[k] * std::abs (sum) * c.tailTop * highpass2 (f, c.tailFrom, 0.707);
 
         // The room's tail: what the cones put into the whole room — beamed (sqrt(2 R1(2ka)) / ka of the axis, 1 low down)
         // — as the mic hears a sound from everywhere (its pattern's mean over six ways), the room keeping less of the top.
