@@ -9,9 +9,14 @@
 [defaults]
 # A closed back's hump at 0.65 of a sealed box's Q (CabSynth.h, Cab::boxQ): a guitar's closed box leaks and gives.
 box_q_factor = 0.65
-# A closed box's echo, out through the cone again (CabSynth.h, Cab::echoGain): 0.65 of it each way round, 400 Hz to
-# 2 kHz — the 5-80 ms its mids keep ringing, some 11 dB under the whole at 1 kHz, as close mics hear measured cabinets.
-box_echo = 0.65/400/2000
+# A closed box's echo, out through the cone again (CabSynth.h, Cab::echoGain): 0.35 of it each way round off the back
+# alone, pulling, 400 Hz to 2 kHz — the dips measured closed cabinets share at c/(2 depth) and twice it (a 4x12's 500 Hz
+# and 1 kHz), and the rise between.
+box_echo = -0.35/400/2000/1
+# The box's tail, 9 dB under the direct sound from 200 Hz to 1.5 kHz, dying away 20 ms at a time, an open back's 17
+# (CabSynth.h, Cab::boxTail): the 5-80 ms measured cabinets keep ringing in their mids, closed some 9-14 dB under the
+# whole at 500 Hz-1 kHz, open 19-27.
+box_tail = -9/200/1500/20/-17
 # The top's tail, 27 dB under the direct sound from 4 kHz up, dying away 12 ms at a time (CabSynth.h, Cab::tailTop): the
 # 5-80 ms measured cabinets keep ringing at 8-16 kHz, open and closed alike, some 28 dB under the whole.
 top_tail = -27/4000/12
