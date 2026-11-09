@@ -111,7 +111,7 @@ private:
     SpectrumView spectrumPreView { spectrumView.columns() };   // ...and what goes into the cabinet, at the same columns
     bool spectrumShown = false;                    // ...and handed to the panel at the last tick
     static State defaultState();                  // the first run's, and the preset menu's DEFAULT
-    void keep (const State&);                      // the panel's state, kept: what history and the next run see
+    void keep (const State&, bool placed = false); // the panel's state, kept: what history and the next run see; placed, FRED's
     void carryFormerName();                        // a first run under the new name: the old one's settings and presets copied
     void loadWorkspace (const juce::String& xml);  // A/B/C/D as kept, else the default alone
     void keepSession();                            // ...and, in a plugin, the workspace handed to its session

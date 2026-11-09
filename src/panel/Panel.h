@@ -387,6 +387,10 @@ public:
 
     std::function<void (int cab, Setup setup)> onSetup;
 
+    /** A state the panel set on purpose, both mics where it put them (FRED): kept as onSetup is, but B turned on by it is
+        not "taken up", so no search follows to move it. None, onSetup. */
+    std::function<void (int cab, Setup setup)> onPlaced;
+
     /** The hand still moving: what it would sound like there, heard and not kept — onSetup follows when it lets go. */
     std::function<void (int cab, Setup setup)> onMove;
 
@@ -2356,7 +2360,10 @@ private:
         setup_.shiftMs = 0.0f;
         setup_.invert = false;
         setup_.blend = 0.5f;
-        send();
+        repaint();
+        // Placed, not taken up: B turned on here would send the host looking for a place for it, off A's spot (the site, 10.11).
+        if (const auto& kept = onPlaced != nullptr ? onPlaced : onSetup; kept != nullptr)
+            kept (chosen, setup_);
     }
 
     void paintFind (ui::Graphics& g) const

@@ -222,6 +222,7 @@ MainComponent::MainComponent (Session* host)
     look().font = brandFont;
 
     picker.onSetup    = [this] (int cab, CabPicker::Setup setup) { keep (CabPicker::stateOf (cab, setup)); };
+    picker.onPlaced   = [this] (int cab, CabPicker::Setup setup) { keep (CabPicker::stateOf (cab, setup), true); };   // FRED's: B stays where it was put
     picker.onMove     = [this] (int cab, CabPicker::Setup setup) { render (CabPicker::stateOf (cab, setup), true); };
     picker.onDownload = [this] { download(); };
     picker.onDownloadFormat = [this] { showFormats(); };
@@ -656,9 +657,9 @@ int MainComponent::writeStills (const juce::File& folder, float scale)
     return failed;
 }
 
-void MainComponent::keep (const State& s)
+void MainComponent::keep (const State& s, bool placed)
 {
-    const bool bTakenUp = ! state.b.on && s.b.on;
+    const bool bTakenUp = ! placed && ! state.b.on && s.b.on;   // B the panel placed (FRED) is not taken up: no search moves it
     state = s;
     noteDownload();
     render (s, false);

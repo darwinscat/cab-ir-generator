@@ -40,6 +40,7 @@ public:
 
     // What a host sets and is told — the panel's own, by reference.
     std::function<void (int cab, Setup setup)>& onSetup { panel.onSetup };
+    std::function<void (int cab, Setup setup)>& onPlaced { panel.onPlaced };   // FRED's: kept, no search for B
     std::function<void (int cab, Setup setup)>& onMove { panel.onMove };
     std::function<void()>& onClose { panel.onClose };
     std::function<void()>& onDownload { panel.onDownload };

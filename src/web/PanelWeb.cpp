@@ -21,6 +21,8 @@
 //                                              not kept), 3 FIND, 4 DOWNLOAD IR — the state at cabir_panel_event_state ()
 //                                              — and 5, DOWNLOAD IR's ▾ (cabir_panel_download_format): the page's format menu,
 //                                              anchored at cabir_panel_format_rect () (x, y, w, h, ints)
+//   cabir_panel_event_placed ()                1 when the last event, a 1, is a state the panel placed on purpose (FRED):
+//                                              keep it, but B turned on by it is not taken up, so no search for B; else 0
 //   cabir_panel_download_format (show)         DOWNLOAD IR's ▾ beside it, or none (the default)
 //   cabir_panel_rect (name)                    where a page's hint goes, as the panel stands now: "cabinet" (the boxes),
 //                                              "mic-a" (A's glyph on the speaker; the speaker while A is off), "download"
@@ -152,7 +154,7 @@ namespace
         }
     };
 
-    struct Event { int kind; std::string state; };
+    struct Event { int kind; std::string state; bool placed = false; };
 
     /** SPECTRUM, one of its two: the page's frames read as the app reads its own (app/Spectrum.h) — tabbyEQ's pane, in
         1/24-octave bands at the panel's columns, tilted +4.5 dB an octave about 1 kHz. */
@@ -206,6 +208,7 @@ namespace
         void options (bool find, bool download, bool def, bool close)
         {
             panel.onSetup = [this] (int cab, Panel::Setup s) { ask (1, cab, s); };
+            panel.onPlaced = [this] (int cab, Panel::Setup s) { ask (1, cab, s); events.back().placed = true; };   // FRED's
             panel.onMove = [this] (int cab, Panel::Setup s) { ask (2, cab, s); };
             panel.onFind = find ? std::function<void (int, Panel::Setup)> ([this] (int cab, Panel::Setup s) { ask (3, cab, s); }) : nullptr;
             panel.onDownload = download ? std::function<void()> ([this] { events.push_back ({ 4, {} }); }) : nullptr;
@@ -297,6 +300,7 @@ CABIR_EXPORT int cabir_panel_event()
 }
 
 CABIR_EXPORT const char* cabir_panel_event_state() { return session().last.state.c_str(); }
+CABIR_EXPORT int cabir_panel_event_placed() { return session().last.placed ? 1 : 0; }
 
 CABIR_EXPORT void cabir_panel_download_format (int show)
 {
