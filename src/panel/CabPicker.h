@@ -61,6 +61,8 @@ public:
     static float spectrumHz (int i) { return Panel::spectrumHz (i); }
     void showSpectrum (std::vector<float> db) { panel.showSpectrum (std::move (db)); }
     bool eqOn() const { return panel.eqOn(); }
+    std::function<void()>& onEqMenu { panel.onEqMenu };   // a right click over the response: the host's EQ menu
+    void resetEq() { panel.resetEq(); }
 
     static const std::vector<Cab>& cabs() { return Panel::cabs(); }
     static std::pair<int, Setup> setupOf (const State& s) { return Panel::setupOf (s); }
@@ -118,7 +120,7 @@ private:
 
     void timerCallback() override { panel.tick (juce::Time::getMillisecondCounterHiRes() * 0.001); }
 
-    static ui::MouseEvent hand (const juce::MouseEvent& e) { return { { e.position.x, e.position.y } }; }
+    static ui::MouseEvent hand (const juce::MouseEvent& e) { return { { e.position.x, e.position.y }, e.mods.isPopupMenu() }; }
 
     /** The host's Look as the panel's: its colours, and its type to measure words by. */
     static void useHostLook()

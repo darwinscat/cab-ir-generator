@@ -220,6 +220,12 @@ MainComponent::MainComponent (Session* host)
     picker.onMove     = [this] (int cab, CabPicker::Setup setup) { render (CabPicker::stateOf (cab, setup), true); };
     picker.onDownload = [this] { download(); };
     picker.onDownloadFormat = [this] { showFormats(); };
+    picker.onEqMenu = [this]
+    {
+        juce::PopupMenu menu;
+        menu.addItem ("RESET EQ", [this] { picker.resetEq(); });
+        menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition());
+    };
     picker.onFind     = [this] (int cab, CabPicker::Setup setup) { findPlace (CabPicker::stateOf (cab, setup), true); };   // FIND looks harder
     picker.showDefault = false;   // DEFAULT is the preset menu's first item here
     addAndMakeVisible (picker);

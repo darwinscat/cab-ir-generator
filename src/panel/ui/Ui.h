@@ -370,6 +370,7 @@ struct Font
 struct MouseEvent
 {
     Point<float> position;
+    bool popup = false;   // the right button, or a ctrl-click: a menu asked for
     Point<int> getPosition() const { return position.roundToInt(); }
 };
 

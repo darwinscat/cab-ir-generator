@@ -532,6 +532,19 @@ public:
     }
     bool eqOn() const { return chosen >= 0 && setup_.eq.on; }
 
+    /** A right click over the response (the owner, 09.11): the host's EQ menu — RESET EQ — where this is set. */
+    std::function<void()> onEqMenu;
+    /** RESET EQ: its passes out at 12 dB an octave, its bells flat where they first stand; on or off as it was. */
+    void resetEq()
+    {
+        if (chosen < 0)
+            return;
+        const bool on = setup_.eq.on;
+        setup_.eq = {};
+        setup_.eq.on = on;
+        send();
+    }
+
 
     void paint (ui::Graphics& g) const
     {
@@ -580,6 +593,13 @@ public:
     {
         if (defaultArmed && ! defaultArea().contains (e.getPosition()))
             disarmDefault();   // a click anywhere else: DEFAULT's question withdrawn
+        if (e.popup)
+        {
+            // A right click: over the response, the EQ's menu; anywhere else, nothing taken.
+            if (chosen >= 0 && onEqMenu != nullptr && responseArea().contains (e.getPosition()))
+                onEqMenu();
+            return;
+        }
         const auto h = hotAt (e.position);
         if (helpOpen >= 0 && h.part != Part::help && h.part != Part::helpBox)
             closeHelp();       // ...and a "?"'s window closed, the click going on to what it is on
