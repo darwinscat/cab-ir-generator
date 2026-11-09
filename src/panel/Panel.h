@@ -2337,18 +2337,16 @@ private:
         return { c.getX() + 4, ui::jmin (placeArea (0, 0).getBottom() + 8, bodyH() - 2 - fredH), c.getWidth() - 8, fredH };
     }
 
-    /** THE FREDMAN PAIR (the owner, 09.11): two SM57s close on the cap's edge, A straight at it, B beside it turned 45° to
-        the same point — its capsule out from A's by as much as it leans, so both hear the cone there at one time; ALIGN on,
-        TIME nought, not turned over, BLEND even. The box, its speaker, its back and the EQ as they were. */
+    /** THE FREDMAN PAIR (the owner, 09.11): two SM57s close on the cap's edge, capsule to capsule — A straight at it, B
+        turned 45° — so both hear the cone there at one time; ALIGN on, TIME nought, not turned over, BLEND even. B on A's
+        own spot: two centimetres out, at two from the cone, the pair cancels 10-15 dB up top. The box, its speaker, its
+        back and the EQ as they were. */
     void fredman()
     {
         constexpr float capEdge = 0.25f, near = 0.02f, lean = 45.0f;   // the cap as paintCone draws it, in radii
-        const auto& cab = cabs()[(size_t) chosen];
-        const float out = near * std::tan (lean * ui::MathConstants<float>::pi / 180.0f) / cab.radius;
         const float side = setup_.a.x < 0.0f ? -1.0f : 1.0f;   // on A's side of the cap, as it stood
         setup_.a.mic = setup_.b.mic = "sm57";
-        setup_.a.x = side * capEdge;
-        setup_.b.x = side * (capEdge + out);
+        setup_.a.x = setup_.b.x = side * capEdge;
         setup_.a.y = setup_.b.y = 0.0f;
         setup_.a.distance = setup_.b.distance = near;
         setup_.a.angle = 0.0f;
