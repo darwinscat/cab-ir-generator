@@ -64,7 +64,7 @@ public:
     std::function<void()>& onEqMenu { panel.onEqMenu };   // a right click over the response: the host's EQ menu
     void resetEq() { panel.resetEq(); }
     void setEqOn (bool on) { panel.setEqOn (on); }
-    std::function<void (bool)>& onSpectrum { panel.onSpectrum };   // SPECTRUM switched: the host keeps it
+    bool& hasSound { panel.hasSound };   // a host with sound: SPECTRUM drawn, switched in its menu
     void setSpectrumOn (bool on) { panel.setSpectrumOn (on); }
     bool spectrumOn() const { return panel.spectrumOn(); }
 

@@ -533,9 +533,9 @@ public:
     }
     bool eqOn() const { return chosen >= 0 && setup_.eq.on; }
 
-    /** SPECTRUM, beside EQ's switch (the owner, 09.11): what plays under the curves, the EQ on or off — a view of the
-        player's, kept by the host between runs, nothing of the preset. Its switch only where this is set: a host with sound. */
-    std::function<void (bool on)> onSpectrum;
+    /** SPECTRUM (the owner, 09.11): what plays under the curves, the EQ on or off — a view of the player's, kept by the
+        host between runs, nothing of the preset; switched in the host's menu alone, and drawn only where the host has sound. */
+    bool hasSound = false;
     void setSpectrumOn (bool on)
     {
         spectrumWanted = on;
@@ -546,7 +546,7 @@ public:
         }
         repaint (responseArea());
     }
-    bool spectrumOn() const { return chosen >= 0 && spectrumWanted && onSpectrum != nullptr; }
+    bool spectrumOn() const { return chosen >= 0 && spectrumWanted && hasSound; }
 
     /** A right click over the response (the owner, 09.11): the host's EQ menu — RESET EQ — where this is set. */
     std::function<void()> onEqMenu;
@@ -765,7 +765,7 @@ private:
     /** WHAT A CLICK AT A POINT WORKS — the one thing both the hand's light and its press go by (hotAt), so what is lit is
         what a click does. */
     enum class Part { none, download, downloadFormat, back, speaker, speakerCone, wall, room, cab, cabHorn, horn, distance, place, micRow, angle, shift, mic, close, reset, find,
-                      align, invert, blend, help, helpBox, eq, spectrum, eqPass, eqBell };
+                      align, invert, blend, help, helpBox, eq, eqPass, eqBell };
     struct Hot
     {
         Part part = Part::none;
@@ -1467,8 +1467,6 @@ private:
         // The EQ over the response: its switch, then while it is on its bells over its passes.
         if (eqBoxArea().contains (pos))
             return { Part::eq };
-        if (spectrumBoxArea().contains (pos))
-            return { Part::spectrum };
         if (eqOn() && responsePlot().expanded (6.0f).contains (p))
         {
             for (int i = 0; i < eqBells; ++i)
@@ -1749,12 +1747,6 @@ private:
             case Part::eq:
                 setup_.eq.on = ! setup_.eq.on;
                 send();
-                return;
-
-            // SPECTRUM on and off: the player's view, not the preset's — no history.
-            case Part::spectrum:
-                setSpectrumOn (! spectrumWanted);
-                onSpectrum (spectrumWanted);
                 return;
 
             // A pass taken by its line or its handle: the line does not jump under the hand.
@@ -2755,14 +2747,6 @@ private:
         const auto plot = responsePlot().toNearestInt();
         return { plot.getX() + 6, plot.getY() + 6, eqTickSize + 6 + wordW ("EQ") + 8, 24 };
     }
-    /** SPECTRUM's switch, beside EQ's; none where the host has no sound. */
-    ui::Rectangle<int> spectrumBoxArea() const
-    {
-        const auto eq = eqBoxArea();
-        if (eq.isEmpty() || onSpectrum == nullptr)
-            return {};
-        return { eq.getRight() + 10, eq.getY(), eqTickSize + 6 + wordW ("SPECTRUM") + 8, eq.getHeight() };
-    }
     static constexpr int eqTickSize = 12;
 
     ui::Point<float> bellAt (int i) const
@@ -2793,24 +2777,20 @@ private:
         return hz >= 1000.0 ? ui::String ((float) (hz / 1000.0), hz >= 10000.0 ? 1 : 2) + " KHZ" : ui::String ((int) std::lround (hz)) + " HZ";
     }
 
-    /** The switches: EQ's and SPECTRUM's, each a box ticked while on and its word, straight on the band (the owner,
-        09.11). */
+    /** The switch: a box ticked while the EQ is on and its word, straight on the band (the owner, 09.11). */
     void paintEqBox (ui::Graphics& g) const
     {
-        const auto box = [&g, this] (ui::Rectangle<int> r, const char* word, bool on, bool over)
-        {
-            if (r.isEmpty())
-                return;
-            const auto b = r.toFloat();
-            const auto tick = ui::Rectangle<float> (b.getX() + 2.0f, b.getCentreY() - 0.5f * eqTickSize, (float) eqTickSize, (float) eqTickSize);
-            g.setColour (on ? ui::look().orange : over ? ui::look().tx : ui::look().txDim);
-            g.drawRoundedRectangle (tick, 2.0f, 1.3f);
-            if (on)
-                g.fillRoundedRectangle (tick.reduced (3.0f), 1.0f);
-            ui::look().drawTracked (g, word, b.withTrimmedLeft (2.0f + eqTickSize + 6.0f), ui::look().font (13.0f), 0.06f, ui::Justification::centredLeft);
-        };
-        box (eqBoxArea(), "EQ", setup_.eq.on, isHot (Part::eq));
-        box (spectrumBoxArea(), "SPECTRUM", spectrumWanted, isHot (Part::spectrum));
+        const auto r = eqBoxArea();
+        if (r.isEmpty())
+            return;
+        const bool on = setup_.eq.on, over = isHot (Part::eq);
+        const auto b = r.toFloat();
+        const auto tick = ui::Rectangle<float> (b.getX() + 2.0f, b.getCentreY() - 0.5f * eqTickSize, (float) eqTickSize, (float) eqTickSize);
+        g.setColour (on ? ui::look().orange : over ? ui::look().tx : ui::look().txDim);
+        g.drawRoundedRectangle (tick, 2.0f, 1.3f);
+        if (on)
+            g.fillRoundedRectangle (tick.reduced (3.0f), 1.0f);
+        ui::look().drawTracked (g, "EQ", b.withTrimmedLeft (2.0f + eqTickSize + 6.0f), ui::look().font (13.0f), 0.06f, ui::Justification::centredLeft);
     }
 
     /** What plays, under the curves: a wash from 0 dBFS at the band's top to -84 at its foot, its edge a faint line —

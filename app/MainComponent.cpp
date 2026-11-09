@@ -220,8 +220,8 @@ MainComponent::MainComponent (Session* host)
     picker.onMove     = [this] (int cab, CabPicker::Setup setup) { render (CabPicker::stateOf (cab, setup), true); };
     picker.onDownload = [this] { download(); };
     picker.onDownloadFormat = [this] { showFormats(); };
-    // SPECTRUM, the player's view: on until switched off, kept between runs (the owner, 09.11).
-    picker.onSpectrum = [this] (bool on) { properties.getUserSettings()->setValue ("spectrum", on); };
+    // SPECTRUM, the player's view: on until switched off in the menu below, kept between runs (the owner, 09.11).
+    picker.hasSound = true;
     picker.setSpectrumOn (properties.getUserSettings()->getBoolValue ("spectrum", true));
     // A right click over the response: EQ and SPECTRUM, each ticked while on, and RESET EQ (the owner, 09.11).
     picker.onEqMenu = [this]
@@ -543,7 +543,7 @@ int MainComponent::writeStills (const juce::File& folder, float scale)
             columns = view.tick (feed);
             columnsPre = viewPre.tick (feedPre);
         }
-        picker.onSpectrum = [] (bool) {};   // a host with sound, for these two alone: the page has none
+        picker.hasSound = true;   // a host with sound, for these two alone: the page has none
         picker.showSpectrum (columns, columnsPre);
         write ("panel-eq@2x.png");
         auto flat = first;   // ...and as it is first switched on: the passes out at their edges, the bells flat
@@ -551,7 +551,7 @@ int MainComponent::writeStills (const juce::File& folder, float scale)
         shown (flat);
         write ("panel-eq-flat@2x.png");
         picker.showSpectrum ({}, {});
-        picker.onSpectrum = nullptr;
+        picker.hasSound = false;
     }
 
     // The whole window as the app opens on its DEFAULT — its header, the panel, its strip, 960 x 540 — twice the stills'
