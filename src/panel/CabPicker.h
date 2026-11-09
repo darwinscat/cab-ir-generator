@@ -63,6 +63,10 @@ public:
     bool eqOn() const { return panel.eqOn(); }
     std::function<void()>& onEqMenu { panel.onEqMenu };   // a right click over the response: the host's EQ menu
     void resetEq() { panel.resetEq(); }
+    void setEqOn (bool on) { panel.setEqOn (on); }
+    std::function<void (bool)>& onSpectrum { panel.onSpectrum };   // SPECTRUM switched: the host keeps it
+    void setSpectrumOn (bool on) { panel.setSpectrumOn (on); }
+    bool spectrumOn() const { return panel.spectrumOn(); }
 
     static const std::vector<Cab>& cabs() { return Panel::cabs(); }
     static std::pair<int, Setup> setupOf (const State& s) { return Panel::setupOf (s); }

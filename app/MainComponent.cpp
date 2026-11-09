@@ -220,9 +220,21 @@ MainComponent::MainComponent (Session* host)
     picker.onMove     = [this] (int cab, CabPicker::Setup setup) { render (CabPicker::stateOf (cab, setup), true); };
     picker.onDownload = [this] { download(); };
     picker.onDownloadFormat = [this] { showFormats(); };
+    // SPECTRUM, the player's view: on until switched off, kept between runs (the owner, 09.11).
+    picker.onSpectrum = [this] (bool on) { properties.getUserSettings()->setValue ("spectrum", on); };
+    picker.setSpectrumOn (properties.getUserSettings()->getBoolValue ("spectrum", true));
+    // A right click over the response: EQ and SPECTRUM, each ticked while on, and RESET EQ (the owner, 09.11).
     picker.onEqMenu = [this]
     {
         juce::PopupMenu menu;
+        const bool eq = picker.eqOn(), spectrum = picker.spectrumOn();
+        menu.addItem ("EQ", true, eq, [this, eq] { picker.setEqOn (! eq); });
+        menu.addItem ("SPECTRUM", true, spectrum, [this, spectrum]
+        {
+            picker.setSpectrumOn (! spectrum);
+            properties.getUserSettings()->setValue ("spectrum", ! spectrum);
+        });
+        menu.addSeparator();
         menu.addItem ("RESET EQ", [this] { picker.resetEq(); });
         menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition());
     };
@@ -522,6 +534,7 @@ int MainComponent::writeStills (const juce::File& folder, float scale)
             feed.feed (played.data() + at, nullptr, 1600);
             columns = view.tick (feed);
         }
+        picker.onSpectrum = [] (bool) {};   // a host with sound, for these two alone: the page has none
         picker.showSpectrum (columns);
         write ("panel-eq@2x.png");
         auto flat = first;   // ...and as it is first switched on: the passes out at their edges, the bells flat
@@ -529,6 +542,7 @@ int MainComponent::writeStills (const juce::File& folder, float scale)
         shown (flat);
         write ("panel-eq-flat@2x.png");
         picker.showSpectrum ({});
+        picker.onSpectrum = nullptr;
     }
 
     // The whole window as the app opens on its DEFAULT — its header, the panel, its strip, 960 x 540 — twice the stills'
@@ -1030,17 +1044,17 @@ void MainComponent::timerCallback()
     history.tick();
     sound().flush();
 
-    // The EQ's spectrum: what plays, while the EQ is on — the feed asked for it only then.
-    const bool eqOn = picker.eqOn();
-    sound().spectrum().want (eqOn);
-    if (eqOn)
+    // SPECTRUM: what plays, while it is ticked, the EQ on or off — the feed asked for it only then.
+    const bool on = picker.spectrumOn();
+    sound().spectrum().want (on);
+    if (on)
         picker.showSpectrum (spectrumView.tick (sound().spectrum()));
     else if (spectrumShown)
     {
         picker.showSpectrum ({});
         spectrumView.reset();
     }
-    spectrumShown = eqOn;
+    spectrumShown = on;
 }
 
 void MainComponent::mouseMove (const juce::MouseEvent& e)
