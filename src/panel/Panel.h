@@ -2799,11 +2799,14 @@ private:
     {
         if (! spectrumOn())
             return;
+        // Below -84 it goes under the band's foot, out of the frame, not along it (the owner, 09.11) — as the curves do.
+        ui::Graphics::ScopedSaveState keep (g);
+        g.reduceClipRegion (p.toNearestInt());
         const auto wash = [&g, p, this] (const std::vector<float>& db, ui::Colour c, float fill, float edge)
         {
             if ((int) db.size() != spectrumColumns)
                 return;
-            const auto yOf = [p] (float v) { return p.getY() + ui::jlimit (0.0f, 1.0f, -v / 84.0f) * p.getHeight(); };
+            const auto yOf = [p] (float v) { return p.getY() + ui::jlimit (0.0f, 1.5f, -v / 84.0f) * p.getHeight(); };
             g.setGradientFill (ui::ColourGradient (c.withAlpha (fill), 0.0f, p.getY(), c.withAlpha (0.12f * fill), 0.0f, p.getBottom(), false));
             ui::Path top;
             for (int i = 0; i < spectrumColumns; ++i)
@@ -2812,7 +2815,7 @@ private:
                 const float x = xOfHz (spectrumHz (i)), y = yOf (db[(size_t) i]);
                 const float x0 = std::round (i == 0 ? p.getX() : 0.5f * (xOfHz (spectrumHz (i - 1)) + x));
                 const float x1 = std::round (i == spectrumColumns - 1 ? p.getRight() : 0.5f * (x + xOfHz (spectrumHz (i + 1))));
-                if (x1 > x0)
+                if (x1 > x0 && y < p.getBottom())
                     g.fillRect (ui::Rectangle<float> (x0, y, x1 - x0, p.getBottom() - y));
                 if (i == 0)
                     top.startNewSubPath (x, y);
