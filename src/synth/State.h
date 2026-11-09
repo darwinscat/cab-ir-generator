@@ -36,6 +36,7 @@ struct Eq
     };
     bool on = false;
     double highPassHz = 0, lowPassHz = 0;
+    int highPassSlope = 12, lowPassSlope = 12;   // dB an octave: 6, 12, 24 or 48 (the owner, 09.11)
     std::array<Bell, 3> bells { { { 250, 0, 1 }, { 800, 0, 1 }, { 3500, 0, 1 } } };   // mud, honk, bite
 
     /** Whether it changes anything: on, with a pass in or a bell off nought. */

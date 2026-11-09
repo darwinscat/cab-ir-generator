@@ -483,6 +483,7 @@ int MainComponent::writeStills (const juce::File& folder, float scale)
         auto eqd = first;
         eqd.eq.on = true;
         eqd.eq.highPassHz = 90;
+        eqd.eq.highPassSlope = 24;
         eqd.eq.lowPassHz = 7000;
         eqd.eq.bells[0].db = -3.0;
         eqd.eq.bells[2] = { 3500, 2.5, 1.4 };

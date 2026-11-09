@@ -205,6 +205,39 @@ int main()
         for (const float v : wet.mix)
             peak = std::max (peak, std::abs (v));
         check (std::abs (peak - 0.5f) < 1e-6f, "its peak at -6 dBFS, as every IR's");
+
+        // A pass's slope: a Butterworth of order slope/6 an octave past its corner — about -7, -12.3, -24.1 and -48.2 dB,
+        // exactly as the bilinear transform warps it (tan of the frequency); read back the same, and a slope not one of the
+        // four read as the nearest.
+        const auto butterworth = [] (double f, double corner, int order, bool high)   // dB
+        {
+            const double w = std::tan (cabir::synth::pi * f / 48000.0) / std::tan (cabir::synth::pi * corner / 48000.0);
+            return -10.0 * std::log10 (1.0 + std::pow (high ? 1.0 / w : w, 2 * order));
+        };
+        for (const int slope : { 6, 12, 24, 48 })
+        {
+            State pass = full;
+            pass.eq.on = true;
+            pass.eq.highPassHz = 400;
+            pass.eq.highPassSlope = slope;
+            const auto high = cabir::synth::eqStages (pass.eq);
+            check (std::abs (cabir::synth::eqDb (high, 200) - butterworth (200, 400, slope / 6, true)) < 0.01
+                   && std::abs (cabir::synth::eqDb (high, 200) + 1.0 * slope) < 1.1,
+                   ("a high pass's slope, " + std::to_string (slope) + " dB an octave").c_str());
+            pass.eq.highPassHz = 0;
+            pass.eq.lowPassHz = 2000;
+            pass.eq.lowPassSlope = slope;
+            const auto low = cabir::synth::eqStages (pass.eq);
+            check (std::abs (cabir::synth::eqDb (low, 4000) - butterworth (4000, 2000, slope / 6, false)) < 0.01,
+                   ("a low pass's slope, " + std::to_string (slope) + " dB an octave").c_str());
+            pass.eq.highPassHz = 400;
+            const auto back = cabir::fromToml (cabir::toToml (pass));
+            check (back.has_value() && *back == pass, ("a pass's slope reads back the same, " + std::to_string (slope)).c_str());
+        }
+        auto odd = cabir::toToml (eqd);
+        odd.replace (odd.find ("high_pass_slope = 12"), std::string ("high_pass_slope = 12").size(), "high_pass_slope = 30");
+        const auto snapped = cabir::fromToml (odd);
+        check (snapped.has_value() && snapped->eq.highPassSlope == 24, "a slope between read as the nearest");
     }
 
     std::printf ("%s\n%s", failures == 0 ? "state: all passed" : "state: FAILED", text.c_str());

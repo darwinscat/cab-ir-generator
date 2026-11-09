@@ -1402,19 +1402,34 @@ struct Pair
     Eq eq;               // the player's, over the two (State's)
 };
 
+/** A pass of `slope` dB an octave, Butterworth, into `out`: 6 a first-order section alone, 12, 24 and 48 one, two and four
+    biquads at the Qs of that order — 12 the single one at Q √½. */
+inline void addPass (std::vector<Biquad>& out, bool high, double f0, int slope, double rate)
+{
+    if (slope <= 6)
+    {
+        const double k = std::tan (pi * f0 / rate), a1 = (k - 1) / (k + 1);
+        out.push_back (high ? Biquad { 1 / (1 + k), -1 / (1 + k), 0, a1, 0 } : Biquad { k / (1 + k), k / (1 + k), 0, a1, 0 });
+        return;
+    }
+    const int order = slope / 6;
+    for (int k = 1; k <= order / 2; ++k)
+        out.push_back (Biquad::make (high ? "hp" : "lp", f0, 1 / (2 * std::cos ((2 * k - 1) * pi / (2 * order))), 0, rate));
+}
+
 /** THE PLAYER'S EQ (State's Eq) as biquads at `rate`, in the order they run: the high pass and the low pass, Butterworth,
-    12 dB an octave, then the bells, RBJ peaks. None while it changes nothing; a pass or a bell past 0.45 of the rate is
-    left out — nothing there for it to do. */
+    6 to 48 dB an octave, then the bells, RBJ peaks. None while it changes nothing; a pass or a bell past 0.45 of the rate
+    is left out — nothing there for it to do. */
 inline std::vector<Biquad> eqStages (const Eq& eq, double rate = fs)
 {
     std::vector<Biquad> out;
     if (! eq.heard())
         return out;
-    const double top = 0.45 * rate, butterworth = std::sqrt (0.5);
+    const double top = 0.45 * rate;
     if (eq.highPassHz > 0)
-        out.push_back (Biquad::make ("hp", std::min (eq.highPassHz, top), butterworth, 0, rate));
+        addPass (out, true, std::min (eq.highPassHz, top), eq.highPassSlope, rate);
     if (eq.lowPassHz > 0 && eq.lowPassHz < top)
-        out.push_back (Biquad::make ("lp", eq.lowPassHz, butterworth, 0, rate));
+        addPass (out, false, eq.lowPassHz, eq.lowPassSlope, rate);
     for (const auto& b : eq.bells)
         if (! b.flat() && b.hz < top)
             out.push_back (Biquad::make ("peak", b.hz, b.q, b.db, rate));

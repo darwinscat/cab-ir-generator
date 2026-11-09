@@ -57,6 +57,8 @@ std::string toToml (const State& s)
         (void) eq.insert ("on", t::Value (s.eq.on));
         (void) eq.insert ("high_pass", t::Value ((std::int64_t) std::lround (s.eq.highPassHz)));
         (void) eq.insert ("low_pass", t::Value ((std::int64_t) std::lround (s.eq.lowPassHz)));
+        (void) eq.insert ("high_pass_slope", t::Value ((std::int64_t) s.eq.highPassSlope));
+        (void) eq.insert ("low_pass_slope", t::Value ((std::int64_t) s.eq.lowPassSlope));
         for (size_t i = 0; i < s.eq.bells.size(); ++i)
         {
             t::Table bell;
@@ -84,7 +86,7 @@ std::optional<State> fromToml (std::string_view text)
         return std::nullopt;
 
     State s;
-    std::int64_t version = 0, hornDb = 0;
+    std::int64_t version = 0, hornDb = 0, highSlope = 12, lowSlope = 12;
     std::string back = backNames[0];
     const auto report = t::read (*root, [&] (t::Reader& in)
     {
@@ -123,6 +125,8 @@ std::optional<State> fromToml (std::string_view text)
             eq.optional ("on", s.eq.on);
             eq.optional ("high_pass", s.eq.highPassHz, { 0.0, 2000.0 });
             eq.optional ("low_pass", s.eq.lowPassHz, { 0.0, 24000.0 });
+            eq.optional ("high_pass_slope", highSlope, { 6, 48 });
+            eq.optional ("low_pass_slope", lowSlope, { 6, 48 });
             for (size_t i = 0; i < s.eq.bells.size(); ++i)
                 eq.table ("bell" + std::to_string (i + 1), t::Need::Optional, [&] (t::Reader& bell)
                 {
@@ -140,6 +144,9 @@ std::optional<State> fromToml (std::string_view text)
         if (back == backNames[i])
             s.back = i - 1;
     s.hornDb = (double) hornDb;
+    const auto slope = [] (std::int64_t v) { return v < 9 ? 6 : v < 18 ? 12 : v < 36 ? 24 : 48; };   // the nearest of the four
+    s.eq.highPassSlope = slope (highSlope);
+    s.eq.lowPassSlope = slope (lowSlope);
     return s;
 }
 

@@ -631,6 +631,9 @@ public:
                 setup_.eq.highPassHz = x <= p.getX() + 3.0f ? 0.0 : (double) ui::jlimit (30.0f, maxHighPassHz, hz);
             else
                 setup_.eq.lowPassHz = x >= p.getRight() - 3.0f ? 0.0 : (double) ui::jlimit (minLowPassHz, 12000.0f, hz);
+            // ...and up and down its slope, a step each slopeStep px, up the steeper (the owner, 09.11).
+            const int step = (int) std::lround ((grabY - e.position.y) / slopeStep);
+            (dragEq == 0 ? setup_.eq.highPassSlope : setup_.eq.lowPassSlope) = passSlopes[ui::jlimit (0, 3, slopeIndex (grabSlope) + step)];
         }
         else if (drag == Drag::eqBell)
         {
@@ -1708,6 +1711,8 @@ private:
             case Part::eqPass:
                 dragEq = h.i;
                 grabOffset = { passX (h.i) - e.position.x, 0.0f };
+                grabY = e.position.y;
+                grabSlope = h.i == 0 ? setup_.eq.highPassSlope : setup_.eq.lowPassSlope;
                 grab (Drag::eqPass, dragMic, e);
                 return;
 
@@ -2662,6 +2667,11 @@ private:
     static constexpr int eqBells = 3;
     static constexpr float maxHighPassHz = 800.0f, minLowPassHz = 800.0f, maxBellDb = 15.0f;
     int dragEq = 0;                 // the pass (0 the high, 1 the low) or the bell a drag holds
+    static constexpr int passSlopes[] { 6, 12, 24, 48 };   // a pass's slopes, dB an octave
+    static constexpr float slopeStep = 28.0f;               // ...a step each this far up or down a pass's drag
+    static int slopeIndex (int slope) { return slope <= 6 ? 0 : slope <= 12 ? 1 : slope <= 24 ? 2 : 3; }
+    float grabY = 0;                // a pass taken: where the hand was, and its slope then
+    int grabSlope = 12;
     double wheelUntil = 0;          // a bell's width turned by the wheel, kept once it has stood till then; 0 none
     std::vector<float> spectrumDb;  // what plays (showSpectrum)
 
@@ -2835,7 +2845,8 @@ private:
             if (held (Part::eqPass, i))
             {
                 const double hz = i == 0 ? setup_.eq.highPassHz : setup_.eq.lowPassHz;
-                word = ui::String (passWords[i]) + " " + (hz > 0 ? hzWord (hz) : ui::String ("OFF"));
+                word = ui::String (passWords[i]) + " " + (hz > 0 ? hzWord (hz) : ui::String ("OFF")) + "  "
+                       + ui::String (i == 0 ? setup_.eq.highPassSlope : setup_.eq.lowPassSlope) + " DB/OCT";
                 near = { passX (i), p.getY() + 0.5f * p.getHeight() };
             }
         if (word.isEmpty())
