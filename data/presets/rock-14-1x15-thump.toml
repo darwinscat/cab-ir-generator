@@ -19,8 +19,9 @@ angle = 0.0
 
 [mic.b]
 on = true
-model = "re20"
-x = 0.300
+model = "d112"
+x = 0.825
 y = 0.000
-distance = 0.200
+distance = 0.066
 angle = 0.0
+shift = 0.000
