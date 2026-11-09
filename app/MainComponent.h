@@ -79,6 +79,7 @@ private:
     static constexpr const char* bypassWords[] { "A", "B", "A+B" };
     bool offA = false, offB = false;          // BYPASS A, BYPASS B
     std::vector<float> irMix, irA, irB;       // the last rendered: the pair and each mic's part of it (none with one mic)
+    float levelMix = 1, levelA = 1, levelB = 1;   // ...and what the EQ did to each one's loudness (PairParts)
     Hear hearing() const;                     // what plays: one mic out with one mic heard plays the pair
     void playHeard();
 

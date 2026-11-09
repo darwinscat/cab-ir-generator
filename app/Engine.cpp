@@ -105,10 +105,11 @@ void Engine::play (bool on)
         transport.stop();
 }
 
-void Engine::setIr (std::vector<float> ir, double rate)
+void Engine::setIr (std::vector<float> ir, double rate, float levelOf)
 {
     irNow = std::move (ir);
     irRate = rate;
+    levelWanted = levelOf;
     loadIrIntoConvolver();
 }
 
@@ -186,11 +187,12 @@ void Engine::audioDeviceIOCallbackWithContext (const float* const* inputs, int n
         float* io[] { mono };
         if (! convolver.process (io, 1, numSamples))
             juce::FloatVectorOperations::clear (mono, numSamples);
-        const float target = bypass.load() ? 0.0f : 1.0f, step = (float) (1.0 / (0.02 * rateNow));
+        const float target = bypass.load() ? 0.0f : 1.0f, step = (float) (1.0 / (0.02 * rateNow)), wanted = levelWanted.load();
         for (int i = 0; i < numSamples; ++i)
         {
             wet = target > wet ? std::min (target, wet + step) : std::max (target, wet - step);
-            mono[i] = wet * mono[i] + (1.0f - wet) * dry[i];
+            level = wanted > level ? std::min (wanted, level + step) : std::max (wanted, level - step);
+            mono[i] = wet * level * mono[i] + (1.0f - wet) * dry[i];
         }
         spectrumFeed.feed (mono, nullptr, numSamples);   // what is heard, for the EQ's spectrum
     }

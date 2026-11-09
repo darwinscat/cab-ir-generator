@@ -52,7 +52,7 @@ public:
     void setStateInformation (const void* data, int size) override;
 
     // The window's (Session).
-    void setIr (std::vector<float> ir, double rate) override;
+    void setIr (std::vector<float> ir, double rate, float level) override;
     void flush() override;
     void setBypass (bool on) override { bypass = on; }
     SpectrumFeed& spectrum() override { return spectrumFeed; }
@@ -70,6 +70,8 @@ private:
     std::atomic<bool> prepared { false };
     std::atomic<bool> bypass { false };
     float wet = 1.0f;                   // the cabinet's share, audio thread: toward nought while bypassed
+    std::atomic<float> levelWanted { 1.0f };   // the cabinet's level (setIr's)
+    float level = 1.0f;                 // ...as it plays, audio thread: moving there as BYPASS does
     double rateNow = 48000.0;
     int width = 1;                      // the channels convolved: the input's, one or two
     std::vector<float> irNow;           // the IR that plays, kept for a prepare to come (under `loading`)
@@ -90,7 +92,7 @@ private:
     std::shared_ptr<int> alive = std::make_shared<int> (0);
     void playState (const std::string& toml);
 
-    void load (std::vector<float> ir, double rate);   // the IR in, played once the convolver is prepared
+    void load (std::vector<float> ir, double rate, float levelOf);   // the IR in, played once the convolver is prepared
     void timerCallback() override { flush(); }
 };
 

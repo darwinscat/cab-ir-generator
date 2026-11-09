@@ -46,7 +46,7 @@ public:
     void play (bool on);
     bool isPlaying() const { return input.load() ? live.load() : transport.isPlaying(); }
 
-    void setIr (std::vector<float> ir, double rate) override;
+    void setIr (std::vector<float> ir, double rate, float level) override;
     void flush() override;
 
     /** BYPASS: the sample heard as it is, the cabinet out — faded either way over 20 ms, the convolver running on under
@@ -74,6 +74,8 @@ private:
     std::atomic<bool> prepared { false };
     std::atomic<bool> bypass { false };
     float wet = 1.0f;          // the cabinet's share, audio thread: toward nought while bypassed
+    std::atomic<float> levelWanted { 1.0f };   // the cabinet's level (setIr's)
+    float level = 1.0f;        // ...as it plays, audio thread: moving there as BYPASS does
     double rateNow = 48000.0;  // the device's
     std::vector<float> irNow;
     double irRate = 48000.0;

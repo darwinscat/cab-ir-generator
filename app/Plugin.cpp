@@ -131,12 +131,13 @@ void Plugin::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
             juce::FloatVectorOperations::clear (io[ch], n);
 
     // BYPASS: the signal as it came and the cabinet crossfaded, the cabinet's share moving 20 ms end to end.
-    const float target = bypass.load() ? 0.0f : 1.0f, step = (float) (1.0 / (0.02 * rateNow));
+    const float target = bypass.load() ? 0.0f : 1.0f, step = (float) (1.0 / (0.02 * rateNow)), wanted = levelWanted.load();
     for (int i = 0; i < n; ++i)
     {
         wet = target > wet ? std::min (target, wet + step) : std::max (target, wet - step);
+        level = wanted > level ? std::min (wanted, level + step) : std::max (wanted, level - step);
         for (int ch = 0; ch < width; ++ch)
-            io[ch][i] = wet * io[ch][i] + (1.0f - wet) * dry.getSample (ch, i);
+            io[ch][i] = wet * level * io[ch][i] + (1.0f - wet) * dry.getSample (ch, i);
     }
     spectrumFeed.feed (io[0], io[1], n);   // what is heard, for the EQ's spectrum
 
@@ -145,17 +146,18 @@ void Plugin::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
         buffer.copyFrom (ch, 0, buffer, 0, 0, n);
 }
 
-void Plugin::setIr (std::vector<float> ir, double rate)
+void Plugin::setIr (std::vector<float> ir, double rate, float levelOf)
 {
     ++ticket;   // the window's: a render of the session's own asked before it is not played
-    load (std::move (ir), rate);
+    load (std::move (ir), rate, levelOf);
 }
 
-void Plugin::load (std::vector<float> ir, double rate)
+void Plugin::load (std::vector<float> ir, double rate, float levelOf)
 {
     std::lock_guard<std::mutex> lock (loading);
     irNow = std::move (ir);
     irRate = rate;
+    levelWanted = levelOf;
     if (prepared.load() && ! irNow.empty())
     {
         const float* planes[] { irNow.data() };
@@ -182,10 +184,10 @@ void Plugin::playState (const std::string& toml)
         if (! s)
             return;
         auto ir = renderer.render (table(), s->box, synth::pairOf (*s), (size_t) 1 << 14);
-        juce::MessageManager::callAsync ([this, stillHere, mine, mix = std::move (ir.mix)]() mutable
+        juce::MessageManager::callAsync ([this, stillHere, mine, mix = std::move (ir.mix), levelOf = ir.levelMix]() mutable
         {
             if (stillHere.lock() != nullptr && mine == ticket.load())
-                load (std::move (mix), 48000.0);
+                load (std::move (mix), 48000.0, levelOf);
         });
     });
 }

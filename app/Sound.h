@@ -19,8 +19,9 @@ class Sound
 public:
     virtual ~Sound() = default;
 
-    /** The cabinet: its IR, mono, at `rate`. Message thread. */
-    virtual void setIr (std::vector<float> ir, double rate) = 0;
+    /** The cabinet: its IR, mono, at `rate`, and what plays out of the convolver — which levels each IR by itself — times
+        `level`: what the EQ did to the cabinet's loudness (PairParts), so a pass only takes away. Message thread. */
+    virtual void setIr (std::vector<float> ir, double rate, float level) = 0;
 
     /** A load the convolver turned away mid-fade, offered again. Message thread, often. */
     virtual void flush() = 0;

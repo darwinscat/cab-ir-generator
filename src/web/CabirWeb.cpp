@@ -213,7 +213,7 @@ CABIR_EXPORT int cabir_render (const char* toml, int live)
         return 0;
     // The sizes the app renders at: half while a hand moves a control, full once it lets go.
     s.ir = s.renderer.render (s.table, state->box, synth::pairOf (*state), live != 0 ? (size_t) 1 << 13 : (size_t) 1 << 14);
-    s.response = synth::responseOf (synth::as24Bit (s.ir.mix), 48000.0);
+    s.response = synth::responseOf (synth::as24Bit (s.ir.mix), 48000.0, state->eq);
     s.comb = s.ir.a.empty() ? std::vector<float>() : synth::combOf (s.ir.a, s.ir.b);
     const auto meta = metaOf (*state);
     s.wav = synth::wav24 (s.ir.mix, 48000, &meta);

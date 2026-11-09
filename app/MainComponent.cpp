@@ -392,12 +392,15 @@ void MainComponent::render (const State& s, bool live)
             heard = mine;
 
             juce::MemoryBlock bytes (wav.data(), wav.size());
-            auto now = synth::responseOf (synth::as24Bit (ir.mix), 48000.0);   // the IR as the WAV holds it, as the page draws it
+            auto now = synth::responseOf (synth::as24Bit (ir.mix), 48000.0, s.eq);   // the IR as the WAV holds it, as the page draws it
             auto comb = ir.a.empty() ? std::vector<float>() : synth::combOf (ir.a, ir.b);
             auto before = keptCurve;
             irMix = std::move (ir.mix);
             irA = std::move (ir.a);
             irB = std::move (ir.b);
+            levelMix = ir.levelMix;
+            levelA = ir.levelA;
+            levelB = ir.levelB;
             playHeard();
             repaint (strip());   // BYPASS's A and B, live with two mics heard
             if (! live)
@@ -435,7 +438,7 @@ int MainComponent::writeStills (const juce::File& folder, float scale)
         const auto ir = renderer.render (table, s.box, synth::pairOf (s), (size_t) 1 << 14);
         const auto [cab, setup] = CabPicker::setupOf (s);
         picker.show (cab, setup);
-        picker.showResponse (synth::responseOf (synth::as24Bit (ir.mix), 48000.0), {},
+        picker.showResponse (synth::responseOf (synth::as24Bit (ir.mix), 48000.0, s.eq), {},
                              ir.a.empty() ? std::vector<float>() : synth::combOf (ir.a, ir.b));
     };
     int failed = 0;
@@ -564,7 +567,7 @@ int MainComponent::writeStills (const juce::File& folder, float scale)
             auto ir = renderer.render (table, s.box, synth::pairOf (s), (size_t) 1 << 14);
             const auto [cab, setup] = CabPicker::setupOf (s);
             main.picker.show (cab, setup);
-            main.picker.showResponse (synth::responseOf (synth::as24Bit (ir.mix), 48000.0), {},
+            main.picker.showResponse (synth::responseOf (synth::as24Bit (ir.mix), 48000.0, s.eq), {},
                                       ir.a.empty() ? std::vector<float>() : synth::combOf (ir.a, ir.b));
             main.irMix = std::move (ir.mix);   // BYPASS's A and B live with two mics heard
             main.irA = std::move (ir.a);
@@ -1168,7 +1171,7 @@ void MainComponent::playHeard()
     const auto now = hearing();
     const auto& ir = now == Hear::a ? irA : now == Hear::b ? irB : irMix;
     if (! ir.empty())
-        sound().setIr (ir, 48000.0);
+        sound().setIr (ir, 48000.0, now == Hear::a ? levelA : now == Hear::b ? levelB : levelMix);
     sound().setBypass (now == Hear::bypass);
 }
 juce::Rectangle<int> MainComponent::versionArea() const { return strip().reduced (8, 5).removeFromRight (70); }

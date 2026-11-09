@@ -7,6 +7,7 @@
 #include "panel/Download.h"
 #include "panel/Link.h"
 #include "synth/CabSynth.h"
+#include "synth/Response.h"
 #include "synth/State.h"
 
 #include <algorithm>
@@ -238,6 +239,23 @@ int main()
         odd.replace (odd.find ("high_pass_slope = 12"), std::string ("high_pass_slope = 12").size(), "high_pass_slope = 30");
         const auto snapped = cabir::fromToml (odd);
         check (snapped.has_value() && snapped->eq.highPassSlope == 24, "a slope between read as the nearest");
+
+        // A pass only takes away (the owner, 09.11): a low pass at 1 kHz leaves the line under it where the cabinet's stood,
+        // and the level a player that levels each IR multiplies by falls; an EQ off leaves it at one, a boost raises it.
+        State low = full;
+        low.eq.on = true;
+        low.eq.lowPassHz = 1000;
+        low.eq.lowPassSlope = 48;
+        const auto cut = cabir::synth::PairRenderer {}.render (table, low.box, cabir::synth::pairOf (low));
+        const auto plain = cabir::synth::responseOf (cabir::synth::as24Bit (dry.mix), 48000.0);
+        const auto passed = cabir::synth::responseOf (cabir::synth::as24Bit (cut.mix), 48000.0, low.eq);
+        double moved = 0;
+        for (int i = 0; i < cabir::synth::responsePoints; ++i)
+            if (const double hz = cabir::synth::responseHz (i); hz >= 60 && hz <= 300)
+                moved = std::max (moved, (double) std::abs (passed[(size_t) i] - plain[(size_t) i]));
+        check (moved < 0.5, "a low pass at 1 kHz leaves the line under 300 Hz where it stood");
+        check (cut.levelMix < 0.9f && dry.levelMix == 1.0f, "...and its level falls, an EQ off's stays at one");
+        check (wet.levelMix > 1.0f, "a bell's boost raises the level");
     }
 
     std::printf ("%s\n%s", failures == 0 ? "state: all passed" : "state: FAILED", text.c_str());

@@ -1464,6 +1464,25 @@ inline void equalise (std::vector<float>& x, const std::vector<Biquad>& stages)
         x[i] = (float) y[i];
 }
 
+/** AN IR'S LOUDNESS as a player that levels each IR at load measures it (felitronics-core's CabConvolver): its power for
+    white noise through a one-pole low pass at 2 kHz, at `rate`. Only a ratio of two means anything. */
+inline double loudnessOf (const std::vector<float>& ir, double rate = fs)
+{
+    size_t m = 256;
+    while (m < 2 * ir.size()) m <<= 1;
+    std::vector<cd> x (m, 0.0);
+    for (size_t i = 0; i < ir.size(); ++i) x[i] = ir[i];
+    fft (x, false);
+    double power = 0, weight = 0;
+    for (size_t k = 1; k <= m / 2; ++k)
+    {
+        const double f = rate * (double) k / (double) m, w = 1 / (1 + (f / 2000) * (f / 2000));
+        power += w * std::norm (x[k]);
+        weight += w;
+    }
+    return power / weight + 1e-30;
+}
+
 /** `ir` moved later by `seconds` — a fraction of a sample as well as whole ones, through the spectrum, its length kept. */
 inline std::vector<double> delayed (const std::vector<double>& ir, double seconds, double rate = fs)
 {
@@ -1487,8 +1506,14 @@ inline std::vector<double> delayed (const std::vector<double>& ir, double second
 }
 
 /** The pair, and each mic's part of it at the mix's own level — `a` + `b` is `mix` — for a picture of where the two
-    meet in phase and where they cancel; a pair with one mic heard (blend 0) has no parts. */
-struct PairParts { std::vector<float> mix, a, b; };
+    meet in phase and where they cancel; a pair with one mic heard (blend 0) has no parts. With the player's EQ in, each
+    one's level too: what the EQ did to its loudness — a player that levels each IR at load times this keeps the cabinet's
+    level, so a pass only takes away (the owner, 09.11); 1 without it. */
+struct PairParts
+{
+    std::vector<float> mix, a, b;
+    float levelMix = 1, levelA = 1, levelB = 1;
+};
 
 
 /** A PAIR RENDERED AGAIN AND AGAIN, as a hand moves one mic: each mic's own IR kept by what made it — the box, the spot,
@@ -1504,8 +1529,15 @@ public:
         auto out = mixed (table, cab, p, n, rate);
         if (const auto stages = eqStages (p.eq, rate); ! stages.empty())
         {
-            for (auto* x : { &out.mix, &out.a, &out.b })
+            const std::pair<std::vector<float>*, float*> parts[] { { &out.mix, &out.levelMix }, { &out.a, &out.levelA }, { &out.b, &out.levelB } };
+            for (auto [x, level] : parts)
+            {
+                if (x->empty())
+                    continue;
+                const double before = loudnessOf (*x, rate);
                 equalise (*x, stages);
+                *level = (float) std::sqrt (loudnessOf (*x, rate) / before);
+            }
             float peak = 1e-12f;
             for (const float v : out.mix)
                 peak = std::max (peak, std::abs (v));
