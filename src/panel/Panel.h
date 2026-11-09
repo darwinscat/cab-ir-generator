@@ -183,6 +183,8 @@ public:
         // What its "?" say, a section each (helpSpot): its help file's text, the bass's data/help.txt, the guitar's
         // data/guitar/help.txt, baked in by the build.
         const char* help = helpText::bass;
+        // FRED under FIND, one click to the Fredman pair (fredman) — the guitar's (the owner, 09.11); false, none (the bass's).
+        bool fred = false;
     };
 
     static const Catalog& bassCatalog()
@@ -765,7 +767,7 @@ private:
     /** WHAT A CLICK AT A POINT WORKS — the one thing both the hand's light and its press go by (hotAt), so what is lit is
         what a click does. */
     enum class Part { none, download, downloadFormat, back, speaker, speakerCone, wall, room, cab, cabHorn, horn, distance, place, micRow, angle, shift, mic, close, reset, find,
-                      align, invert, blend, help, helpBox, eq, eqPass, eqBell };
+                      fred, align, invert, blend, help, helpBox, eq, eqPass, eqBell };
     struct Hot
     {
         Part part = Part::none;
@@ -1530,6 +1532,8 @@ private:
         // FIND, in A's column under its places: before the column, which keeps every other click in it for its own.
         if (findArea().contains (pos))
             return { Part::find };
+        if (fredArea().contains (pos))
+            return { Part::fred };
 
         for (int m = 0; m < 2; ++m)
         {
@@ -1727,6 +1731,10 @@ private:
             // With both mics heard B is looked for, with one that one (the host's: synth::BSearch, synth::MicSearch).
             case Part::find:
                 onFind (chosen, setup_);
+                return;
+
+            case Part::fred:
+                fredman();
                 return;
 
             case Part::align:
@@ -2311,8 +2319,46 @@ private:
             return {};
         const auto c = column (0);
         const int h = 2 * findLineH + 4;
-        const int top = ui::jmin (placeArea (0, 0).getBottom() + 8, bodyH() - 2 - h);
+        const int top = ui::jmin (placeArea (0, 0).getBottom() + 8, bodyH() - 2 - h - (catalog().fred ? fredGap + fredH : 0));
         return { c.getX() + 4, top, c.getWidth() - 8, h };
+    }
+
+    /** FRED under FIND, its width, a plain button — FIND stays the one orange (the owner, 09.11): the guitar's. */
+    static constexpr int fredH = 26, fredGap = 6;
+
+    ui::Rectangle<int> fredArea() const
+    {
+        if (! catalog().fred || chosen < 0)
+            return {};
+        const auto f = findArea();
+        if (! f.isEmpty())
+            return { f.getX(), f.getBottom() + fredGap, f.getWidth(), fredH };
+        const auto c = column (0);
+        return { c.getX() + 4, ui::jmin (placeArea (0, 0).getBottom() + 8, bodyH() - 2 - fredH), c.getWidth() - 8, fredH };
+    }
+
+    /** THE FREDMAN PAIR (the owner, 09.11): two SM57s close on the cap's edge, A straight at it, B beside it turned 45° to
+        the same point — its capsule out from A's by as much as it leans, so both hear the cone there at one time; ALIGN on,
+        TIME nought, not turned over, BLEND even. The box, its speaker, its back and the EQ as they were. */
+    void fredman()
+    {
+        constexpr float capEdge = 0.25f, near = 0.02f, lean = 45.0f;   // the cap as paintCone draws it, in radii
+        const auto& cab = cabs()[(size_t) chosen];
+        const float out = near * std::tan (lean * ui::MathConstants<float>::pi / 180.0f) / cab.radius;
+        const float side = setup_.a.x < 0.0f ? -1.0f : 1.0f;   // on A's side of the cap, as it stood
+        setup_.a.mic = setup_.b.mic = "sm57";
+        setup_.a.x = side * capEdge;
+        setup_.b.x = side * (capEdge + out);
+        setup_.a.y = setup_.b.y = 0.0f;
+        setup_.a.distance = setup_.b.distance = near;
+        setup_.a.angle = 0.0f;
+        setup_.b.angle = lean;
+        setup_.aOn = setup_.bOn = true;
+        setup_.align = true;
+        setup_.shiftMs = 0.0f;
+        setup_.invert = false;
+        setup_.blend = 0.5f;
+        send();
     }
 
     void paintFind (ui::Graphics& g) const
@@ -2618,6 +2664,7 @@ private:
         }
 
         paintFind (g);
+        paintButton (g, "FRED", fredArea(), false, isHot (Part::fred));
         paintButton (g, defaultArmed ? "SURE?" : "DEFAULT", defaultArea(), defaultArmed, isHot (Part::reset));
         paintButton (g, "CLOSE", closeArea(), false, isHot (Part::close));
     }

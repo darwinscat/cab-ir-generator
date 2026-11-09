@@ -31,6 +31,8 @@ All notable changes to **Orbit Bass Cab Builder** and **Orbit Guitar Cab Builder
   reads the same. SPECTRUM under the curves: what goes into the cabinet, grey, and what comes out.
 - **The page's module with the EQ**: cabir_gain plays a cabinet with its EQ as loud as the app does, and SPECTRUM is
   there for a page with sound — cabir_panel_sound, cabir_spectrum_frame with what it plays before the cabinet and after.
+- **FRED, the guitar's**: under FIND BEST POSITION, one click to the Fredman pair — two SM57s 2 cm off the cap's edge,
+  A straight at it, B beside it turned 45° to the same point, aligned, BLEND even; the box, its speaker and the EQ kept.
 - **The bass's Blues**: ten of the old blues rigs, a 1x15 flip-top, 2x15s, a tweed 4x10 with an open back, small 1x12,
   2x12 and 2x10 combos, no horn, vintage mics (U47, ribbon, RE20), each off its pits.
 
