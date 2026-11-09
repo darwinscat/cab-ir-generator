@@ -114,8 +114,18 @@ int main()
         check (! cabir::fromLink ("cab=1&box=9x9").has_value(), "a box the panel has not: none");
         for (const char* bad : { "cab=1&box=8x10&shift=nan", "cab=1&box=8x10&blend=inf", "cab=1&box=8x10&a=md421,nan,0,5,0",
                                  "cab=1&box=8x10&a=md421,0,0,-nan,0", "cab=1&box=8x10&b=u87,0,0,5,NAN(1)", "cab=1&box=8x10&horn=x",
-                                 "cab=1&box=8x10&a=md421,0,0" })
+                                 "cab=1&box=8x10&a=md421,0,0", "cab=1&box=8x10&lpf=6000", "cab=1&box=8x10&bell2=800,nan,1" })
             check (! cabir::fromLink (bad).has_value(), "a link with a value that is no number: none");
+        State eqd = full;
+        eqd.eq.on = true;
+        eqd.eq.lowPassHz = 6000;
+        eqd.eq.lowPassSlope = 24;
+        eqd.eq.bells[1] = { 800, -3.0, 1.4 };
+        check (cabir::fromLink (cabir::linkOf (eqd)) == eqd, "a link reads back the EQ");
+        check (cabir::linkOf (full).find ("eq=") == std::string::npos, "an EQ as it came is left out of the link");
+        State eqOff = eqd;
+        eqOff.eq.on = false;
+        check (cabir::fromLink (cabir::linkOf (eqOff)) == eqOff, "an EQ switched off keeps its settings in the link");
         State alone = full;
         alone.b.on = false;
         const auto one = cabir::fromLink (cabir::linkOf (alone));
