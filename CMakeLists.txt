@@ -212,6 +212,7 @@ if(CABIR_APP)
             ${riffsTarget}
             cabir::panel
             felitronics::convolution
+            felitronics::analysis   # the EQ's spectrum: tabbyEQ's multi-length pane
             felitronics::appkit
             juce::juce_gui_extra
             juce::juce_audio_utils
@@ -290,6 +291,7 @@ if(CABIR_APP)
                 ${dataTarget}
                 cabir::panel
                 felitronics::convolution
+                felitronics::analysis
                 felitronics::appkit
                 juce::juce_gui_extra
                 juce::juce_audio_utils

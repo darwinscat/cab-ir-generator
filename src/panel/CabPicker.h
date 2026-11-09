@@ -56,6 +56,12 @@ public:
         panel.showResponse (std::move (now), std::move (before), std::move (comb));
     }
 
+    /** What plays, while the EQ is on: dBFS at spectrumHz, spectrumColumns of them (Panel::showSpectrum). */
+    static constexpr int spectrumColumns = Panel::spectrumColumns;
+    static float spectrumHz (int i) { return Panel::spectrumHz (i); }
+    void showSpectrum (std::vector<float> db) { panel.showSpectrum (std::move (db)); }
+    bool eqOn() const { return panel.eqOn(); }
+
     static const std::vector<Cab>& cabs() { return Panel::cabs(); }
     static std::pair<int, Setup> setupOf (const State& s) { return Panel::setupOf (s); }
     static State stateOf (int cab, const Setup& su) { return Panel::stateOf (cab, su); }
@@ -102,6 +108,10 @@ public:
     void mouseDrag (const juce::MouseEvent& e) override        { panel.mouseDrag (hand (e)); }
     void mouseDoubleClick (const juce::MouseEvent& e) override { panel.mouseDoubleClick (hand (e)); }
     void mouseUp (const juce::MouseEvent& e) override          { panel.mouseUp (hand (e)); }
+    void mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWheelDetails& w) override
+    {
+        panel.mouseWheelMove (hand (e), w.isReversed ? -w.deltaY : w.deltaY);
+    }
 
 private:
     Panel panel;

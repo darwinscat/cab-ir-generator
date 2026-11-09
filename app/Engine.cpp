@@ -134,6 +134,7 @@ void Engine::audioDeviceAboutToStart (juce::AudioIODevice* device)
     transport.prepareToPlay (block, rate);
     scratch.setSize (2, block);
     prepared = convolver.prepare (rate, block, 1, 1.0, true);   // reference-unity: the same loudness as a plugin's
+    spectrumFeed.prepare (rate);
     loadIrIntoConvolver();
 }
 
@@ -189,6 +190,7 @@ void Engine::audioDeviceIOCallbackWithContext (const float* const* inputs, int n
             wet = target > wet ? std::min (target, wet + step) : std::max (target, wet - step);
             mono[i] = wet * mono[i] + (1.0f - wet) * dry[i];
         }
+        spectrumFeed.feed (mono, nullptr, numSamples);   // what is heard, for the EQ's spectrum
     }
     for (int ch = 0; ch < numOutputs; ++ch)
         if (outputs[ch] != nullptr)

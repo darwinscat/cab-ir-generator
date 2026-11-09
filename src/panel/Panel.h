@@ -82,13 +82,18 @@ public:
         stepHandles (dt);
         stepResponseFade (dt);
         stepHelp (dt);
+        if (wheelUntil > 0.0 && clock >= wheelUntil)   // the wheel stopped: the width it left kept
+        {
+            wheelUntil = 0.0;
+            send();
+        }
     }
 
     /** True while something moves on its own: a host ticks it then, and need not otherwise. */
     bool wantsFrames() const
     {
         return ! downloadArea().isEmpty() || searchFade > 0.0f || defaultArmed || zoomMoving() || backZoomMoving()
-            || (handlesOf >= 0 && ! handHolds) || responseFading() || (helpOpen >= 0 && ! helpPinned && ! helpHeld);
+            || (handlesOf >= 0 && ! handHolds) || responseFading() || (helpOpen >= 0 && ! helpPinned && ! helpHeld) || wheelUntil > 0.0;
     }
 
     /** The size it is drawn for — small enough to open over a cabin's face too. */
@@ -118,6 +123,7 @@ public:
         bool wall = false;  // the wall behind the box, the guitar's switch (WALL)
         bool cone = false;  // the speakers' cone as the catalog's variant has it (the guitar's PAPER, SPEAKER clicked)
         int room = -1;      // the room round the box — an index of the catalog's rooms — or -1, none (ROOM's OFF)
+        Eq eq;              // the player's EQ, over the response (synth/State.h)
     };
 
     struct Cab
@@ -313,7 +319,7 @@ public:
         { return Spot { (float) m.x, (float) m.y, (float) m.distance, s.horn, ui::String (m.model), (float) m.angle, (float) s.hornDb }; };
         return { indexOf (ui::String (s.box)), { spot (s.a), spot (s.b), (float) s.blend, s.align, s.invert, s.a.on, s.b.on, s.back,
                                                    (float) s.shiftMs, catalog().speakers.indexOf (ui::String (s.speaker)), s.wall,
-                                                   ! s.cone.empty(), catalog().rooms.indexOf (ui::String (s.room)) } };
+                                                   ! s.cone.empty(), catalog().rooms.indexOf (ui::String (s.room)), s.eq } };
     }
 
     /** A STATE AS A LINE READS IT: its box's size, its back where turned from the box's own, and the mics heard —
@@ -355,6 +361,7 @@ public:
         s.align = su.align;
         s.invert = su.invert;
         s.shiftMs = su.shiftMs;
+        s.eq = su.eq;
         return s;
     }
 
@@ -442,7 +449,8 @@ public:
     bool grabs (ui::Point<float> p) const
     {
         const auto part = hotAt (p).part;
-        return part == Part::mic || part == Part::distance || part == Part::angle || part == Part::blend || part == Part::shift;
+        return part == Part::mic || part == Part::distance || part == Part::angle || part == Part::blend || part == Part::shift
+            || part == Part::eqPass || part == Part::eqBell;
     }
 
     /** DEFAULT as a button in the foot — or not, where the host offers it another way (the app's preset menu). With
@@ -495,7 +503,12 @@ public:
         responseNow = std::move (now);
         responseBefore = std::move (before);
         responseComb = std::move (comb);
-        responseBad = synth::pitsOf (responseNow);
+        // Pits judged in the cabinet, the EQ taken back out: a bell cut on purpose is no pit.
+        auto cabinet = responseNow;
+        if (const auto stages = synth::eqStages (setup_.eq); ! stages.empty() && (int) cabinet.size() == responsePoints)
+            for (int i = 0; i < responsePoints; ++i)
+                cabinet[(size_t) i] -= (float) synth::eqDb (stages, responseHz (i));
+        responseBad = synth::pitsOf (cabinet);
         for (auto& b : responseBad)   // a pit judged from where this catalog's line reddens: the guitar's 7 dB, the bass's 3
             b = ui::jmax (0.0f, b - (catalog().pitRedDb - 3.0f));
         if (responseComb.size() == responseBad.size())
@@ -504,6 +517,20 @@ public:
                                                              - (responseHz ((int) i) >= synth::combTopHz ? catalog().combTopRedDb - 3.0f : 0.0f));
         repaint (responseArea());
     }
+
+    /** WHAT PLAYS, while the EQ is on (the owner, 09.11): its spectrum in dBFS at spectrumColumns points from 30 Hz to
+        12 kHz, evenly on the log scale the response is drawn on — tilted as tabbyEQ tilts it — a wash under the curves;
+        empty, none. A host with sound hands it in about thirty times a second; the page has none. */
+    static constexpr int spectrumColumns = 360;
+    static float spectrumHz (int i) { return 30.0f * std::pow (12000.0f / 30.0f, (float) i / (float) (spectrumColumns - 1)); }
+    void showSpectrum (std::vector<float> db)
+    {
+        if (db.empty() && spectrumDb.empty())
+            return;
+        spectrumDb = std::move (db);
+        repaint (responseArea());
+    }
+    bool eqOn() const { return chosen >= 0 && setup_.eq.on; }
 
 
     void paint (ui::Graphics& g) const
@@ -595,6 +622,25 @@ public:
         }
         else if (drag == Drag::blend)
             setup_.blend = along (blendTrack(), e.position.x);
+        else if (drag == Drag::eqPass)
+        {
+            // A pass along the frequencies, out at its own edge of the band (the high pass the left, the low the right).
+            const auto p = responsePlot();
+            const float hz = std::round (hzOfX (e.position.x));
+            if (dragEq == 0)
+                setup_.eq.highPassHz = e.position.x <= p.getX() + 3.0f ? 0.0 : (double) ui::jlimit (30.0f, maxHighPassHz, hz);
+            else
+                setup_.eq.lowPassHz = e.position.x >= p.getRight() - 3.0f ? 0.0 : (double) ui::jlimit (minLowPassHz, 12000.0f, hz);
+        }
+        else if (drag == Drag::eqBell)
+        {
+            // A bell where the hand takes it: its frequency across, its gain up and down, a little stick at nought.
+            auto& b = setup_.eq.bells[(size_t) dragEq];
+            const auto at = e.position + grabOffset;
+            b.hz = std::round (ui::jlimit (30.0f, 12000.0f, hzOfX (at.x)));
+            const float db = ui::jlimit (-maxBellDb, maxBellDb, dbOfY (at.y));
+            b.db = std::abs (db) < 0.5f ? 0.0 : std::round (db * 10.0f) / 10.0;
+        }
         repaint();
         if (onMove != nullptr)
             onMove (chosen, setup_);
@@ -602,6 +648,15 @@ public:
 
     void mouseDoubleClick (const ui::MouseEvent& e)
     {
+        if (const auto h = hotAt (e.position); h.part == Part::eqBell || h.part == Part::eqPass)
+        {
+            if (h.part == Part::eqBell)
+                setup_.eq.bells[(size_t) h.i].db = 0.0;   // a bell flat again, where it stands
+            else
+                (h.i == 0 ? setup_.eq.highPassHz : setup_.eq.lowPassHz) = 0.0;   // a pass out
+            send();
+            return;
+        }
         if (chosen >= 0 && timeTrack().expanded (2.0f, 10.0f).contains (e.position))
         {
             setup_.shiftMs = 0.0f;   // TIME back to where ALIGN leaves B
@@ -632,6 +687,21 @@ public:
         keepHelp();
     }
 
+    /** The wheel over a bell: its width, narrower up (Q higher), heard as it turns and kept a moment after it stops. */
+    void mouseWheelMove (const ui::MouseEvent& e, float deltaY)
+    {
+        const auto h = hotAt (e.position);
+        if (h.part != Part::eqBell || deltaY == 0.0f)
+            return;
+        auto& b = setup_.eq.bells[(size_t) h.i];
+        b.q = std::round (ui::jlimit (0.3, 8.0, b.q * std::pow (2.0, 4.0 * (double) deltaY)) * 100.0) / 100.0;
+        hot = h;
+        wheelUntil = clock + 0.4;
+        repaint();
+        if (onMove != nullptr)
+            onMove (chosen, setup_);
+    }
+
 private:
     static constexpr float maxReach = 1.1f;    // how far from the cap the mic may go, in radii: just past the rim, in sight
     static constexpr float minCm = 1.0f, maxAngle = 60.0f;
@@ -643,12 +713,12 @@ private:
     /** Down to the response's band: the pile, the columns and the speaker over it, the feet under it. */
     int bodyH() const { return getHeight() - footHeight() - responseH; }
 
-    enum class Drag { none, spot, distance, angle, blend, shift };
+    enum class Drag { none, spot, distance, angle, blend, shift, eqPass, eqBell };
 
     /** WHAT A CLICK AT A POINT WORKS — the one thing both the hand's light and its press go by (hotAt), so what is lit is
         what a click does. */
     enum class Part { none, download, downloadFormat, back, speaker, speakerCone, wall, room, cab, cabHorn, horn, distance, place, micRow, angle, shift, mic, close, reset, find,
-                      align, invert, blend, help, helpBox };
+                      align, invert, blend, help, helpBox, eq, eqPass, eqBell };
     struct Hot
     {
         Part part = Part::none;
@@ -1347,6 +1417,18 @@ private:
             return { Part::download };
         if (downloadFormatArea().contains (pos))
             return { Part::downloadFormat };
+        // The EQ over the response: its switch, then while it is on its bells over its passes.
+        if (eqBoxArea().contains (pos))
+            return { Part::eq };
+        if (eqOn() && responsePlot().expanded (6.0f).contains (p))
+        {
+            for (int i = 0; i < eqBells; ++i)
+                if (p.getDistanceFrom (bellAt (i)) < 9.0f)
+                    return { Part::eqBell, -1, i };
+            for (int i = 0; i < 2; ++i)
+                if (std::abs (p.x - passX (i)) < 6.0f)
+                    return { Part::eqPass, -1, i };
+        }
 
         if (p.x < (float) leftW)
         {
@@ -1612,6 +1694,26 @@ private:
 
             case Part::blend:
                 grab (Drag::blend, dragMic, e);
+                return;
+
+            // The EQ on and off, its settings kept either way.
+            case Part::eq:
+                setup_.eq.on = ! setup_.eq.on;
+                if (! setup_.eq.on)
+                    spectrumDb.clear();
+                send();
+                return;
+
+            case Part::eqPass:
+                dragEq = h.i;
+                grab (Drag::eqPass, dragMic, e);
+                return;
+
+            // A bell taken where the hand is on it: its dot does not jump under the hand.
+            case Part::eqBell:
+                dragEq = h.i;
+                grabOffset = bellAt (h.i) - e.position;
+                grab (Drag::eqBell, dragMic, e);
                 return;
         }
     }
@@ -2551,6 +2653,185 @@ private:
         return responseArea().toFloat().withTrimmedLeft (36.0f).withTrimmedRight (12.0f).withTrimmedTop (9.0f).withTrimmedBottom (20.0f);
     }
 
+    // ---------------------------------------------------------------- the EQ over the response
+    // EQ's switch in the band's top left corner, as DOWNLOAD IR is in its right (the owner, 09.11). While it is on, its
+    // line in orange over the cabinet's — its passes dashed across the band, each out at its own edge, its three bells
+    // a dot each at their own gain — and what plays a violet wash under them all.
+    static constexpr int eqBells = 3;
+    static constexpr float maxHighPassHz = 800.0f, minLowPassHz = 800.0f, maxBellDb = 15.0f;
+    int dragEq = 0;                 // the pass (0 the high, 1 the low) or the bell a drag holds
+    double wheelUntil = 0;          // a bell's width turned by the wheel, kept once it has stood till then; 0 none
+    std::vector<float> spectrumDb;  // what plays (showSpectrum)
+
+    float xOfHz (float hz) const
+    {
+        const auto p = responsePlot();
+        return p.getX() + p.getWidth() * std::log (hz / 30.0f) / std::log (12000.0f / 30.0f);
+    }
+    float hzOfX (float x) const
+    {
+        const auto p = responsePlot();
+        return 30.0f * std::pow (12000.0f / 30.0f, ui::jlimit (0.0f, 1.0f, (x - p.getX()) / p.getWidth()));
+    }
+    float yOfDb (float db) const
+    {
+        const auto p = responsePlot();
+        return p.getY() + (responseTop - db) / (responseTop - responseBottom) * p.getHeight();
+    }
+    float dbOfY (float y) const
+    {
+        const auto p = responsePlot();
+        return responseTop - (y - p.getY()) / p.getHeight() * (responseTop - responseBottom);
+    }
+
+    ui::Rectangle<int> eqBoxArea() const
+    {
+        if (chosen < 0)
+            return {};
+        const auto plot = responsePlot().toNearestInt();
+        return { plot.getX() + 6, plot.getY() + 6, eqTickSize + 8 + wordW ("EQ") + 12, 24 };
+    }
+    static constexpr int eqTickSize = 12;
+
+    ui::Point<float> bellAt (int i) const
+    {
+        const auto& b = setup_.eq.bells[(size_t) i];
+        return { xOfHz ((float) b.hz), yOfDb ((float) b.db) };
+    }
+
+    float passX (int i) const
+    {
+        const auto p = responsePlot();
+        const double hz = i == 0 ? setup_.eq.highPassHz : setup_.eq.lowPassHz;
+        return hz > 0 ? xOfHz ((float) hz) : i == 0 ? p.getX() : p.getRight();
+    }
+
+    static ui::String hzWord (double hz)
+    {
+        return hz >= 1000.0 ? ui::String ((float) (hz / 1000.0), hz >= 10000.0 ? 1 : 2) + " KHZ" : ui::String ((int) std::lround (hz)) + " HZ";
+    }
+
+    /** The switch: a box ticked while the EQ is on, and its word. */
+    void paintEqBox (ui::Graphics& g) const
+    {
+        const auto r = eqBoxArea();
+        if (r.isEmpty())
+            return;
+        const bool over = isHot (Part::eq), on = setup_.eq.on;
+        const auto b = r.toFloat().reduced (0.5f);
+        g.setColour (ui::look().panel2.withAlpha (0.92f));
+        g.fillRoundedRectangle (b, 4.0f);
+        g.setColour (on ? ui::look().orange.withAlpha (over ? 0.9f : 0.6f) : over ? ui::look().txDim : ui::look().txFaint);
+        g.drawRoundedRectangle (b, 4.0f, 1.0f);
+        const auto tick = ui::Rectangle<float> (b.getX() + 7.0f, b.getCentreY() - 0.5f * eqTickSize, (float) eqTickSize, (float) eqTickSize);
+        g.setColour (on ? ui::look().orange : over ? ui::look().tx : ui::look().txDim);
+        g.drawRoundedRectangle (tick, 2.0f, 1.3f);
+        if (on)
+            g.fillRoundedRectangle (tick.reduced (3.0f), 1.0f);
+        ui::look().drawTracked (g, "EQ", b.withTrimmedLeft (7.0f + eqTickSize + 6.0f), ui::look().font (13.0f), 0.06f, ui::Justification::centredLeft);
+    }
+
+    /** What plays, under the curves: a wash from 0 dBFS at the band's top to -84 at its foot, its edge a faint line. */
+    void paintSpectrum (ui::Graphics& g, ui::Rectangle<float> p) const
+    {
+        if (! eqOn() || (int) spectrumDb.size() != spectrumColumns)
+            return;
+        const auto yOf = [p] (float db) { return p.getY() + ui::jlimit (0.0f, 1.0f, -db / 84.0f) * p.getHeight(); };
+        g.setGradientFill (ui::ColourGradient (ui::look().violet.withAlpha (0.34f), 0.0f, p.getY(),
+                                               ui::look().violet.withAlpha (0.04f), 0.0f, p.getBottom(), false));
+        ui::Path top;
+        for (int i = 0; i < spectrumColumns; ++i)
+        {
+            // Each column from a whole pixel to the next one's: a wash that neither overlaps nor gaps reads as one.
+            const float x = xOfHz (spectrumHz (i)), y = yOf (spectrumDb[(size_t) i]);
+            const float x0 = std::round (i == 0 ? p.getX() : 0.5f * (xOfHz (spectrumHz (i - 1)) + x));
+            const float x1 = std::round (i == spectrumColumns - 1 ? p.getRight() : 0.5f * (x + xOfHz (spectrumHz (i + 1))));
+            if (x1 > x0)
+                g.fillRect (ui::Rectangle<float> (x0, y, x1 - x0, p.getBottom() - y));
+            if (i == 0)
+                top.startNewSubPath (x, y);
+            else
+                top.lineTo (x, y);
+        }
+        g.setColour (ui::look().violet.withAlpha (0.55f));
+        g.strokePath (top, ui::PathStrokeType (1.0f, ui::PathStrokeType::curved, ui::PathStrokeType::rounded));
+    }
+
+    /** The EQ's line, its passes and its bells, while it is on — and what the one under the hand or held is set to. */
+    void paintEq (ui::Graphics& g, ui::Rectangle<float> p) const
+    {
+        if (! eqOn())
+            return;
+        const auto stages = synth::eqStages (setup_.eq);
+        ui::Path line;
+        for (int i = 0; i < responsePoints; ++i)
+        {
+            const float hz = responseHz (i);
+            const ui::Point<float> at (xOfHz (hz), yOfDb (ui::jlimit (3.0f * responseBottom, 3.0f * responseTop, (float) synth::eqDb (stages, hz))));
+            if (i == 0)
+                line.startNewSubPath (at);
+            else
+                line.lineTo (at);
+        }
+        g.setColour (ui::look().orange.withAlpha (0.85f));
+        g.strokePath (line, ui::PathStrokeType (1.4f, ui::PathStrokeType::curved, ui::PathStrokeType::rounded));
+
+        const auto held = [this] (Part part, int i) { return (drag == (part == Part::eqPass ? Drag::eqPass : Drag::eqBell) && dragEq == i) || isHot (part, -1, i); };
+        // The passes, dashed across the band: bright while in, faint out at their edge.
+        for (int i = 0; i < 2; ++i)
+        {
+            const bool in = (i == 0 ? setup_.eq.highPassHz : setup_.eq.lowPassHz) > 0, lit = held (Part::eqPass, i);
+            const float x = passX (i) + (in ? 0.0f : i == 0 ? 1.0f : -2.0f);
+            g.setColour (ui::look().orange.withAlpha (lit ? 1.0f : in ? 0.7f : 0.3f));
+            for (float y = p.getY(); y < p.getBottom(); y += 8.0f)
+                g.fillRect (ui::Rectangle<float> (x - 0.6f, y, lit ? 1.8f : 1.2f, ui::jmin (4.0f, p.getBottom() - y)));
+        }
+        // The bells: a dot each, solid once off nought, a ring while flat.
+        for (int i = 0; i < eqBells; ++i)
+        {
+            const auto c = bellAt (i);
+            const bool lit = held (Part::eqBell, i), flat = setup_.eq.bells[(size_t) i].flat();
+            const float r = lit ? 6.0f : 5.0f;
+            const auto dot = ui::Rectangle<float> (c.x - r, c.y - r, 2.0f * r, 2.0f * r);
+            g.setColour (ui::look().panel2);
+            g.fillEllipse (dot);
+            g.setColour (lit ? ui::look().orange.brighter (0.3f) : ui::look().orange);
+            if (flat)
+                g.drawEllipse (dot.reduced (0.7f), 1.4f);
+            else
+                g.fillEllipse (dot);
+        }
+        // What the one under the hand, or held, is set to — over it, or under it near the band's top.
+        ui::String word;
+        ui::Point<float> near;
+        for (int i = 0; i < eqBells; ++i)
+            if (held (Part::eqBell, i))
+            {
+                const auto& b = setup_.eq.bells[(size_t) i];
+                word = hzWord (b.hz) + "  " + (b.db > 0 ? "+" : "") + ui::String ((float) b.db, 1) + " DB  Q " + ui::String ((float) b.q, 2);
+                near = bellAt (i);
+            }
+        for (int i = 0; i < 2; ++i)
+            if (held (Part::eqPass, i))
+            {
+                const double hz = i == 0 ? setup_.eq.highPassHz : setup_.eq.lowPassHz;
+                word = ui::String (i == 0 ? "HIGH PASS " : "LOW PASS ") + (hz > 0 ? hzWord (hz) : ui::String ("OFF"));
+                near = { passX (i), p.getY() + 0.5f * p.getHeight() };
+            }
+        if (word.isEmpty())
+            return;
+        const float w = (float) wordW (word.toRawUTF8()) + 16.0f, h = 22.0f;
+        const float x = ui::jlimit (p.getX() + 2.0f, p.getRight() - w - 2.0f, near.x - 0.5f * w);
+        const float y = near.y - 14.0f - h < p.getY() ? near.y + 14.0f : near.y - 14.0f - h;
+        const ui::Rectangle<float> box (x, y, w, h);
+        g.setColour (ui::look().panel2.withAlpha (0.94f));
+        g.fillRoundedRectangle (box, 4.0f);
+        g.setColour (ui::look().orange.withAlpha (0.6f));
+        g.drawRoundedRectangle (box.reduced (0.5f), 4.0f, 1.0f);
+        g.setColour (ui::look().tx);
+        ui::look().drawTracked (g, word, box, ui::look().font (13.0f), 0.04f, ui::Justification::centred);
+    }
+
     /** THE INSTRUMENT'S NAME across the response, a watermark — BASS CAB, GUITAR CAB, big, solid and pale, under the curve,
         the comb's colours and the grid — so the two builders are never taken one for the other (the owner, 07.11);
         brighter while the hand is over the response. */
@@ -2601,6 +2882,7 @@ private:
                 g.setColour ((v > 0.0f ? ui::Colour (0xff3fae6a) : ui::Colour (0xffd5455a)).withAlpha (0.45f * ui::jmin (1.0f, std::abs (v) / 6.0f)));
                 g.fillRect (ui::Rectangle<float> (x0, p.getY(), x1 - x0 + 0.5f, p.getHeight()));
             }
+        paintSpectrum (g, p);
 
         struct Mark { float hz; const char* word; };
         static constexpr Mark marks[] { { 50.0f, "50" }, { 100.0f, "100" }, { 200.0f, "200" }, { 500.0f, "500" },
@@ -2665,6 +2947,8 @@ private:
                 from = to;
             }
         }
+        paintEq (g, p);
+        paintEqBox (g);
 
         // DOWNLOAD IR over the corner, its line pulsing slowly — the one thing the response invites a hand to do.
         if (const auto d = downloadArea(); ! d.isEmpty())

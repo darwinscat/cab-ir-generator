@@ -31,6 +31,7 @@ struct Eq
     struct Bell
     {
         double hz = 1000, db = 0, q = 1;
+        bool flat() const { return db > -0.05 && db < 0.05; }   // its gain is kept to a tenth of a dB
         bool operator== (const Bell&) const = default;
     };
     bool on = false;
@@ -44,7 +45,7 @@ struct Eq
             return false;
         bool any = highPassHz > 0 || lowPassHz > 0;
         for (const auto& b : bells)
-            any = any || b.db != 0;
+            any = any || ! b.flat();
         return any;
     }
 

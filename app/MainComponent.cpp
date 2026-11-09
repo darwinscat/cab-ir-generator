@@ -279,6 +279,7 @@ MainComponent::MainComponent (Session* host)
 MainComponent::~MainComponent()
 {
     alive.reset();
+    sound().spectrum().want (false);   // a plugin plays on with its window closed: nothing fed for it
     worker.removeAllJobs (true, 2000);
     if (session != nullptr)
     {
@@ -348,13 +349,18 @@ void MainComponent::render (const State& s, bool live)
     const int mine = ++latest;
     std::weak_ptr<int> stillHere = alive;
     const auto meta = metaOf (s);
-    worker.addJob ([this, stillHere, mine, s, live, meta]
+    // A hand on the EQ alone moves no mic: the mics as last rendered are kept, at full size, so the live one is full too.
+    auto cabinet = s;
+    cabinet.eq = {};
+    const bool small = live && cabinet != lastCabinet;
+    lastCabinet = cabinet;
+    worker.addJob ([this, stillHere, mine, s, live, small, meta]
     {
         if (mine != latest.load())
             return;   // superseded before it began
         const auto& table = playedTable();
         // The mic that did not move kept, the one that did rendered at half the size while the hand is on it.
-        auto ir = renderer.render (table, s.box, synth::pairOf (s), live ? (size_t) 1 << 13 : (size_t) 1 << 14);
+        auto ir = renderer.render (table, s.box, synth::pairOf (s), small ? (size_t) 1 << 13 : (size_t) 1 << 14);
         auto wav = synth::wav24 (ir.mix, 48000, &meta);
 
         juce::MessageManager::callAsync ([this, stillHere, mine, s, live, ir, wav]() mutable
@@ -470,6 +476,49 @@ int MainComponent::writeStills (const juce::File& folder, float scale)
     found.shiftMs = place.shiftMs;
     shown (found);
     write ("panel-find@2x.png");
+
+    // The EQ on (the owner, 09.11): both passes in, two bells off nought, and under them what plays — noise through the
+    // cabinet, read as the window reads it.
+    {
+        auto eqd = first;
+        eqd.eq.on = true;
+        eqd.eq.highPassHz = 90;
+        eqd.eq.lowPassHz = 7000;
+        eqd.eq.bells[0].db = -3.0;
+        eqd.eq.bells[2] = { 3500, 2.5, 1.4 };
+        shown (eqd);
+        const auto ir = renderer.render (table, eqd.box, synth::pairOf (eqd), (size_t) 1 << 14).mix;
+        juce::Random random (9);
+        std::vector<synth::cd> x ((size_t) 1 << 17, 0.0), h (x.size(), 0.0);   // 64k of noise through the IR, by FFT
+        for (size_t i = 0; i < x.size() / 2; ++i)
+            x[i] = random.nextFloat() * 2.0f - 1.0f;
+        for (size_t i = 0; i < ir.size(); ++i)
+            h[i] = ir[i];
+        synth::fft (x, false);
+        synth::fft (h, false);
+        for (size_t k = 0; k < x.size(); ++k)
+            x[k] *= h[k];
+        synth::fft (x, true);
+        std::vector<float> played (x.size() / 2);
+        for (size_t i = 0; i < played.size(); ++i)
+            played[i] = 0.25f * (float) x[i].real();
+        SpectrumFeed feed;
+        feed.prepare (48000.0);
+        feed.want (true);
+        std::vector<float> hz;
+        for (int i = 0; i < CabPicker::spectrumColumns; ++i)
+            hz.push_back (CabPicker::spectrumHz (i));
+        SpectrumView view (hz);
+        std::vector<float> columns;
+        for (size_t at = 0; at + 1600 <= played.size(); at += 1600)
+        {
+            feed.feed (played.data() + at, nullptr, 1600);
+            columns = view.tick (feed);
+        }
+        picker.showSpectrum (columns);
+        write ("panel-eq@2x.png");
+        picker.showSpectrum ({});
+    }
 
     // The whole window as the app opens on its DEFAULT — its header, the panel, its strip, 960 x 540 — twice the stills'
     // scale, 3840 x 2160 at their 2x: a page's 16:9 picture, larger than a screen holds the window (the owner, 07.11);
@@ -969,6 +1018,18 @@ void MainComponent::timerCallback()
 {
     history.tick();
     sound().flush();
+
+    // The EQ's spectrum: what plays, while the EQ is on — the feed asked for it only then.
+    const bool eqOn = picker.eqOn();
+    sound().spectrum().want (eqOn);
+    if (eqOn)
+        picker.showSpectrum (spectrumView.tick (sound().spectrum()));
+    else if (spectrumShown)
+    {
+        picker.showSpectrum ({});
+        spectrumView.reset();
+    }
+    spectrumShown = eqOn;
 }
 
 void MainComponent::mouseMove (const juce::MouseEvent& e)

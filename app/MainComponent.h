@@ -97,7 +97,16 @@ private:
     int riffNow = -1;                              // the riff playing, by its place in the menu; -1 for a file of the player's own
 
     void render (const State&, bool live);
-    static State defaultState();                   // the first run's, and the preset menu's DEFAULT
+    State lastCabinet;                             // the last rendered, its EQ left out: what a hand on the EQ alone keeps
+    SpectrumView spectrumView { []                 // what plays, read for the EQ's spectrum at the panel's columns
+    {
+        std::vector<float> hz;
+        for (int i = 0; i < CabPicker::spectrumColumns; ++i)
+            hz.push_back (CabPicker::spectrumHz (i));
+        return hz;
+    }() };
+    bool spectrumShown = false;                    // ...and handed to the panel at the last tick
+    static State defaultState();                  // the first run's, and the preset menu's DEFAULT
     void keep (const State&);                      // the panel's state, kept: what history and the next run see
     void carryFormerName();                        // a first run under the new name: the old one's settings and presets copied
     void loadWorkspace (const juce::String& xml);  // A/B/C/D as kept, else the default alone

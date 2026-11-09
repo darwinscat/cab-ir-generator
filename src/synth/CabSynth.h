@@ -1416,7 +1416,7 @@ inline std::vector<Biquad> eqStages (const Eq& eq, double rate = fs)
     if (eq.lowPassHz > 0 && eq.lowPassHz < top)
         out.push_back (Biquad::make ("lp", eq.lowPassHz, butterworth, 0, rate));
     for (const auto& b : eq.bells)
-        if (b.db != 0 && b.hz < top)
+        if (! b.flat() && b.hz < top)
             out.push_back (Biquad::make ("peak", b.hz, b.q, b.db, rate));
     return out;
 }

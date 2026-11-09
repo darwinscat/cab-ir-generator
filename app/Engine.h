@@ -52,6 +52,7 @@ public:
     /** BYPASS: the sample heard as it is, the cabinet out — faded either way over 20 ms, the convolver running on under
         it so the cabinet comes back without a start. */
     void setBypass (bool on) override { bypass = on; }
+    SpectrumFeed& spectrum() override { return spectrumFeed; }
 
     void audioDeviceIOCallbackWithContext (const float* const* inputs, int numInputs, float* const* outputs, int numOutputs,
                                            int numSamples, const juce::AudioIODeviceCallbackContext&) override;
@@ -76,6 +77,7 @@ private:
     std::vector<float> irNow;
     double irRate = 48000.0;
     juce::AudioBuffer<float> scratch;
+    SpectrumFeed spectrumFeed;   // what plays, out of the cabinet, for the EQ's spectrum
 
     bool take (juce::AudioFormatReader*, const juce::String& title);   // the reader looped into the transport, named
     void loadIrIntoConvolver();

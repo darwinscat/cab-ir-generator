@@ -103,6 +103,7 @@ void Plugin::prepareToPlay (double rate, int maxBlock)
     dry.setSize (width, juce::jmax (1, maxBlock));
     wet = bypass.load() ? 0.0f : 1.0f;
     const bool ok = convolver.prepare (rate, maxBlock, width, 1.0, true);   // reference-unity: the app's loudness
+    spectrumFeed.prepare (rate);
     if (ok && ! irNow.empty())
     {
         const float* planes[] { irNow.data() };
@@ -135,6 +136,7 @@ void Plugin::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
         for (int ch = 0; ch < width; ++ch)
             io[ch][i] = wet * io[ch][i] + (1.0f - wet) * dry.getSample (ch, i);
     }
+    spectrumFeed.feed (io[0], io[1], n);   // what is heard, for the EQ's spectrum
 
     // A mono cabinet on a stereo track: the same on both sides.
     for (int ch = width; ch < outs; ++ch)

@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "Spectrum.h"
+
 #include <juce_events/juce_events.h>
 
 #include <string>
@@ -25,6 +27,9 @@ public:
 
     /** BYPASS: the signal heard as it is, the cabinet out, faded either way. Any thread. */
     virtual void setBypass (bool on) = 0;
+
+    /** What plays, for the EQ's spectrum: fed while the window asks (SpectrumFeed::want). */
+    virtual SpectrumFeed& spectrum() = 0;
 };
 
 /** A PLUGIN'S SESSION: the window's in a plugin, where the track plays and the host keeps the project. Its workspace —
