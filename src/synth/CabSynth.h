@@ -1399,7 +1399,55 @@ struct Pair
     double blend = 0;
     bool align = false, invertB = false;
     double shiftB = 0;   // seconds B is moved against A, later positive
+    Eq eq;               // the player's, over the two (State's)
 };
+
+/** THE PLAYER'S EQ (State's Eq) as biquads at `rate`, in the order they run: the high pass and the low pass, Butterworth,
+    12 dB an octave, then the bells, RBJ peaks. None while it changes nothing; a pass or a bell past 0.45 of the rate is
+    left out — nothing there for it to do. */
+inline std::vector<Biquad> eqStages (const Eq& eq, double rate = fs)
+{
+    std::vector<Biquad> out;
+    if (! eq.heard())
+        return out;
+    const double top = 0.45 * rate, butterworth = std::sqrt (0.5);
+    if (eq.highPassHz > 0)
+        out.push_back (Biquad::make ("hp", std::min (eq.highPassHz, top), butterworth, 0, rate));
+    if (eq.lowPassHz > 0 && eq.lowPassHz < top)
+        out.push_back (Biquad::make ("lp", eq.lowPassHz, butterworth, 0, rate));
+    for (const auto& b : eq.bells)
+        if (b.db != 0 && b.hz < top)
+            out.push_back (Biquad::make ("peak", b.hz, b.q, b.db, rate));
+    return out;
+}
+
+/** ...its gain at `f`, dB: the line the panel draws it by. */
+inline double eqDb (const std::vector<Biquad>& stages, double f, double rate = fs)
+{
+    double g = 1;
+    for (const auto& s : stages)
+        g *= std::abs (s.at (f, rate));
+    return 20 * std::log10 (g + 1e-30);
+}
+
+/** ...run over `x` from rest, on doubles, one biquad after the other (transposed direct form II). */
+inline void equalise (std::vector<float>& x, const std::vector<Biquad>& stages)
+{
+    std::vector<double> y (x.begin(), x.end());
+    for (const auto& s : stages)
+    {
+        double z1 = 0, z2 = 0;
+        for (auto& v : y)
+        {
+            const double in = v, out = s.b0 * in + z1;
+            z1 = s.b1 * in - s.a1 * out + z2;
+            z2 = s.b2 * in - s.a2 * out;
+            v = out;
+        }
+    }
+    for (size_t i = 0; i < x.size(); ++i)
+        x[i] = (float) y[i];
+}
 
 /** `ir` moved later by `seconds` — a fraction of a sample as well as whole ones, through the spectrum, its length kept. */
 inline std::vector<double> delayed (const std::vector<double>& ir, double seconds, double rate = fs)
@@ -1430,11 +1478,31 @@ struct PairParts { std::vector<float> mix, a, b; };
 
 /** A PAIR RENDERED AGAIN AND AGAIN, as a hand moves one mic: each mic's own IR kept by what made it — the box, the spot,
     the clock it stands on, the size it was rendered at — so the mic that did not move is not rendered again; and the two
-    rendered side by side, on two threads, when both did. One renderer to one thread: it keeps what it last made. */
+    rendered side by side, on two threads, when both did. One renderer to one thread: it keeps what it last made.
+    The player's EQ over what they make, the mix and its two parts alike, the mix's peak put back at -6 dBFS: a hand on
+    the EQ renders no mic again. */
 class PairRenderer
 {
 public:
     PairParts render (const Table& table, const std::string& cab, const Pair& p, size_t n = 1 << 14, double rate = fs)
+    {
+        auto out = mixed (table, cab, p, n, rate);
+        if (const auto stages = eqStages (p.eq, rate); ! stages.empty())
+        {
+            for (auto* x : { &out.mix, &out.a, &out.b })
+                equalise (*x, stages);
+            float peak = 1e-12f;
+            for (const float v : out.mix)
+                peak = std::max (peak, std::abs (v));
+            for (auto* x : { &out.mix, &out.a, &out.b })
+                for (auto& v : *x)
+                    v *= 0.5f / peak;
+        }
+        return out;
+    }
+
+private:
+    PairParts mixed (const Table& table, const std::string& cab, const Pair& p, size_t n, double rate)
     {
         if (&table != lastTable)   // another table (a listener's SETUP): nothing kept from the last one is its
         {
@@ -1502,7 +1570,6 @@ public:
         return out;
     }
 
-private:
     struct Kept { std::string key; std::vector<double> ir; };
     Kept lastA, lastB;
     const Table* lastTable = nullptr;
@@ -1554,7 +1621,7 @@ inline Pair pairOf (const State& s)
         p.room = s.room;
         return p;
     };
-    Pair pair { spot (s.a), spot (s.b), s.blend, s.align, s.invert, s.shiftMs / 1000.0 };
+    Pair pair { spot (s.a), spot (s.b), s.blend, s.align, s.invert, s.shiftMs / 1000.0, s.eq };
     if (! s.b.on)
         pair.blend = 0;            // A alone: the blend not heard
     else if (! s.a.on)

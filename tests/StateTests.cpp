@@ -166,6 +166,47 @@ int main()
         check (names.size() == 1 && names[0].first == "loud" && names[0].second == "LOUD", "an option named once, with its label");
     }
 
+    // The player's EQ: as it came, not written and nothing changed; set, read back the same; on, heard where it is set —
+    // a bell's +6 dB at 1 kHz reads about +6 there against the same cabinet without it — and off, the IR as before.
+    {
+        check (cabir::toToml (full).find ("[eq]") == std::string::npos, "an EQ as it came is not written");
+        State eqd = full;
+        eqd.eq.on = true;
+        eqd.eq.highPassHz = 80;
+        eqd.eq.lowPassHz = 7500;
+        eqd.eq.bells[1] = { 1000, 6.0, 1.4 };
+        const auto eqText = cabir::toToml (eqd);
+        const auto eqBack = cabir::fromToml (eqText);
+        check (eqBack.has_value() && *eqBack == eqd && cabir::toToml (*eqBack) == eqText, "an EQ reads back the same");
+
+        const auto table = cabir::synth::readTable (CABIR_TABLE);
+        const auto dry = cabir::synth::PairRenderer {}.render (table, full.box, cabir::synth::pairOf (full));
+        State off = eqd;
+        off.eq.on = false;
+        check (cabir::synth::PairRenderer {}.render (table, off.box, cabir::synth::pairOf (off)).mix == dry.mix, "an EQ off: the IR as before");
+
+        State bell = full;
+        bell.eq.on = true;
+        bell.eq.bells[1] = { 1000, 6.0, 1.0 };
+        const auto wet = cabir::synth::PairRenderer {}.render (table, bell.box, cabir::synth::pairOf (bell));
+        const auto at = [] (const std::vector<float>& ir, double hz)   // the IR's level at hz, dB
+        {
+            std::vector<cabir::synth::cd> x (1 << 15, 0.0);
+            for (size_t i = 0; i < ir.size() && i < x.size(); ++i)
+                x[i] = ir[i];
+            cabir::synth::fft (x, false);
+            const auto k = (size_t) std::lround (hz * (double) x.size() / 48000.0);
+            return 20.0 * std::log10 (std::abs (x[k]) + 1e-30);
+        };
+        const double lift = (at (wet.mix, 1000) - at (dry.mix, 1000)) - (at (wet.mix, 100) - at (dry.mix, 100));
+        check (std::abs (lift - 6.0) < 0.3, "a bell's +6 dB at 1 kHz is heard there");
+        check (std::abs (cabir::synth::eqDb (cabir::synth::eqStages (bell.eq), 1000) - 6.0) < 0.01, "...and drawn there");
+        float peak = 0;
+        for (const float v : wet.mix)
+            peak = std::max (peak, std::abs (v));
+        check (std::abs (peak - 0.5f) < 1e-6f, "its peak at -6 dBFS, as every IR's");
+    }
+
     std::printf ("%s\n%s", failures == 0 ? "state: all passed" : "state: FAILED", text.c_str());
     return failures == 0 ? 0 : 1;
 }
