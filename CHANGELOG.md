@@ -13,6 +13,12 @@ All notable changes to **Orbit Bass Cab Builder** and **Orbit Guitar Cab Builder
   sound for rock stays in Blues and Indie, on the same open 1x12 and 2x12. 140 presets in seven styles, and the TOP 12.
 - **The guitar's presets cut to forty**: four styles of ten, Blues, Rock (Classic Rock and Hard Rock in one), Metal (Metal
   and Modern Metal in one) and Punk; Indie gone. The TOP 12 stay, each one of the forty.
+- **The bass's presets cut to forty**, the guitar's four styles: Rock, Metal and Punk ten each from the factory's, the
+  twelve OrbitAmp plays among them (Modern's three in Metal); Funk, Jazz, Modern, Motown and Reggae gone.
+
+### Added
+- **The bass's Blues**: ten of the old blues rigs, a 1x15 flip-top, 2x15s, a tweed 4x10 with an open back, small 1x12,
+  2x12 and 2x10 combos, no horn, vintage mics (U47, ribbon, RE20), each off its pits.
 
 ## [0.2.0] — 2026-11-08 — two builders, their plugins, and a window in 16:9
 
