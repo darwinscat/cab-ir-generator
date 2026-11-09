@@ -31,10 +31,9 @@ public:
 
     juce::AudioDeviceManager devices;
 
-    /** A sample from a file: false for one that does not decode. Played from its start once play() is asked. */
-    bool loadSample (const juce::File&);
-    /** ...or from bytes the app carries (a riff of its own), read where they lie: they outlive the player. */
-    bool loadSample (const void* data, size_t size, const juce::String& title);
+    /** A sample from a file, named `title` (else by the file): false for one that does not decode. Played from its start
+        once play() is asked. */
+    bool loadSample (const juce::File&, const juce::String& title = {});
     juce::String sampleName() const { return name; }
     bool hasSample() const { return input.load() || reader != nullptr; }
 

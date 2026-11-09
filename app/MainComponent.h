@@ -52,7 +52,7 @@ public:
     void mouseExit (const juce::MouseEvent&) override;
     bool keyPressed (const juce::KeyPress&) override;
 
-    bool isInterestedInFileDrag (const juce::StringArray&) override;   // a sample for the player (CABIR_PLAYER)
+    bool isInterestedInFileDrag (const juce::StringArray&) override;   // a sample for the player, where there is one
 
     /** The app's own settings — the window keeps where it was and how large there. */
     juce::PropertiesFile& settings() { return *properties.getUserSettings(); }
@@ -96,6 +96,8 @@ private:
     juce::String presetName;                       // the preset last loaded or saved — dim once edited
     std::string presetText;                        // ...as its state's TOML, to tell
     int riffNow = -1;                              // the riff playing, by its place in the menu; -1 for a file of the player's own
+    bool player = false;                           // the riffs are where the app was built (the owner's machine): OPEN, PLAY,
+                                                   // the songs' menu; else the input alone
 
     void render (const State&, bool live);
     State lastCabinet;                             // the last rendered, its EQ left out: what a hand on the EQ alone keeps

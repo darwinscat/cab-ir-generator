@@ -17,14 +17,9 @@ Engine::~Engine()
     transport.setSource (nullptr);
 }
 
-bool Engine::loadSample (const juce::File& file)
+bool Engine::loadSample (const juce::File& file, const juce::String& title)
 {
-    return take (formats.createReaderFor (file), file.getFileNameWithoutExtension());
-}
-
-bool Engine::loadSample (const void* data, size_t size, const juce::String& title)
-{
-    return take (formats.createReaderFor (std::make_unique<juce::MemoryInputStream> (data, size, false)), title);
+    return take (formats.createReaderFor (file), title.isNotEmpty() ? title : file.getFileNameWithoutExtension());
 }
 
 bool Engine::take (juce::AudioFormatReader* read, const juce::String& title)

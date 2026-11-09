@@ -176,15 +176,12 @@ if(CABIR_APP)
 
     # The owner's listening build: SETUP in the app's strip switches the table's options (app/Table.h). Never a release's.
     option(CABIR_LISTEN "The owner's listening build: SETUP switches the table's options" OFF)
-    # The app's player — our riffs, a file of one's own, OPEN and PLAY — for the owner's testing; a release plays the input
-    # alone, through the cabinet as an amp would (the owner, 09.11: choosing INPUT among songs, then PLAY, lost a player).
-    # The riffs stay in data/ for that and for the site.
-    option(CABIR_PLAYER "The app's player: riffs, a file, OPEN and PLAY (a listening build's)" ${CABIR_LISTEN})
-
     # One app, built for each instrument (app/Flavour.h): its name, its bundle, its logo — the icon and the mark the header
     # draws, from `logo` (assets/logo, the bass's, or assets/logo/guitar) — and its data: the cabinet table, the factory's
-    # presets and the riffs the player carries, from `data` (the bass's) or `data/guitar`.
-    function(cabir_add_app target logo data dataTarget riffsTarget)
+    # presets, from `data` (the bass's) or `data/guitar`. Its riffs are not carried: the player reads them from the checkout
+    # it was built from (CABIR_RIFFS_DIR) and shows only where they are, the owner's machine (the owner, 09.11: choosing
+    # INPUT among songs, then PLAY, lost a player who came to play; the songs are for testing and for the site).
+    function(cabir_add_app target logo data dataTarget)
         cmake_parse_arguments(APP "GUITAR" "PRODUCT;BUNDLE;DESCRIPTION" "" ${ARGN})
         juce_add_gui_app(${target}
             PRODUCT_NAME  "${APP_PRODUCT}"
@@ -200,15 +197,10 @@ if(CABIR_APP)
         target_sources(${target} PRIVATE app/Main.cpp app/MainComponent.cpp app/Engine.cpp)
         file(GLOB presets CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/${data}/presets/*.toml")   # the factory's presets
         juce_add_binary_data(${dataTarget} SOURCES ${data}/cabinets.txt ${logo}/mark.svg ${presets})
-        if(CABIR_PLAYER)
-            file(GLOB riffs CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/${data}/riffs/*.flac")   # the riffs the player carries
-            juce_add_binary_data(${riffsTarget} HEADER_NAME RiffData.h NAMESPACE RiffData SOURCES ${riffs})
-            target_link_libraries(${target} PRIVATE ${riffsTarget})
-        endif()
         target_compile_definitions(${target} PRIVATE
             JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0
             CABIR_PLUGIN=0
-            CABIR_PLAYER=$<BOOL:${CABIR_PLAYER}>
+            CABIR_RIFFS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/${data}/riffs"
             CABIR_GUITAR=$<BOOL:${APP_GUITAR}>
             CABIR_GIT_HASH="${cabirGitHash}"
             CABIR_CORE_VERSION="${cabirCoreVersion}"
@@ -229,14 +221,14 @@ if(CABIR_APP)
             juce::juce_recommended_warning_flags)
     endfunction()
 
-    cabir_add_app(OrbitBassCabBuilder assets/logo data CabIrData CabIrRiffs
+    cabir_add_app(OrbitBassCabBuilder assets/logo data CabIrData
         PRODUCT "Orbit Bass Cab Builder" BUNDLE com.darwinscat.orbitbasscabbuilder
         DESCRIPTION "Bass cabinet IR generator and cab sim")
 
     # THE GUITAR'S — the same app on the guitar's cabinets (data/guitar, src/panel/GuitarCatalog.h).
     option(CABIR_GUITAR_APP "Build the guitar's app too" ON)
     if(CABIR_GUITAR_APP)
-        cabir_add_app(OrbitGuitarCabBuilder assets/logo/guitar data/guitar GuitarCabIrData GuitarCabIrRiffs GUITAR
+        cabir_add_app(OrbitGuitarCabBuilder assets/logo/guitar data/guitar GuitarCabIrData GUITAR
             PRODUCT "Orbit Guitar Cab Builder" BUNDLE com.darwinscat.orbitguitarcabbuilder
             DESCRIPTION "Guitar cabinet IR generator and cab sim")
     endif()

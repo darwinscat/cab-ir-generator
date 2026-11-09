@@ -15,9 +15,10 @@ All notable changes to **Orbit Bass Cab Builder** and **Orbit Guitar Cab Builder
   and Modern Metal in one) and Punk; Indie gone. The TOP 12 stay, each one of the forty.
 - **The bass's presets cut to forty**, the guitar's four styles: Rock, Metal and Punk ten each from the factory's, the
   twelve OrbitAmp plays among them (Modern's three in Metal); Funk, Jazz, Modern, Motown and Reggae gone.
-- **The apps' player**: no riffs, OPEN, PLAY or a dropped sample in a release — choosing INPUT among songs and then
+- **The apps' player and their riffs**: no OPEN, PLAY, songs or dropped sample — choosing INPUT among songs and then
   PLAY lost a player who came to play. The app plays the input AUDIO opens, at once, through the cabinet; the INPUT box
-  names it and opens AUDIO. The player stays in a listening build, for testing.
+  names it and opens AUDIO. The riffs are no longer carried (the bass's package 22 MB lighter, the guitar's 10): the
+  player shows only where they lie, on the machine the app was built on, for testing.
 
 ### Fixed
 - **INPUT heard on any input ticked**: every one open is summed, so the instrument plays with the first input left
