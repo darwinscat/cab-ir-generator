@@ -38,8 +38,8 @@ public:
     juce::String sampleName() const { return name; }
     bool hasSample() const { return input.load() || reader != nullptr; }
 
-    /** The input instead of a sample, silent until played. */
-    void useInput();
+    /** The input instead of a sample, silent until played — or, `play`, heard at once if the sample was playing. */
+    void useInput (bool play = false);
     bool usingInput() const { return input.load(); }
     juce::String inputName() const;   // the input device open, empty for none
 

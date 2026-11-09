@@ -360,7 +360,13 @@ void MainComponent::changeListenerCallback (juce::ChangeBroadcaster* from)
     if (session != nullptr && from == session)
         loadWorkspace (session->workspace());
     else
-        repaint (strip());   // the app's audio device changed: the input the strip names
+    {
+        // The app's audio device changed: an input opened in AUDIO is what plays now (the owner, 09.11: its meter moved
+        // while a riff stood silent) — at once if the riff was playing; and the strip names it.
+        if (engine != nullptr && ! engine->usingInput() && engine->inputName().isNotEmpty())
+            useInput (true);
+        repaint (strip());
+    }
 }
 
 void MainComponent::render (const State& s, bool live)
@@ -903,11 +909,11 @@ void MainComponent::loadRiff (int i)
     repaint (strip());
 }
 
-void MainComponent::useInput()
+void MainComponent::useInput (bool play)
 {
     if (engine == nullptr)
         return;
-    engine->useInput();   // silent until PLAY: a laptop's own mic beside its speakers would howl
+    engine->useInput (play);   // silent until PLAY: a laptop's own mic beside its speakers would howl
     properties.getUserSettings()->setValue ("sample", inputKey);
     riffNow = -1;
     repaint (strip());
@@ -953,7 +959,7 @@ void MainComponent::filesDropped (const juce::StringArray& files, int, int)
 
 void MainComponent::showAudio()
 {
-    // The output, and the input INPUT plays: a device and its channels, the first one open heard.
+    // The output, and the input INPUT plays: a device and its channels, every one open heard, summed; opening one plays it.
     felitronics::appkit::AudioSettingsPanel::Options o;
     o.minInputs = 0;
     o.maxInputs = 2;

@@ -43,10 +43,11 @@ bool Engine::take (juce::AudioFormatReader* read, const juce::String& title)
     return true;
 }
 
-void Engine::useInput()
+void Engine::useInput (bool play)
 {
+    const bool playing = isPlaying();
     transport.stop();
-    live = false;
+    live = play && playing;
     input = true;
     listen (true);
 }
@@ -149,8 +150,9 @@ void Engine::audioDeviceStopped()
 void Engine::audioDeviceIOCallbackWithContext (const float* const* inputs, int numInputs, float* const* outputs, int numOutputs,
                                                int numSamples, const juce::AudioIODeviceCallbackContext&)
 {
-    // The first input open, while it is played — read before any output is written, the two may share memory — or the
-    // sample, folded to mono; through the cabinet, to every output.
+    // Every input open, summed, while it is played — whichever one the instrument is plugged into, the first left ticked
+    // beside it or not (the owner, 09.11); read before any output is written, the two may share memory — or the sample,
+    // folded to mono; through the cabinet, to every output.
     const bool fits = numSamples <= scratch.getNumSamples() && numOutputs > 0;
     float* mono = fits ? scratch.getWritePointer (0) : nullptr;
     if (fits)
@@ -158,8 +160,10 @@ void Engine::audioDeviceIOCallbackWithContext (const float* const* inputs, int n
         scratch.clear (0, numSamples);
         if (input.load())
         {
-            if (live.load() && numInputs > 0 && inputs[0] != nullptr)
-                juce::FloatVectorOperations::copy (mono, inputs[0], numSamples);
+            if (live.load())
+                for (int ch = 0; ch < numInputs; ++ch)
+                    if (inputs[ch] != nullptr)
+                        juce::FloatVectorOperations::add (mono, inputs[ch], numSamples);
         }
         else
         {

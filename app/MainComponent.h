@@ -125,7 +125,7 @@ private:
     void openSample();
     void loadSample (const juce::File&);
     void loadRiff (int);                           // one of the riffs the app carries, by its place in the menu
-    void useInput();                               // the live input instead, silent until played
+    void useInput (bool play = false);             // the live input instead, silent until played (Engine::useInput)
     void showSamples();
     void showAudio();
     void download();
