@@ -36,6 +36,10 @@ All notable changes to **Orbit Bass Cab Builder** and **Orbit Guitar Cab Builder
 - **The bass's Blues**: ten of the old blues rigs, a 1x15 flip-top, 2x15s, a tweed 4x10 with an open back, small 1x12,
   2x12 and 2x10 combos, no horn, vintage mics (U47, ribbon, RE20), each off its pits.
 
+### Changed
+- **The guitar's presets on the PAPER cone**: 32 of the forty, two a style left without (TEXAS, HARP, HAYMAKER, BARK,
+  ANVIL, PRISM, POGO, SNEER: the ones paper changes least or brightens); the mics moved where paper opened a pit or a comb.
+
 ## [0.2.0] — 2026-11-08 — two builders, their plugins, and a window in 16:9
 
 ### Added

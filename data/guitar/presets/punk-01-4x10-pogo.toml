@@ -4,7 +4,6 @@ cabir = 1
 box = "4x10-open"
 back = "open"
 speaker = "snap"
-cone = "paper"
 horn = false
 horn_db = 0
 blend = 0.400

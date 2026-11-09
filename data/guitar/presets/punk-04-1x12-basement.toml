@@ -4,6 +4,7 @@ cabir = 1
 box = "1x12-open"
 back = "open"
 speaker = "mid"
+cone = "paper"
 wall = true
 horn = false
 horn_db = 0
