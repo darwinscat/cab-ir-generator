@@ -105,6 +105,7 @@ private:
             hz.push_back (CabPicker::spectrumHz (i));
         return hz;
     }() };
+    SpectrumView spectrumPreView { spectrumView.columns() };   // ...and what goes into the cabinet, at the same columns
     bool spectrumShown = false;                    // ...and handed to the panel at the last tick
     static State defaultState();                  // the first run's, and the preset menu's DEFAULT
     void keep (const State&);                      // the panel's state, kept: what history and the next run see

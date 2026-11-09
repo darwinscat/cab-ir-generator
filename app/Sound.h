@@ -30,6 +30,8 @@ public:
 
     /** What plays, for the EQ's spectrum: fed while the window asks (SpectrumFeed::want). */
     virtual SpectrumFeed& spectrum() = 0;
+    /** ...and what goes into the cabinet, the same way: the spectrum's pre, as tabbyEQ draws its pre (the owner, 09.11). */
+    virtual SpectrumFeed& spectrumPre() = 0;
 };
 
 /** A PLUGIN'S SESSION: the window's in a plugin, where the track plays and the host keeps the project. Its workspace —

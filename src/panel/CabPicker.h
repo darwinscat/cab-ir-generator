@@ -59,7 +59,7 @@ public:
     /** What plays, while the EQ is on: dBFS at spectrumHz, spectrumColumns of them (Panel::showSpectrum). */
     static constexpr int spectrumColumns = Panel::spectrumColumns;
     static float spectrumHz (int i) { return Panel::spectrumHz (i); }
-    void showSpectrum (std::vector<float> db) { panel.showSpectrum (std::move (db)); }
+    void showSpectrum (std::vector<float> db, std::vector<float> pre) { panel.showSpectrum (std::move (db), std::move (pre)); }
     bool eqOn() const { return panel.eqOn(); }
     std::function<void()>& onEqMenu { panel.onEqMenu };   // a right click over the response: the host's EQ menu
     void resetEq() { panel.resetEq(); }

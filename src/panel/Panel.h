@@ -523,11 +523,12 @@ public:
         empty, none. A host with sound hands it in about thirty times a second; the page has none. */
     static constexpr int spectrumColumns = 360;
     static float spectrumHz (int i) { return 30.0f * std::pow (12000.0f / 30.0f, (float) i / (float) (spectrumColumns - 1)); }
-    void showSpectrum (std::vector<float> db)
+    void showSpectrum (std::vector<float> db, std::vector<float> pre = {})
     {
-        if (db.empty() && spectrumDb.empty())
+        if (db.empty() && spectrumDb.empty() && pre.empty() && spectrumPreDb.empty())
             return;
         spectrumDb = std::move (db);
+        spectrumPreDb = std::move (pre);   // ...and what goes into the cabinet, grey behind it, as tabbyEQ's pre
         repaint (responseArea());
     }
     bool eqOn() const { return chosen >= 0 && setup_.eq.on; }
@@ -539,7 +540,10 @@ public:
     {
         spectrumWanted = on;
         if (! on)
+        {
             spectrumDb.clear();
+            spectrumPreDb.clear();
+        }
         repaint (responseArea());
     }
     bool spectrumOn() const { return chosen >= 0 && spectrumWanted && onSpectrum != nullptr; }
@@ -2720,6 +2724,7 @@ private:
     int grabSlope = 12;
     double wheelUntil = 0;          // a bell's width turned by the wheel, kept once it has stood till then; 0 none
     std::vector<float> spectrumDb;  // what plays (showSpectrum)
+    std::vector<float> spectrumPreDb;   // ...and what goes in
     bool spectrumWanted = true;     // SPECTRUM ticked (setSpectrumOn)
 
     float xOfHz (float hz) const
@@ -2808,30 +2813,37 @@ private:
         box (spectrumBoxArea(), "SPECTRUM", spectrumWanted, isHot (Part::spectrum));
     }
 
-    /** What plays, under the curves: a wash from 0 dBFS at the band's top to -84 at its foot, its edge a faint line. */
+    /** What plays, under the curves: a wash from 0 dBFS at the band's top to -84 at its foot, its edge a faint line —
+        violet; and behind it what goes into the cabinet, grey and fainter, as tabbyEQ draws its pre and post. */
     void paintSpectrum (ui::Graphics& g, ui::Rectangle<float> p) const
     {
-        if (! spectrumOn() || (int) spectrumDb.size() != spectrumColumns)
+        if (! spectrumOn())
             return;
-        const auto yOf = [p] (float db) { return p.getY() + ui::jlimit (0.0f, 1.0f, -db / 84.0f) * p.getHeight(); };
-        g.setGradientFill (ui::ColourGradient (ui::look().violet.withAlpha (0.26f), 0.0f, p.getY(),
-                                               ui::look().violet.withAlpha (0.04f), 0.0f, p.getBottom(), false));
-        ui::Path top;
-        for (int i = 0; i < spectrumColumns; ++i)
+        const auto wash = [&g, p, this] (const std::vector<float>& db, ui::Colour c, float fill, float edge)
         {
-            // Each column from a whole pixel to the next one's: a wash that neither overlaps nor gaps reads as one.
-            const float x = xOfHz (spectrumHz (i)), y = yOf (spectrumDb[(size_t) i]);
-            const float x0 = std::round (i == 0 ? p.getX() : 0.5f * (xOfHz (spectrumHz (i - 1)) + x));
-            const float x1 = std::round (i == spectrumColumns - 1 ? p.getRight() : 0.5f * (x + xOfHz (spectrumHz (i + 1))));
-            if (x1 > x0)
-                g.fillRect (ui::Rectangle<float> (x0, y, x1 - x0, p.getBottom() - y));
-            if (i == 0)
-                top.startNewSubPath (x, y);
-            else
-                top.lineTo (x, y);
-        }
-        g.setColour (ui::look().violet.withAlpha (0.55f));
-        g.strokePath (top, ui::PathStrokeType (1.0f, ui::PathStrokeType::curved, ui::PathStrokeType::rounded));
+            if ((int) db.size() != spectrumColumns)
+                return;
+            const auto yOf = [p] (float v) { return p.getY() + ui::jlimit (0.0f, 1.0f, -v / 84.0f) * p.getHeight(); };
+            g.setGradientFill (ui::ColourGradient (c.withAlpha (fill), 0.0f, p.getY(), c.withAlpha (0.12f * fill), 0.0f, p.getBottom(), false));
+            ui::Path top;
+            for (int i = 0; i < spectrumColumns; ++i)
+            {
+                // Each column from a whole pixel to the next one's: a wash that neither overlaps nor gaps reads as one.
+                const float x = xOfHz (spectrumHz (i)), y = yOf (db[(size_t) i]);
+                const float x0 = std::round (i == 0 ? p.getX() : 0.5f * (xOfHz (spectrumHz (i - 1)) + x));
+                const float x1 = std::round (i == spectrumColumns - 1 ? p.getRight() : 0.5f * (x + xOfHz (spectrumHz (i + 1))));
+                if (x1 > x0)
+                    g.fillRect (ui::Rectangle<float> (x0, y, x1 - x0, p.getBottom() - y));
+                if (i == 0)
+                    top.startNewSubPath (x, y);
+                else
+                    top.lineTo (x, y);
+            }
+            g.setColour (c.withAlpha (edge));
+            g.strokePath (top, ui::PathStrokeType (1.0f, ui::PathStrokeType::curved, ui::PathStrokeType::rounded));
+        };
+        wash (spectrumPreDb, ui::look().tx, 0.06f, 0.24f);
+        wash (spectrumDb, ui::look().violet, 0.18f, 0.42f);
     }
 
     /** The EQ's line, its passes and its bells, while it is on — and what the one under the hand or held is set to. */

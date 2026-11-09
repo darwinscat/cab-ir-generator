@@ -298,6 +298,7 @@ MainComponent::~MainComponent()
 {
     alive.reset();
     sound().spectrum().want (false);   // a plugin plays on with its window closed: nothing fed for it
+    sound().spectrumPre().want (false);
     worker.removeAllJobs (true, 2000);
     if (session != nullptr)
     {
@@ -513,6 +514,9 @@ int MainComponent::writeStills (const juce::File& folder, float scale)
             x[i] = random.nextFloat() * 2.0f - 1.0f;
         for (size_t i = 0; i < ir.size(); ++i)
             h[i] = ir[i];
+        std::vector<float> into (x.size() / 2);   // what goes in, a little under what comes out
+        for (size_t i = 0; i < into.size(); ++i)
+            into[i] = 0.05f * (float) x[i].real();
         synth::fft (x, false);
         synth::fft (h, false);
         for (size_t k = 0; k < x.size(); ++k)
@@ -521,27 +525,32 @@ int MainComponent::writeStills (const juce::File& folder, float scale)
         std::vector<float> played (x.size() / 2);
         for (size_t i = 0; i < played.size(); ++i)
             played[i] = 0.25f * (float) x[i].real();
-        SpectrumFeed feed;
-        feed.prepare (48000.0);
-        feed.want (true);
+        SpectrumFeed feed, feedPre;
+        for (auto* f : { &feed, &feedPre })
+        {
+            f->prepare (48000.0);
+            f->want (true);
+        }
         std::vector<float> hz;
         for (int i = 0; i < CabPicker::spectrumColumns; ++i)
             hz.push_back (CabPicker::spectrumHz (i));
-        SpectrumView view (hz);
-        std::vector<float> columns;
+        SpectrumView view (hz), viewPre (hz);
+        std::vector<float> columns, columnsPre;
         for (size_t at = 0; at + 1600 <= played.size(); at += 1600)
         {
             feed.feed (played.data() + at, nullptr, 1600);
+            feedPre.feed (into.data() + at, nullptr, 1600);
             columns = view.tick (feed);
+            columnsPre = viewPre.tick (feedPre);
         }
         picker.onSpectrum = [] (bool) {};   // a host with sound, for these two alone: the page has none
-        picker.showSpectrum (columns);
+        picker.showSpectrum (columns, columnsPre);
         write ("panel-eq@2x.png");
         auto flat = first;   // ...and as it is first switched on: the passes out at their edges, the bells flat
         flat.eq.on = true;
         shown (flat);
         write ("panel-eq-flat@2x.png");
-        picker.showSpectrum ({});
+        picker.showSpectrum ({}, {});
         picker.onSpectrum = nullptr;
     }
 
@@ -1044,15 +1053,17 @@ void MainComponent::timerCallback()
     history.tick();
     sound().flush();
 
-    // SPECTRUM: what plays, while it is ticked, the EQ on or off — the feed asked for it only then.
+    // SPECTRUM: what plays and what goes in, while it is ticked, the EQ on or off — the feeds asked for them only then.
     const bool on = picker.spectrumOn();
     sound().spectrum().want (on);
+    sound().spectrumPre().want (on);
     if (on)
-        picker.showSpectrum (spectrumView.tick (sound().spectrum()));
+        picker.showSpectrum (spectrumView.tick (sound().spectrum()), spectrumPreView.tick (sound().spectrumPre()));
     else if (spectrumShown)
     {
-        picker.showSpectrum ({});
+        picker.showSpectrum ({}, {});
         spectrumView.reset();
+        spectrumPreView.reset();
     }
     spectrumShown = on;
 }

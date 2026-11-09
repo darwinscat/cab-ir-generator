@@ -104,6 +104,7 @@ void Plugin::prepareToPlay (double rate, int maxBlock)
     wet = bypass.load() ? 0.0f : 1.0f;
     const bool ok = convolver.prepare (rate, maxBlock, width, 1.0, true);   // reference-unity: the app's loudness
     spectrumFeed.prepare (rate);
+    spectrumPreFeed.prepare (rate);
     if (ok && ! irNow.empty())
     {
         const float* planes[] { irNow.data() };
@@ -124,6 +125,7 @@ void Plugin::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
     float* io[2] { buffer.getWritePointer (0), width > 1 ? buffer.getWritePointer (1) : nullptr };
     for (int ch = 0; ch < width; ++ch)
         dry.copyFrom (ch, 0, io[ch], n);
+    spectrumPreFeed.feed (dry.getReadPointer (0), width > 1 ? dry.getReadPointer (1) : nullptr, n);   // what goes in, for the spectrum's pre
     if (! convolver.process (io, width, n))
         for (int ch = 0; ch < width; ++ch)
             juce::FloatVectorOperations::clear (io[ch], n);

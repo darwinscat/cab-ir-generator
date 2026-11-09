@@ -135,6 +135,7 @@ void Engine::audioDeviceAboutToStart (juce::AudioIODevice* device)
     scratch.setSize (2, block);
     prepared = convolver.prepare (rate, block, 1, 1.0, true);   // reference-unity: the same loudness as a plugin's
     spectrumFeed.prepare (rate);
+    spectrumPreFeed.prepare (rate);
     loadIrIntoConvolver();
 }
 
@@ -181,6 +182,7 @@ void Engine::audioDeviceIOCallbackWithContext (const float* const* inputs, int n
         // The sample as it came kept beside it, for BYPASS: the two crossfaded, the cabinet's share moving 20 ms end to end.
         float* dry = scratch.getWritePointer (1);
         juce::FloatVectorOperations::copy (dry, mono, numSamples);
+        spectrumPreFeed.feed (dry, nullptr, numSamples);   // what goes into the cabinet, for the spectrum's pre
         float* io[] { mono };
         if (! convolver.process (io, 1, numSamples))
             juce::FloatVectorOperations::clear (mono, numSamples);

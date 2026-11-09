@@ -56,6 +56,7 @@ public:
     void flush() override;
     void setBypass (bool on) override { bypass = on; }
     SpectrumFeed& spectrum() override { return spectrumFeed; }
+    SpectrumFeed& spectrumPre() override { return spectrumPreFeed; }
     juce::String workspace() const override;
     void keepWorkspace (const juce::String& xml, const std::string& playing) override;
     juce::String format() const override;
@@ -75,6 +76,7 @@ private:
     double irRate = 48000.0;
     juce::AudioBuffer<float> dry;       // the signal as it came, for BYPASS
     SpectrumFeed spectrumFeed;          // what plays, out of the cabinet, for the EQ's spectrum
+    SpectrumFeed spectrumPreFeed;       // ...and what goes in
 
     mutable std::mutex keeping;         // the session's text: a host may ask for it from any thread
     juce::String kept;                  // the workspace, XML

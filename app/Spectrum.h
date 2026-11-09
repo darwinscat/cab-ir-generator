@@ -79,6 +79,7 @@ public:
     }
 
     void reset() { pane->reset(); }
+    const std::vector<float>& columns() const { return at; }   // the frequencies it reads at
 
 private:
     std::vector<float> at;
