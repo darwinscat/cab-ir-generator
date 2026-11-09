@@ -517,6 +517,10 @@ int MainComponent::writeStills (const juce::File& folder, float scale)
         }
         picker.showSpectrum (columns);
         write ("panel-eq@2x.png");
+        auto flat = first;   // ...and as it is first switched on: the passes out at their edges, the bells flat
+        flat.eq.on = true;
+        shown (flat);
+        write ("panel-eq-flat@2x.png");
         picker.showSpectrum ({});
     }
 

@@ -626,11 +626,11 @@ public:
         {
             // A pass along the frequencies, out at its own edge of the band (the high pass the left, the low the right).
             const auto p = responsePlot();
-            const float hz = std::round (hzOfX (e.position.x));
+            const float x = e.position.x + grabOffset.x, hz = std::round (hzOfX (x));
             if (dragEq == 0)
-                setup_.eq.highPassHz = e.position.x <= p.getX() + 3.0f ? 0.0 : (double) ui::jlimit (30.0f, maxHighPassHz, hz);
+                setup_.eq.highPassHz = x <= p.getX() + 3.0f ? 0.0 : (double) ui::jlimit (30.0f, maxHighPassHz, hz);
             else
-                setup_.eq.lowPassHz = e.position.x >= p.getRight() - 3.0f ? 0.0 : (double) ui::jlimit (minLowPassHz, 12000.0f, hz);
+                setup_.eq.lowPassHz = x >= p.getRight() - 3.0f ? 0.0 : (double) ui::jlimit (minLowPassHz, 12000.0f, hz);
         }
         else if (drag == Drag::eqBell)
         {
@@ -1426,7 +1426,7 @@ private:
                 if (p.getDistanceFrom (bellAt (i)) < 9.0f)
                     return { Part::eqBell, -1, i };
             for (int i = 0; i < 2; ++i)
-                if (std::abs (p.x - passX (i)) < 6.0f)
+                if (passTab (i).expanded (2.0f).contains (p) || std::abs (p.x - passX (i)) < 6.0f)
                     return { Part::eqPass, -1, i };
         }
 
@@ -1704,8 +1704,10 @@ private:
                 send();
                 return;
 
+            // A pass taken by its line or its handle: the line does not jump under the hand.
             case Part::eqPass:
                 dragEq = h.i;
+                grabOffset = { passX (h.i) - e.position.x, 0.0f };
                 grab (Drag::eqPass, dragMic, e);
                 return;
 
@@ -2706,6 +2708,16 @@ private:
         return hz > 0 ? xOfHz ((float) hz) : i == 0 ? p.getX() : p.getRight();
     }
 
+    /** A pass's handle at the band's foot, HPF or LPF on it, against its line — so a pass out at its edge is still seen
+        and taken (the owner, 09.11). */
+    ui::Rectangle<float> passTab (int i) const
+    {
+        const auto p = responsePlot();
+        const float w = (float) wordW (passWords[i]) + 12.0f, h = 22.0f, x = passX (i);
+        return { i == 0 ? x : x - w, p.getBottom() - 6.0f - h, w, h };
+    }
+    static constexpr const char* passWords[] { "HPF", "LPF" };
+
     static ui::String hzWord (double hz)
     {
         return hz >= 1000.0 ? ui::String ((float) (hz / 1000.0), hz >= 10000.0 ? 1 : 2) + " KHZ" : ui::String ((int) std::lround (hz)) + " HZ";
@@ -2785,6 +2797,14 @@ private:
             g.setColour (ui::look().orange.withAlpha (lit ? 1.0f : in ? 0.7f : 0.3f));
             for (float y = p.getY(); y < p.getBottom(); y += 8.0f)
                 g.fillRect (ui::Rectangle<float> (x - 0.6f, y, lit ? 1.8f : 1.2f, ui::jmin (4.0f, p.getBottom() - y)));
+            // ...and its handle, lit as the EQ's switch is: orange while in, grey while out.
+            const auto t = passTab (i).reduced (0.5f);
+            g.setColour (ui::look().panel2.withAlpha (0.92f));
+            g.fillRoundedRectangle (t, 4.0f);
+            g.setColour (in ? ui::look().orange.withAlpha (lit ? 1.0f : 0.6f) : lit ? ui::look().txDim : ui::look().txFaint);
+            g.drawRoundedRectangle (t, 4.0f, 1.0f);
+            g.setColour (in ? ui::look().orange : lit ? ui::look().tx : ui::look().txDim);
+            ui::look().drawTracked (g, passWords[i], t, ui::look().font (13.0f), 0.06f, ui::Justification::centred);
         }
         // The bells: a dot each, solid once off nought, a ring while flat.
         for (int i = 0; i < eqBells; ++i)
@@ -2815,7 +2835,7 @@ private:
             if (held (Part::eqPass, i))
             {
                 const double hz = i == 0 ? setup_.eq.highPassHz : setup_.eq.lowPassHz;
-                word = ui::String (i == 0 ? "HIGH PASS " : "LOW PASS ") + (hz > 0 ? hzWord (hz) : ui::String ("OFF"));
+                word = ui::String (passWords[i]) + " " + (hz > 0 ? hzWord (hz) : ui::String ("OFF"));
                 near = { passX (i), p.getY() + 0.5f * p.getHeight() };
             }
         if (word.isEmpty())
