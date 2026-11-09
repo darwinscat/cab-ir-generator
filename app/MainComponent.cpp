@@ -6,7 +6,7 @@
 #include "Table.h"
 
 #include <BinaryData.h>
-#if ! CABIR_PLUGIN
+#if CABIR_PLAYER
  #include <RiffData.h>
 #endif
 #include <felitronics/appkit/AudioSettingsPanel.h>
@@ -46,7 +46,8 @@ namespace
     const juce::String productUrl = juce::String (flavour::page) + "?utm_source=" + flavour::utmSource
                                   + "&utm_medium=" + (flavour::plugin ? "plugin" : "app");
 
-    // The riffs the app carries (Flavour.h); a plugin carries none, the track plays through it.
+#if CABIR_PLAYER
+    // The riffs the player carries (Flavour.h) — a listening build's; a release has no player, a plugin's track plays.
     using flavour::riffs;
     using flavour::numRiffs;
     const juce::String riffKey = "riff:";   // the setting's prefix for one of these, else a file's path
@@ -54,15 +55,13 @@ namespace
 
     const char* riffBytes (int i, int& size)
     {
-#if ! CABIR_PLUGIN
         for (int r = 0; r < RiffData::namedResourceListSize; ++r)
             if (juce::String (RiffData::originalFilenames[r]) == riffs[i].file)
                 return RiffData::getNamedResource (RiffData::namedResourceList[r], size);
-#endif
-        juce::ignoreUnused (i);
         size = 0;
         return nullptr;
     }
+#endif
 
     /** The cabinet table: what the download's note reads the IR's length from. */
     const synth::Table& cabinetTable() { return playedTable(); }
@@ -273,6 +272,12 @@ MainComponent::MainComponent (Session* host)
         noteDownload();
     }
 
+#if ! CABIR_PLAYER
+    // A release has no player: the input AUDIO opened, heard at once — none until one is picked there, so a laptop's own
+    // mic does not howl through its speakers on the first run (the device starts with no input; it keeps what was picked).
+    if (engine != nullptr)
+        engine->inputOnly();
+#else
     // The sample the last run played — a riff of ours, a file, or the live input (silent until played) — else the first riff.
     if (engine != nullptr)
     {
@@ -288,6 +293,7 @@ MainComponent::MainComponent (Session* host)
         if (! engine->hasSample())
             loadRiff (riff);
     }
+#endif
 
     setSize (CabPicker::panelW, headerH + CabPicker::panelH - CabPicker::footRowH + stripH);
     setWantsKeyboardFocus (true);
@@ -363,8 +369,10 @@ void MainComponent::changeListenerCallback (juce::ChangeBroadcaster* from)
     {
         // The app's audio device changed: an input opened in AUDIO is what plays now (the owner, 09.11: its meter moved
         // while a riff stood silent) — at once if the riff was playing; and the strip names it.
+#if CABIR_PLAYER
         if (engine != nullptr && ! engine->usingInput() && engine->inputName().isNotEmpty())
             useInput (true);
+#endif
         repaint (strip());
     }
 }
@@ -881,6 +889,7 @@ void MainComponent::savePreset()
     }), true);
 }
 
+#if CABIR_PLAYER
 void MainComponent::loadSample (const juce::File& file)
 {
     if (engine == nullptr)
@@ -951,11 +960,17 @@ void MainComponent::openSample()
                           [this] (const juce::FileChooser& c) { if (c.getResult().existsAsFile()) loadSample (c.getResult()); });
 }
 
+bool MainComponent::isInterestedInFileDrag (const juce::StringArray&) { return engine != nullptr; }
+
 void MainComponent::filesDropped (const juce::StringArray& files, int, int)
 {
     if (! files.isEmpty())
         loadSample (juce::File (files[0]));
 }
+#else
+bool MainComponent::isInterestedInFileDrag (const juce::StringArray&) { return false; }   // no player: nothing to drop
+void MainComponent::filesDropped (const juce::StringArray&, int, int) {}
+#endif
 
 void MainComponent::showAudio()
 {
@@ -1102,13 +1117,15 @@ bool MainComponent::keyPressed (const juce::KeyPress& key)
         return history.undo(), true;
     if (key == juce::KeyPress ('z', command | juce::ModifierKeys::shiftModifier, 0) || key == juce::KeyPress ('y', command, 0))
         return history.redo(), true;
-    // SPACE plays and stops the sample; the arrows step through the presets, as ◀ ▶ do (the owner, 05.11).
+    // SPACE plays and stops the sample (the player's); the arrows step through the presets, as ◀ ▶ do (the owner, 05.11).
+#if CABIR_PLAYER
     if (key == juce::KeyPress::spaceKey && engine != nullptr && engine->hasSample())
     {
         engine->play (! engine->isPlaying());
         repaint (strip());
         return true;
     }
+#endif
     if (key == juce::KeyPress::leftKey)
         return stepPreset (-1), true;
     if (key == juce::KeyPress::rightKey)
@@ -1147,7 +1164,11 @@ juce::Rectangle<int> MainComponent::brandLink() const
 // ---------------------------------------------------------------- the strip
 juce::Rectangle<int> MainComponent::openArea() const    { return strip().reduced (8, 5).withWidth (70); }
 juce::Rectangle<int> MainComponent::playArea() const    { return openArea().translated (78, 0).withWidth (70); }
+#if CABIR_PLAYER
 juce::Rectangle<int> MainComponent::sampleArea() const  { return playArea().translated (78, 0).withWidth (300); }
+#else
+juce::Rectangle<int> MainComponent::sampleArea() const  { return openArea().withWidth (300); }   // no player: the input first
+#endif
 juce::Rectangle<int> MainComponent::audioArea() const   { return versionArea().translated (-82, 0).withWidth (74); }
 
 juce::Rectangle<int> MainComponent::bypassWordArea() const   // after the sample, BYPASS; a plugin's first in the strip
@@ -1300,29 +1321,38 @@ void MainComponent::paint (juce::Graphics& g)
         button (bypassWords[2], hearArea (2), offA && offB);
     }
 
-    if (engine != nullptr)   // the app's player; a plugin's track plays through it, set in the host
+    if (engine != nullptr)   // the app's input and, in a listening build, its player; a plugin's track plays through it
     {
+#if CABIR_PLAYER
         button ("OPEN", openArea(), false);
         if (engine->hasSample())
             button (engine->isPlaying() ? "STOP" : "PLAY", playArea(), engine->isPlaying());
+#endif
         button ("AUDIO", audioArea(), false);
 #if CABIR_LISTEN
         button ("SETUP", setupArea(), false);
 #endif
 
-        // The sample: a box like the preset's, its menu the riffs we carry and a file of the player's own.
+        // The sample: a box like the preset's, its menu the riffs we carry and a file of the player's own; without the
+        // player, the input alone, a click on it AUDIO.
         const auto sa = sampleArea().toFloat().reduced (0.5f);
         g.setColour (look().panel2);
         g.fillRoundedRectangle (sa, 4.0f);
         g.setColour (look().txFaint);
         g.drawRoundedRectangle (sa, 4.0f, 1.0f);
+        const auto input = "INPUT: " + (engine->inputName().isNotEmpty() ? engine->inputName().toUpperCase() : juce::String ("NONE, SEE AUDIO"));
+#if CABIR_PLAYER
         g.setColour (engine->hasSample() ? look().tx : look().txFaint);
-        const auto source = engine->usingInput() ? "INPUT: " + (engine->inputName().isNotEmpty() ? engine->inputName().toUpperCase() : juce::String ("NONE, SEE AUDIO"))
+        const auto source = engine->usingInput() ? input
                           : engine->hasSample()  ? engine->sampleName().toUpperCase()
                                                  : juce::String ("DROP A ") + flavour::sampleWord + " SAMPLE ON THE WINDOW";
         look().drawTracked (g, source,
                             sa.reduced (10.0f, 0.0f), font, 0.06f, juce::Justification::centredLeft);
         look().drawTracked (g, juce::String::fromUTF8 ("\xe2\x96\xbe"), sa.reduced (10.0f, 0.0f), font, 0.0f, juce::Justification::centredRight);
+#else
+        g.setColour (engine->inputName().isNotEmpty() ? look().tx : look().txFaint);
+        look().drawTracked (g, input, sa.reduced (10.0f, 0.0f), font, 0.06f, juce::Justification::centredLeft);
+#endif
     }
 
     g.setColour (checker.updateAvailable() ? look().orange : look().txDim);
@@ -1366,6 +1396,7 @@ void MainComponent::mouseDown (const juce::MouseEvent& e)
             history.switchTo (reg);
         repaint (header());
     }
+#if CABIR_PLAYER
     else if (engine != nullptr && openArea().contains (p))
         openSample();
     else if (engine != nullptr && sampleArea().contains (p))
@@ -1375,7 +1406,8 @@ void MainComponent::mouseDown (const juce::MouseEvent& e)
         engine->play (! engine->isPlaying());
         repaint (strip());
     }
-    else if (engine != nullptr && audioArea().contains (p))
+#endif
+    else if (engine != nullptr && (audioArea().contains (p) || sampleArea().contains (p)))   // the input's box: AUDIO, without the player
         showAudio();
 #if CABIR_LISTEN
     else if (engine != nullptr && setupArea().contains (p))

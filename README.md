@@ -61,11 +61,11 @@ phase and where they cancel; the response before your last change stays as a fai
 **Presets.** 160 of them in eight styles — Funk, Jazz, Metal, Modern, Motown, Punk, Reggae and Rock;
 the arrows beside the menu (and the arrow keys) step through them.
 
-**Listening.** A few bass riffs come with the app, or drop a sample of your own on the window — or pick
-**INPUT** and play your instrument live through the cabinet from an audio interface, silent until PLAY. **Space**
-plays and stops. **HEAR** chooses what you listen through: **A+B**, **A** or **B** alone as it stands in
-the pair, or **BYPASS**, the sample with no cabinet at all — for listening only, nothing of the preset
-changes. **AUDIO** picks the output device.
+**Listening.** Plug your instrument into an audio interface and pick its input in **AUDIO** (or click the
+**INPUT** box): it plays live through the cabinet, as through an amp. **HEAR** chooses what you listen through:
+**A+B**, **A** or **B** alone as it stands in the pair, or **BYPASS**, the input with no cabinet at all — for
+listening only, nothing of the preset changes. **AUDIO** picks the output device too. A listening build
+(`CABIR_LISTEN`) carries a player as well: our riffs, a file of your own, PLAY and **Space**.
 
 **History.** Undo and redo, and four registers, **A B C D**, to keep four cabinets side by side and
 compare them; right-click a register to copy the one playing into it.
@@ -107,7 +107,7 @@ page's module, and `irdump`, its check against the native build).
 - `src/web/` — the page's module (WebAssembly): the synthesis and the same panel, drawn on a canvas.
 - `app/` — the standalone apps and the plugins.
 - `data/` — `cabinets.txt`, the cabinets, mics and positions the synthesis reads; the factory presets;
-  the typical cabinets; the riffs.
+  the typical cabinets; the riffs (a listening build's player, and the site's).
 - `tools/` — `cabgen` renders a table to files, `irlook` reads an IR's response back, `presetcheck`
   and `respread` judge and spread the presets' mic pairs, `cabpack` makes the IR packs.
 - `assets/logo/` — the mark, the app's icon drawn from it (`icon.png`, 1024 px), and the lockup with the name.

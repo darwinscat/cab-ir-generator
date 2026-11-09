@@ -176,6 +176,10 @@ if(CABIR_APP)
 
     # The owner's listening build: SETUP in the app's strip switches the table's options (app/Table.h). Never a release's.
     option(CABIR_LISTEN "The owner's listening build: SETUP switches the table's options" OFF)
+    # The app's player — our riffs, a file of one's own, OPEN and PLAY — for the owner's testing; a release plays the input
+    # alone, through the cabinet as an amp would (the owner, 09.11: choosing INPUT among songs, then PLAY, lost a player).
+    # The riffs stay in data/ for that and for the site.
+    option(CABIR_PLAYER "The app's player: riffs, a file, OPEN and PLAY (a listening build's)" ${CABIR_LISTEN})
 
     # One app, built for each instrument (app/Flavour.h): its name, its bundle, its logo — the icon and the mark the header
     # draws, from `logo` (assets/logo, the bass's, or assets/logo/guitar) — and its data: the cabinet table, the factory's
@@ -196,11 +200,15 @@ if(CABIR_APP)
         target_sources(${target} PRIVATE app/Main.cpp app/MainComponent.cpp app/Engine.cpp)
         file(GLOB presets CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/${data}/presets/*.toml")   # the factory's presets
         juce_add_binary_data(${dataTarget} SOURCES ${data}/cabinets.txt ${logo}/mark.svg ${presets})
-        file(GLOB riffs CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/${data}/riffs/*.flac")       # the riffs the player carries
-        juce_add_binary_data(${riffsTarget} HEADER_NAME RiffData.h NAMESPACE RiffData SOURCES ${riffs})
+        if(CABIR_PLAYER)
+            file(GLOB riffs CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/${data}/riffs/*.flac")   # the riffs the player carries
+            juce_add_binary_data(${riffsTarget} HEADER_NAME RiffData.h NAMESPACE RiffData SOURCES ${riffs})
+            target_link_libraries(${target} PRIVATE ${riffsTarget})
+        endif()
         target_compile_definitions(${target} PRIVATE
             JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0
             CABIR_PLUGIN=0
+            CABIR_PLAYER=$<BOOL:${CABIR_PLAYER}>
             CABIR_GUITAR=$<BOOL:${APP_GUITAR}>
             CABIR_GIT_HASH="${cabirGitHash}"
             CABIR_CORE_VERSION="${cabirCoreVersion}"
@@ -209,7 +217,6 @@ if(CABIR_APP)
             $<$<BOOL:${CABIR_LISTEN}>:CABIR_LISTEN=1>)
         target_link_libraries(${target} PRIVATE
             ${dataTarget}
-            ${riffsTarget}
             cabir::panel
             felitronics::convolution
             felitronics::analysis   # the EQ's spectrum: tabbyEQ's multi-length pane

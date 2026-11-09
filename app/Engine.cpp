@@ -52,6 +52,13 @@ void Engine::useInput (bool play)
     listen (true);
 }
 
+void Engine::inputOnly()
+{
+    transport.stop();
+    input = true;
+    live = true;
+}
+
 void Engine::listen (bool on)
 {
     auto setup = devices.getAudioDeviceSetup();

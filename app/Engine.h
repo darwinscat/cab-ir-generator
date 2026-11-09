@@ -40,6 +40,9 @@ public:
 
     /** The input instead of a sample, silent until played — or, `play`, heard at once if the sample was playing. */
     void useInput (bool play = false);
+    /** THE INPUT ALONE, as a release plays it (no player): whatever input AUDIO has open, heard at once — none opened
+        here, so a first run is silent until one is picked there. */
+    void inputOnly();
     bool usingInput() const { return input.load(); }
     juce::String inputName() const;   // the input device open, empty for none
 

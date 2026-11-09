@@ -52,7 +52,7 @@ public:
     void mouseExit (const juce::MouseEvent&) override;
     bool keyPressed (const juce::KeyPress&) override;
 
-    bool isInterestedInFileDrag (const juce::StringArray&) override { return engine != nullptr; }
+    bool isInterestedInFileDrag (const juce::StringArray&) override;   // a sample for the player (CABIR_PLAYER)
 
     /** The app's own settings — the window keeps where it was and how large there. */
     juce::PropertiesFile& settings() { return *properties.getUserSettings(); }
