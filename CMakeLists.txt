@@ -131,7 +131,8 @@ if(CABIR_WEB)
     if(EMSCRIPTEN)
         target_link_options(irdump PRIVATE -sNODERAWFS=1 -sALLOW_MEMORY_GROWTH=1 -sENVIRONMENT=node)
         add_executable(cabir_web src/web/CabirWeb.cpp src/web/PanelWeb.cpp)
-        target_link_libraries(cabir_web PRIVATE cabir_synth felitronics::convolution)
+        target_link_libraries(cabir_web PRIVATE cabir_synth felitronics::convolution
+            felitronics::analysis)   # SPECTRUM, the app's pane, on what the page plays
         set_target_properties(cabir_web PROPERTIES OUTPUT_NAME cabir SUFFIX ".mjs")
         target_link_options(cabir_web PRIVATE
             -sMODULARIZE=1 -sEXPORT_ES6=1 -sEXPORT_NAME=createCabir -sENVIRONMENT=web,worker,node

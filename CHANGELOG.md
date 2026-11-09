@@ -25,6 +25,12 @@ All notable changes to **Orbit Bass Cab Builder** and **Orbit Guitar Cab Builder
   ticked beside its own.
 
 ### Added
+- **EQ over the response**: its switch in the response's corner, HPF and LPF at its foot, 6, 12, 24 or 48 dB an octave
+  dragged up and down, three bells; rendered into the IR, so DOWNLOAD IR writes what plays, and the line stays where the
+  cabinet without it stands. A preset and a link keep it; a link only where it is not as it came, so every link of before
+  reads the same. SPECTRUM under the curves: what goes into the cabinet, grey, and what comes out.
+- **The page's module with the EQ**: cabir_gain plays a cabinet with its EQ as loud as the app does, and SPECTRUM is
+  there for a page with sound — cabir_panel_sound, cabir_spectrum_frame with what it plays before the cabinet and after.
 - **The bass's Blues**: ten of the old blues rigs, a 1x15 flip-top, 2x15s, a tweed 4x10 with an open back, small 1x12,
   2x12 and 2x10 combos, no horn, vintage mics (U47, ribbon, RE20), each off its pits.
 

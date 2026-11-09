@@ -26,6 +26,16 @@
 //                                              "mic-a" (A's glyph on the speaker; the speaker while A is off), "download"
 //                                              — x, y, w, h (ints, the panel's units); null for another name or none shown
 //   cabir_panel_download_note (text)           the line under the button: what the next download will be (UTF-8; "" none)
+//   cabir_panel_sound (on)                     the page has sound: SPECTRUM under the curves, as the app has it (none
+//                                              until said)
+//   cabir_panel_spectrum (on)                  SPECTRUM switched, the app's menu item (on until said); off, it goes
+//   cabir_spectrum_wanted ()                   1 while the panel shows it: then the page hands frames in, else needs not
+//   cabir_spectrum_size ()                     a frame's length in samples (16384)
+//   cabir_spectrum_frame (after, before, cover)   about thirty times a second, as the app's: the latest
+//                                              cabir_spectrum_size () samples at 48 kHz of what is heard (after the
+//                                              cabinet, BYPASS's dry in it) and of what goes in (before it), floats in
+//                                              the module's heap, either null for none; cover, the samples played since the
+//                                              last frame — 0 while nothing plays, and the two fade as the app's do
 //   cabir_glyph_svg (mic)                      a mic's glyph as SVG, its black for the canvas to recolour
 //   cabir_label (toml)                         a state as a line reads it, the app's words: "4x10 PORTED · MD421+U47" (UTF-8)
 //
@@ -58,8 +68,12 @@
 #include <panel/Panel.h>
 #include <synth/State.h>
 
+#include <felitronics/analysis/MultiResSpectrumPane.h>
+
+#include <algorithm>
 #include <cstring>
 #include <deque>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -140,6 +154,29 @@ namespace
 
     struct Event { int kind; std::string state; };
 
+    /** SPECTRUM, one of its two: the page's frames read as the app reads its own (app/Spectrum.h) — tabbyEQ's pane, in
+        1/24-octave bands at the panel's columns, tilted +4.5 dB an octave about 1 kHz. */
+    struct Heard
+    {
+        std::unique_ptr<felitronics::analysis::MultiResSpectrumPane> pane = std::make_unique<felitronics::analysis::MultiResSpectrumPane>();
+        std::vector<float> db;
+
+        void take (const float* frame, int cover)
+        {
+            if (frame != nullptr && cover > 0)
+            {
+                std::copy (frame, frame + pane->frameSize(), pane->frameInput());
+                pane->coverSamples = std::min (cover, pane->frameSize());
+                pane->ingest (pane->frameOrder());
+            }
+            else
+                pane->starve();
+            db.resize ((size_t) Panel::spectrumColumns);
+            for (int i = 0; i < Panel::spectrumColumns; ++i)
+                db[(size_t) i] = (float) pane->readDb (Panel::spectrumHz (i), 48000.0, 4.5, 1000.0);
+        }
+    };
+
     struct PanelSession
     {
         Panel panel;
@@ -150,6 +187,8 @@ namespace
         std::vector<float> now, before, comb;
         int formatRect[4] {};
         int hintRect[4] {};
+        Heard post, pre;   // what is heard, and what goes into the cabinet (tabbyEQ's post and pre)
+        bool spectrumShown = false;
 
         PanelSession()
         {
@@ -296,6 +335,41 @@ CABIR_EXPORT void cabir_panel_download_note (const char* text)
     s.panel.downloadNote = ui::String (text != nullptr ? text : "");
     s.dirty = true;
 }
+
+CABIR_EXPORT int cabir_spectrum_frame (const float* after, const float* before, int cover)
+{
+    // As the app's tick: while shown, both frames in and the panel handed them; gone, both cleared once.
+    auto& s = session();
+    if (! s.panel.spectrumOn())
+    {
+        if (s.spectrumShown)
+        {
+            s.panel.showSpectrum ({}, {});
+            s.post.pane->reset();
+            s.pre.pane->reset();
+        }
+        s.spectrumShown = false;
+        return 0;
+    }
+    s.post.take (after, cover);
+    s.pre.take (before, cover);
+    s.panel.showSpectrum (s.post.db, s.pre.db);
+    s.spectrumShown = true;
+    return 1;
+}
+
+CABIR_EXPORT void cabir_panel_sound (int on)
+{
+    auto& s = session();
+    s.panel.hasSound = on != 0;
+    if (! s.panel.hasSound && s.spectrumShown)
+        (void) cabir_spectrum_frame (nullptr, nullptr, 0);   // its spectrum gone at once, not at a frame that may not come
+    s.dirty = true;
+}
+
+CABIR_EXPORT void cabir_panel_spectrum (int on) { session().panel.setSpectrumOn (on != 0); }
+CABIR_EXPORT int cabir_spectrum_wanted() { return session().panel.spectrumOn() ? 1 : 0; }
+CABIR_EXPORT int cabir_spectrum_size() { return session().post.pane->frameSize(); }
 
 CABIR_EXPORT const char* cabir_glyph_svg (const char* mic) { return micSvg (mic != nullptr ? mic : ""); }
 
