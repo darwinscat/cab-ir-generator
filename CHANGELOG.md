@@ -39,6 +39,8 @@ All notable changes to **Orbit Bass Cab Builder** and **Orbit Guitar Cab Builder
 ### Changed
 - **The guitar's presets on the PAPER cone**: 32 of the forty, two a style left without (TEXAS, HARP, HAYMAKER, BARK,
   ANVIL, PRISM, POGO, SNEER: the ones paper changes least or brightens); the mics moved where paper opened a pit or a comb.
+- **Eight Fredman pairs among the guitar's presets**, as FRED puts them: Metal's VENOM, SPIKE, SHADOW, HAVOC and FANG, Rock's
+  BLAZE and TOWER, Punk's SQUAT — each on its own box and speaker, so no two are one IR.
 
 ## [0.2.0] — 2026-11-08 — two builders, their plugins, and a window in 16:9
 
