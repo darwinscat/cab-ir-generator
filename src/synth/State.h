@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <array>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -20,6 +21,36 @@ struct Mic
     double x = 0, y = 0, distance = 0.05, angle = 0;
 
     bool operator== (const Mic&) const = default;
+};
+
+/** THE PLAYER'S EQ over the cabinet (the owner, 09.11): a high pass and a low pass, 12 dB an octave, and three bells —
+    rendered into the IR, so what is heard is what DOWNLOAD IR writes and what a preset keeps. Off, the IR as the cabinet
+    makes it, its settings kept, so it comes back as it was left. A pass at 0 Hz is out. */
+struct Eq
+{
+    struct Bell
+    {
+        double hz = 1000, db = 0, q = 1;
+        bool flat() const { return db > -0.05 && db < 0.05; }   // its gain is kept to a tenth of a dB
+        bool operator== (const Bell&) const = default;
+    };
+    bool on = false;
+    double highPassHz = 0, lowPassHz = 0;
+    int highPassSlope = 12, lowPassSlope = 12;   // dB an octave: 6, 12, 24 or 48 (the owner, 09.11)
+    std::array<Bell, 3> bells { { { 250, 0, 1 }, { 800, 0, 1 }, { 3500, 0, 1 } } };   // mud, honk, bite
+
+    /** Whether it changes anything: on, with a pass in or a bell off nought. */
+    bool heard() const
+    {
+        if (! on)
+            return false;
+        bool any = highPassHz > 0 || lowPassHz > 0;
+        for (const auto& b : bells)
+            any = any || ! b.flat();
+        return any;
+    }
+
+    bool operator== (const Eq&) const = default;
 };
 
 /** WHAT THE GENERATOR MAKES, all of it: the box by the table's name; its back — -1 the box's own, else synth::Back (3,
@@ -43,6 +74,7 @@ struct State
     double blend = 0.5;
     bool align = true, invert = false;
     double shiftMs = 0;   // B moved in time against A, ms: later positive — where ALIGN (or the one clock) leaves it, 0
+    Eq eq;                // the player's, over all of it
 
     bool operator== (const State&) const = default;
 };
@@ -52,7 +84,7 @@ inline constexpr const char* backNames[] { "own", "closed", "ported", "open", "h
 
 /** THE STATE AS TOML — canonical: the same state, the same bytes, on every platform. Its first key, `cabir`, is the
     format's mark and version; a mic's model is left out where it is the box's own, and so is the speaker, and the wall
-    where there is none. */
+    where there is none, and the EQ while it stands as it came. */
 std::string toToml (const State&);
 
 /** ...and read back: nullopt for text that is not one — no `cabir = 1`, no box, a value out of its range. A key it

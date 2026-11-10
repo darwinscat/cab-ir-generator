@@ -8,7 +8,7 @@
 //
 // Judged as the panel draws a cabinet: the pit, how far the heard response (a sixth of an octave, as the band draws it)
 // falls under its own third of an octave either side, 40 Hz to 8 kHz — a dip a player hears, which no comb shows, 3 dB at
-// most, where the line starts to redden (the owner, 05.11; a table's own where it says one, the guitar's 5, synth::pitRedOf) — and with two mics where they meet (synth::combOf, 30 Hz to
+// most, where the line starts to redden (the owner, 05.11; a table's own where it says one, the guitar's 7, synth::pitRedOf) — and with two mics where they meet (synth::combOf, 30 Hz to
 // 12 kHz), its worst point green above -3 dB.
 // A single mic with a pit moves as FIND moves one (synth::MicSearch): about where it stands, the nearest place without
 // one. A pair, in two steps (the owner, 05.11): first A alone, the same way, if A by itself has a pit — B rarely fills
@@ -259,7 +259,7 @@ int main (int argc, char** argv)
     }
 
     // A single mic, and a pair's A heard alone: off its pit first, each search on all the machine's threads.
-    // Where the line reddens for a preset's box: its table's (synth::pitRedOf — the guitar's 5 dB, the bass's 3).
+    // Where the line reddens for a preset's box: its table's (synth::pitRedOf — the guitar's 7 dB, the bass's 3).
     const auto limit = [&table] (const State& st) { return synth::pitRedOf (table, st.box); };
     int singles = 0, singlesMoved = 0, singlesClear = 0;
     for (auto& p : all)

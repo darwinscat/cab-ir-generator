@@ -15,6 +15,8 @@
 // has none of the size of (one is read either way); back own|closed|ported|open; horn off or its step in dB; a, b —
 // model (own: the box's own), across and up in radii, distance in cm, angle in degrees, a mic not heard left out; blend,
 // align, invert, shift (ms). Every number at the precision the preset's TOML keeps, so the two say the same cabinet.
+// The EQ (the owner, 09.11) only where it is not as it came, so every link of before stays the same: eq 1|0; hpf, lpf —
+// Hz and dB an octave, where not out at 12; bell1..3 — Hz, dB, Q, each where moved (&eq=1&lpf=6000,24&bell2=800,-3,1.4).
 
 #include "Panel.h"
 
@@ -24,6 +26,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace cabir
 {
@@ -83,6 +86,20 @@ namespace link
         v = std::strtod (s.c_str(), &end);
         return end != nullptr && *end == 0 && std::isfinite (v);
     }
+
+    /** A value's comma-parted fields: "md421,0.2,0,3,10" five. */
+    inline std::vector<std::string> fields (const std::string& v)
+    {
+        std::vector<std::string> f;
+        for (size_t from = 0;;)
+        {
+            const auto comma = v.find (',', from);
+            f.push_back (v.substr (from, comma == std::string::npos ? std::string::npos : comma - from));
+            if (comma == std::string::npos) break;
+            from = comma + 1;
+        }
+        return f;
+    }
 }
 
 /** The part after `#` that carries `s`. */
@@ -107,6 +124,21 @@ inline std::string linkOf (const State& s)
     if (s.b.on) out += "&b=" + mic (s.b);
     out += "&blend=" + number (s.blend, 3) + "&align=" + (s.align ? "1" : "0") + "&invert=" + (s.invert ? "1" : "0")
          + "&shift=" + number (s.shiftMs, 3);
+    if (const Eq came; s.eq != came)
+    {
+        out += std::string ("&eq=") + (s.eq.on ? "1" : "0");
+        const auto pass = [&] (const char* key, double hz, int slope, double cameHz, int cameSlope)
+        {
+            if (hz != cameHz || slope != cameSlope)
+                out += std::string ("&") + key + "=" + number (std::round (hz), 0) + "," + std::to_string (slope);
+        };
+        pass ("hpf", s.eq.highPassHz, s.eq.highPassSlope, came.highPassHz, came.highPassSlope);
+        pass ("lpf", s.eq.lowPassHz, s.eq.lowPassSlope, came.lowPassHz, came.lowPassSlope);
+        for (size_t i = 0; i < s.eq.bells.size(); ++i)
+            if (const auto& b = s.eq.bells[i]; b != came.bells[i])
+                out += "&bell" + std::to_string (i + 1) + "=" + number (std::round (b.hz), 0) + "," + number (b.db, 1) + ","
+                     + number (b.q, 2);
+    }
     return out;
 }
 
@@ -125,14 +157,7 @@ inline std::optional<State> fromLink (std::string_view text)
     bool boxed = false, broken = false;   // broken: a value that is no number where one is due — then no cabinet at all
     const auto mic = [] (const std::string& v, Mic& m)
     {
-        std::vector<std::string> f;
-        for (size_t from = 0;;)
-        {
-            const auto comma = v.find (',', from);
-            f.push_back (v.substr (from, comma == std::string::npos ? std::string::npos : comma - from));
-            if (comma == std::string::npos) break;
-            from = comma + 1;
-        }
+        const auto f = link::fields (v);
         double x = 0, y = 0, cm = 5, angle = 0;
         if (f.size() < 5 || ! link::numberOf (f[1], x) || ! link::numberOf (f[2], y) || ! link::numberOf (f[3], cm)
             || ! link::numberOf (f[4], angle))
@@ -193,6 +218,31 @@ inline std::optional<State> fromLink (std::string_view text)
         else if (key == "align") s.align = value == "1";
         else if (key == "invert") s.invert = value == "1";
         else if (key == "shift") { if (link::numberOf (value, v)) s.shiftMs = std::clamp (v, -1.0, 1.0); else broken = true; }
+        else if (key == "eq") s.eq.on = value == "1";
+        else if (key == "hpf" || key == "lpf")
+        {
+            const auto f = link::fields (value);
+            double hz = 0, slope = 12;
+            if (f.size() < 2 || ! link::numberOf (f[0], hz) || ! link::numberOf (f[1], slope))
+                broken = true;
+            else
+            {
+                const int nearest = slope < 9 ? 6 : slope < 18 ? 12 : slope < 36 ? 24 : 48;   // as the TOML reads it
+                (key == "hpf" ? s.eq.highPassHz : s.eq.lowPassHz) = std::clamp (std::round (hz), 0.0, key == "hpf" ? 2000.0 : 24000.0);
+                (key == "hpf" ? s.eq.highPassSlope : s.eq.lowPassSlope) = nearest;
+            }
+        }
+        else if (key.size() == 5 && key.rfind ("bell", 0) == 0 && key[4] >= '1' && key[4] <= '3')
+        {
+            const auto f = link::fields (value);
+            double hz = 0, db = 0, q = 1;
+            if (f.size() < 3 || ! link::numberOf (f[0], hz) || ! link::numberOf (f[1], db) || ! link::numberOf (f[2], q))
+                broken = true;
+            else
+                s.eq.bells[(size_t) (key[4] - '1')] = { std::clamp (std::round (hz), 20.0, 20000.0),
+                                                        std::round (std::clamp (db, -24.0, 24.0) * 10.0) / 10.0,
+                                                        std::round (std::clamp (q, 0.1, 20.0) * 100.0) / 100.0 };
+        }
         // cab, and every key it does not know, passed over
     }
     if (! boxed || broken)

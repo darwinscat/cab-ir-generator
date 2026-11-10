@@ -1,17 +1,39 @@
 # THE GUITAR CABINETS: [<cab> <position>] sections, `key = value`, `inherit` laid under left to right — the same keys as
 # the bass's (data/cabinets.txt, src/synth/CabSynth.h). Our own boxes and speakers, not measurements of any one: tuned
-# against the shape measured guitar cabinets share, close-miked at the cap — a steep foot under 80 Hz (63 Hz some
-# 10 dB under 1 kHz), a hump 100-250 Hz, flat to 5 kHz with a few deep dips in the cone's breakup (1.5-6 kHz: 3 to 7
-# dips of 5 to 10 dB, a dip near 1.1 kHz), and a cliff past it (8 kHz 15 to 28 dB under 1 kHz).
+# against the shape measured guitar cabinets share, close-miked at the cap (27 commercial packs, each IR levelled by its
+# 400 Hz-2.5 kHz, 08.11) — a steep foot under 80 Hz (63 Hz some 7 dB under 1 kHz); a closed box's hump at 125-200 Hz
+# some 5 dB over it, an open one's hardly any there and 2-3 dB at 250-400; flat to 5 kHz with a few deep dips in the
+# cone's breakup (1.5-6 kHz: 3 to 7 dips of 5 to 10 dB, a dip near 1.1 kHz); a cliff from 5.5 kHz to a shelf some 25 dB
+# under 1 kHz at 7.5-10 kHz, then falling 17 dB an octave (16 kHz some 42 dB under).
 
 [defaults]
+# A closed back's hump at 0.65 of a sealed box's Q (CabSynth.h, Cab::boxQ): a guitar's closed box leaks and gives.
+box_q_factor = 0.65
+# A closed box's echo, out through the cone again (CabSynth.h, Cab::echoGain): 0.35 of it each way round off the back
+# alone, pulling, 400 Hz to 2 kHz — the dips measured closed cabinets share at c/(2 depth) and twice it (a 4x12's 500 Hz
+# and 1 kHz), and the rise between.
+box_echo = -0.35/400/2000/1
+# The box's tail, 9 dB under the direct sound from 200 Hz to 1.5 kHz, dying away 20 ms at a time, an open back's 17
+# (CabSynth.h, Cab::boxTail): the 5-80 ms measured cabinets keep ringing in their mids, closed some 9-14 dB under the
+# whole at 500 Hz-1 kHz, open 19-27.
+box_tail = -9/200/1500/20/-17
+# The top's tail, 27 dB under the direct sound from 4 kHz up, dying away 12 ms at a time (CabSynth.h, Cab::tailTop): the
+# 5-80 ms measured cabinets keep ringing at 8-16 kHz, open and closed alike, some 28 dB under the whole.
+top_tail = -27/4000/12
+# The cap past the cone's cliff, 22 dB under the whole cone, in steeply from 8.5 kHz, falling off from 11 (CabSynth.h,
+# Cab::capTop): the shelf measured guitar cabinets keep at 7.5-10 kHz.
+cap_top = -22/8500/11000/0.7
+# A capsule's top heard off its axis: 10 dB under its pattern at 90 degrees, growing from 1 kHz to all of it at 12 (CabSynth.h,
+# heard): a mic at the cone's edge hears the centre's top from the side, as dark as measured cabinets' edge.
+mic_off_axis = 10/12000
 floor_gap_m = 0
 floor_reflection = 0.9
 length_ms = 100
 tail_fade_ms = 15
-# Where the panel's line reddens with a pit, and FIND and the presets' tools judge one: 5 dB, the speakers' own dips
-# running deeper than a bass's (the owner, 07.11; the panel's catalog says the same, GuitarCatalog.h).
-pit_red_db = 5
+# Where the panel's line reddens with a pit, and FIND and the presets' tools judge one: 7 dB, the speakers' own dips
+# running deeper than a bass's — measured guitar cabinets keep one or two of 6 dB and more at 1-6 kHz, a close mic's own
+# (the owner, 07.11 at 5; 08.11 at 7; the panel's catalog says the same, GuitarCatalog.h).
+pit_red_db = 7
 # Where a pair's comb reddens from 2 kHz up: 6 dB — up there a comb is a tone of its own, the classic second mic's phase
 # colour, not a fault; under 2 kHz 3, as the bass's, where it thins the low notes (the owner, 07.11; the panel's catalog
 # says the same, GuitarCatalog.h).
@@ -27,17 +49,19 @@ driver_sensitivity_spread_db = -0.5..0.5
 driver_mode_frequency_spread_percent = -2..2
 driver_mode_residue_spread_db = -1.5..1.5
 open_back_lowpass_hz = 400
-open_back_loss = 0.6
-# An open back heard whole low down, where the box does not shadow it; the wall the WALL switch puts 40 cm behind the
-# box, giving back 80 % of the back's sound; an open back letting the box's modes across go to 40 %.
-open_back_full_below_step = 1
+# An open back's pipe damped hard (a quarter wave that rang over 160-250 Hz, which measured open combos do not), and
+# heard low down as the bass's is, half, shadowed as at the top; the wall the WALL switch puts 40 cm behind the box,
+# giving back 80 % of the back's sound; an open back letting the box's modes across go to 40 %.
+open_back_loss = 2.0
+open_back_full_below_step = 0
 back_wall_m = 0.4
 back_wall_reflection = 0.8
 open_back_cavity_share = 0.4
 
 # A GUITAR SPEAKER'S CHARACTER — its paper's breakup (the modes, their Q, how loud against the piston), its knee and
 # the cliff past it (woofer_lowpass_hz under woofer_lowpass_second), the surround's dip and the presence its breakup
-# builds (body_eq), its resonance (ts: Fs, Qts, Vas in litres).
+# builds (body_eq) — its last a broad 3 dB at 3.5 kHz every one of them shares, measured cabinets' attack — its
+# resonance (ts: Fs, Qts, Vas in litres). Its paper's modes ring as long as a real cone's go on after 5 ms (mode_Q).
 
 # The middle one: a thick midrange, a dip at 1.1 kHz, a presence lift at 4 kHz, the knee near 6.
 [speaker-mid]
@@ -46,14 +70,14 @@ ts = 85, 0.9, 60
 coil_corner_hz = 2500
 breakup_hz = 1300..7000
 mode_count = 28
-mode_Q = 10..30
+mode_Q = 30..90
 mode_level_rel_piston_db_first3 = 5..9
 mode_level_rel_piston_db_rest = -8..6
 cone_decouple_hz = 6000
 woofer_lowpass_hz = 5800
 woofer_envelope_Q = 2.2
 woofer_lowpass_second = 6200/0.6
-body_eq = 1150/8/-9, 2200/1.2/1, 4000/0.9/8
+body_eq = 1150/8/-9, 2200/1.2/1, 4000/0.9/8, 3500/0.7/3
 
 # The bright one: lighter paper, its breakup higher and its knee near 7 kHz, a chime at 3 and 4.5.
 [speaker-bright]
@@ -62,14 +86,14 @@ ts = 95, 1.0, 50
 coil_corner_hz = 2800
 breakup_hz = 1500..8000
 mode_count = 28
-mode_Q = 10..30
+mode_Q = 30..90
 mode_level_rel_piston_db_first3 = 5..9
 mode_level_rel_piston_db_rest = -8..6
 cone_decouple_hz = 6500
 woofer_lowpass_hz = 6600
 woofer_envelope_Q = 2.0
 woofer_lowpass_second = 7000/0.6
-body_eq = 1250/8/-8, 3000/1/3, 4500/1/6
+body_eq = 1250/8/-8, 3000/1/3, 4500/1/6, 3500/0.7/3
 
 # The dark one: heavy paper, a smooth top falling from 5 kHz, more of its low mids.
 [speaker-dark]
@@ -78,30 +102,30 @@ ts = 75, 0.8, 70
 coil_corner_hz = 2000
 breakup_hz = 1200..6000
 mode_count = 26
-mode_Q = 10..24
+mode_Q = 30..72
 mode_level_rel_piston_db_first3 = 5..8
 mode_level_rel_piston_db_rest = -8..6
 cone_decouple_hz = 5000
 woofer_lowpass_hz = 5000
 woofer_envelope_Q = 1.8
 woofer_lowpass_second = 5400/0.6
-body_eq = 1100/7/-7, 2500/1/2, 3500/1/5
+body_eq = 1100/7/-7, 2500/1/2, 3500/1/5, 3500/0.7/3
 
 # The snap: a ten's — small and quick, its breakup and its knee the highest.
 [speaker-snap]
 speaker_name = snap
-ts = 100, 0.9, 30
+ts = 90, 1.3, 30
 coil_corner_hz = 3000
 breakup_hz = 1800..9000
 mode_count = 26
-mode_Q = 10..28
+mode_Q = 30..84
 mode_level_rel_piston_db_first3 = 5..8
 mode_level_rel_piston_db_rest = -8..5
 cone_decouple_hz = 7000
 woofer_lowpass_hz = 7000
 woofer_envelope_Q = 2.0
 woofer_lowpass_second = 7500/0.6
-body_eq = 1500/8/-8, 3500/1/4, 5000/1/6
+body_eq = 1500/8/-8, 3500/1/4, 5000/1/6, 3500/0.7/3
 
 # The scoop: its middle dipped round 800 Hz, a bite at 2.6 kHz and a sizzle at 5, the low end tight.
 [speaker-scoop]
@@ -110,14 +134,14 @@ ts = 90, 0.7, 50
 coil_corner_hz = 2800
 breakup_hz = 1500..7500
 mode_count = 28
-mode_Q = 10..30
+mode_Q = 30..90
 mode_level_rel_piston_db_first3 = 5..9
 mode_level_rel_piston_db_rest = -8..6
 cone_decouple_hz = 6500
 woofer_lowpass_hz = 6400
 woofer_envelope_Q = 2.2
 woofer_lowpass_second = 6800/0.6
-body_eq = 800/1.2/-5, 1300/8/-6, 2600/1.2/4, 5000/1.4/5
+body_eq = 800/1.2/-5, 1300/8/-6, 2600/1.2/4, 5000/1.4/5, 3500/0.7/3
 
 # The flat one: big and even, a low resonance and little breakup of its own — a loud clean speaker's.
 [speaker-flat]
@@ -126,14 +150,14 @@ ts = 60, 0.6, 90
 coil_corner_hz = 3500
 breakup_hz = 1400..6500
 mode_count = 20
-mode_Q = 8..20
+mode_Q = 24..60
 mode_level_rel_piston_db_first3 = 3..6
 mode_level_rel_piston_db_rest = -8..3
 cone_decouple_hz = 5500
 woofer_lowpass_hz = 5600
 woofer_envelope_Q = 1.4
 woofer_lowpass_second = 6000/0.6
-body_eq = 1200/6/-3, 3500/1/5
+body_eq = 1200/6/-3, 3500/1/5, 3500/0.7/3
 
 # THE PAPER CONE (PAPER, SPEAKER clicked): each speaker as above but for its cone past the breakup — its outer part
 # letting go where the breakup starts, keeping 80 % of its motion scattered in time (cone_decouple_floor), not moving
@@ -141,13 +165,13 @@ body_eq = 1200/6/-3, 3500/1/5
 # cap 2-3 dB brighter at 4-5 kHz for it: each one's presence that much lower, its cap where the speaker's own is.
 [speaker-mid-paper]
 inherit = speaker-mid
-body_eq = 1150/8/-9, 2200/1.2/2, 4000/0.9/5
+body_eq = 1150/8/-9, 2200/1.2/2, 4000/0.9/5, 3500/0.7/3
 cone_decouple_hz = 1300
 cone_decouple_floor = 0.8
 cone_floor_jitter_ms = 0.3
 [speaker-bright-paper]
 inherit = speaker-bright
-body_eq = 1250/8/-8, 3000/1/3, 4500/1/4
+body_eq = 1250/8/-8, 3000/1/3, 4500/1/4, 3500/0.7/3
 cone_decouple_hz = 1500
 cone_decouple_floor = 0.8
 cone_floor_jitter_ms = 0.3
@@ -155,68 +179,72 @@ cone_floor_jitter_ms = 0.3
 inherit = speaker-dark
 mode_level_rel_piston_db_first3 = 4..7
 mode_level_rel_piston_db_rest = -8..4
-body_eq = 1100/7/-7, 2500/1/3, 3500/1/3
+body_eq = 1100/7/-7, 2500/1/3, 3500/1/3, 3500/0.7/3
 cone_decouple_hz = 1200
 cone_decouple_floor = 0.8
 cone_floor_jitter_ms = 0.3
 [speaker-snap-paper]
 inherit = speaker-snap
-body_eq = 1500/8/-8, 2500/1.2/2, 3500/1/3, 5000/1/5
+body_eq = 1500/8/-8, 2500/1.2/2, 3500/1/3, 5000/1/5, 3500/0.7/3
 cone_decouple_hz = 1800
 cone_decouple_floor = 0.8
 cone_floor_jitter_ms = 0.3
 [speaker-scoop-paper]
 inherit = speaker-scoop
-body_eq = 800/1.2/-5, 1300/8/-6, 2600/1.2/4, 5000/1.4/3
+body_eq = 800/1.2/-5, 1300/8/-6, 2600/1.2/4, 5000/1.4/3, 3500/0.7/3
 cone_decouple_hz = 1500
 cone_decouple_floor = 0.8
 cone_floor_jitter_ms = 0.3
 [speaker-flat-paper]
 inherit = speaker-flat
-body_eq = 1200/6/-3, 3500/1/3
+body_eq = 1200/6/-3, 3500/1/3, 3500/0.7/3
 cone_decouple_hz = 1400
 cone_decouple_floor = 0.8
 cone_floor_jitter_ms = 0.3
 
 # Each mic's low end and capsule, as the bass's table has them: a mic is the same mic on any cabinet.
 [mic-sm57]
-proximity_strength = 1.0
+proximity_strength = 0.6
 proximity_corner_hz = 80
 mic_highpass_hz = 90
 mic_presence_eq = 5500/0.8/5
 mic_top_corner_hz = 13000
 
-# The flat one made for a guitar's cabinet: a gentler proximity, a broad lift round 4 kHz, an open top.
+# The one made for a guitar's cabinet: hardly a proximity, its presence at 5 kHz, its top falling steeply from 9.5 —
+# darker than the SM57 from 8 kHz up, 5 dB at 16, as 25 measured cabinets' e906 against their SM57 at the same place.
 [mic-e906]
-proximity_strength = 0.8
+proximity_strength = 0.1
 proximity_corner_hz = 80
 mic_highpass_hz = 70
-mic_presence_eq = 4000/0.7/3
-mic_top_corner_hz = 15000
+mic_presence_eq = 5000/1/5
+mic_top_corner_hz = 0
+mic_lowpass_hz = 9500
 
+# A big dynamic's: more proximity than the SM57, its bite broad round 4 kHz, its top open past the SM57's to 16 kHz, as
+# 26 measured cabinets' MD421 against their SM57 at the same place.
 [mic-md421]
-proximity_strength = 1.0
+proximity_strength = 1.4
 proximity_corner_hz = 80
-mic_highpass_hz = 80
-mic_presence_eq = 4500/0.8/3.5
-mic_top_corner_hz = 14000
+mic_highpass_hz = 70
+mic_presence_eq = 4000/0.8/6, 15000/1.5/5
+mic_top_corner_hz = 18000
 
 [mic-re20]
-proximity_strength = 0.15
+proximity_strength = 0.1
 proximity_corner_hz = 0
 mic_highpass_hz = 40
 mic_presence_eq = 5000/0.8/2
 mic_top_corner_hz = 13000
 
 [mic-u87]
-proximity_strength = 1.2
+proximity_strength = 0.7
 proximity_corner_hz = 0
 mic_highpass_hz = 30
 mic_presence_eq = 10000/1/3
 mic_top_corner_hz = 20000
 
 [mic-ribbon]
-proximity_strength = 1.4
+proximity_strength = 0.85
 proximity_corner_hz = 100
 mic_pattern = figure8
 mic_highpass_hz = 25
@@ -243,7 +271,10 @@ mic_axis_tilt_deg = 0
 
 # THE BOXES: four twelves' sealed box, the tall half-closed 2x12, the open combos, the tens. Their cavity modes across the box (c/2W, c/2H) and
 # through it (c/2D), as an empty box rings — an open back lets the depth's go and keeps 40 % of the others (CabSynth.h,
-# render).
+# render). An open back's Q against the cone's free air (open_q_factor, Cab::openQ): the small combos ring round the
+# cone's own resonance, the big open boxes hardly at all. The small open combos' top rings 6 dB less than the big boxes'
+# (top_tail), as measured small combos' 8-16 kHz does. The two twelves', the one's and the 2x10's and 1x10's cap rings at
+# 9.5 kHz (cap_top, Q 1.4): their shelf at 9-11 kHz, which the default left 3 to 11 dB under measured cabinets'.
 
 [4x12-closed cap]
 inherit = defaults, speaker-mid, mic-sm57, pos-cap
@@ -275,6 +306,7 @@ effective_radius_m = 0.125
 horn = absent
 cavity_modes = 245/4/0.16, 315/5/-0.12, 572/5/0.16
 panel_modes = 140/3/0.06
+cap_top = -22/8500/9500/1.4
 [2x12-vertical edge]
 inherit = 2x12-vertical cap, pos-edge
 [2x12-vertical offaxis]
@@ -283,6 +315,7 @@ inherit = 2x12-vertical cap, mic-md421, pos-offaxis
 inherit = 2x12-vertical cap, mic-ribbon, pos-distance
 
 [2x12-open cap]
+open_q_factor = 0.45
 inherit = defaults, speaker-bright, mic-sm57, pos-cap
 seed = 21201
 alignment = open
@@ -293,6 +326,7 @@ effective_radius_m = 0.125
 horn = absent
 cavity_modes = 245/5/0.16, 343/4/-0.12, 635/5/0.16
 panel_modes = 130/3/0.06
+cap_top = -22/8500/9500/1.4
 [2x12-open edge]
 inherit = 2x12-open cap, pos-edge
 [2x12-open offaxis]
@@ -311,6 +345,8 @@ effective_radius_m = 0.125
 horn = absent
 cavity_modes = 286/5/0.16, 357/4/-0.12, 686/5/0.16
 panel_modes = 150/3/0.06
+cap_top = -22/8500/9500/1.4
+top_tail = -33/4000/12
 [1x12-open edge]
 inherit = 1x12-open cap, pos-edge
 [1x12-open offaxis]
@@ -319,6 +355,7 @@ inherit = 1x12-open cap, mic-md421, pos-offaxis
 inherit = 1x12-open cap, mic-u87, pos-distance
 
 [4x10-open cap]
+open_q_factor = 0.45
 inherit = defaults, speaker-snap, mic-sm57, pos-cap
 seed = 41022
 alignment = open
@@ -337,6 +374,7 @@ inherit = 4x10-open cap, mic-md421, pos-offaxis
 inherit = 4x10-open cap, mic-ribbon, pos-distance
 
 [2x10-open cap]
+open_q_factor = 1.1
 inherit = defaults, speaker-snap, mic-sm57, pos-cap
 seed = 21021
 alignment = open
@@ -347,6 +385,8 @@ effective_radius_m = 0.105
 horn = absent
 cavity_modes = 286/5/0.16, 373/4/-0.12, 715/5/0.16
 panel_modes = 160/3/0.06
+cap_top = -22/8500/9500/1.4
+top_tail = -33/4000/12
 [2x10-open edge]
 inherit = 2x10-open cap, pos-edge
 [2x10-open offaxis]
@@ -355,6 +395,7 @@ inherit = 2x10-open cap, mic-md421, pos-offaxis
 inherit = 2x10-open cap, mic-u87, pos-distance
 
 [1x10-open cap]
+open_q_factor = 1.2
 inherit = defaults, speaker-snap, mic-sm57, pos-cap
 seed = 11011
 alignment = open
@@ -365,9 +406,46 @@ effective_radius_m = 0.105
 horn = absent
 cavity_modes = 373/5/0.16, 429/4/-0.12, 780/5/0.16
 panel_modes = 180/3/0.06
+cap_top = -22/8500/9500/1.4
+top_tail = -33/4000/12
 [1x10-open edge]
 inherit = 1x10-open cap, pos-edge
 [1x10-open offaxis]
 inherit = 1x10-open cap, mic-md421, pos-offaxis
 [1x10-open distance]
 inherit = 1x10-open cap, mic-u87, pos-distance
+
+# THE ROCK OPTIONS (08.11, for the owner's ear): each laid over its section unless his SETUP switches it off (CabSynth.h,
+# parseTable) — measured against 27 York packs, like for like, an SM57 at the sweet spot unless said.
+
+# SPEAKERS: their difference where the real twelves keep it, round the same middle. DARK, FLAT and MID fell off their
+# cone's cliff before the cap's shelf came in, 8 kHz 4-10 dB under every measured twelve, SNAP and SCOOP at their top: a
+# 4x12's spread at 6-10 kHz 11.7 dB (York's 4), now 8; the dark ones darker at 12-16 kHz, the bright ones brighter, 3.9
+# there now 6 (York's 7.6). The 4x12 and closed 2x12 packs' miss 2.87 and 2.83 dB, now 2.71 and 2.70.
+[option speakers: speaker-dark]
+label = SPEAKERS
+top_eq = 6300/2/2, 8000/2/2.5, 10000/2/1, 16000/1.2/-5
+[option speakers: speaker-flat]
+top_eq = 6300/2/1.5, 8000/2/2.5, 16000/1.2/-4
+[option speakers: speaker-mid]
+top_eq = 8000/2/1, 16000/1.2/-1
+[option speakers: speaker-bright]
+top_eq = 8000/2/-1, 13000/1.2/2
+[option speakers: speaker-scoop]
+top_eq = 8000/2/-1.5, 16000/1.2/-1
+[option speakers: speaker-snap]
+top_eq = 8000/2/-2.5, 13000/1.2/1.5
+
+# RIBBON: the ribbon against the SM57 at the same place as 26 measured cabinets' — 4.5 dB too bright at 10 kHz and 8 at
+# 12.7, 3 too dark at 16, 1-1.5 short of body at 80-125 Hz; now within 0.7 dB rms (York's takes of one cell: 0.6).
+[option ribbon: mic-ribbon]
+label = RIBBON
+proximity_strength = 1.0
+mic_presence_eq = 12000/1.6/-10.5, 16500/2.5/5.5
+
+# 4X12 AIR: the sealed four twelves' cap in from 6.5 kHz, not 8.5 — the hole at 8 kHz between the cone's cliff and the
+# cap's shelf at the sweet spot, 3-7 dB under the twelve measured 4x12s, filled; the cone's edge and off axis then 2 dB
+# over them at 6-10 kHz (an ear's call: air, or fizz).
+[option air: 4x12-closed cap]
+label = 4X12 AIR
+cap_top = -22/6500/11000/0.7

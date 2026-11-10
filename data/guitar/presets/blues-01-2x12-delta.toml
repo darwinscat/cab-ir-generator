@@ -1,0 +1,29 @@
+name = "BLUES: 2x12 DELTA"
+style = "Blues"
+cabir = 1
+box = "2x12-vertical"
+back = "half"
+speaker = "dark"
+cone = "paper"
+horn = false
+horn_db = 0
+blend = 0.350
+align = true
+invert = false
+
+[mic.a]
+on = true
+model = "md421"
+x = 0.200
+y = 0.300
+distance = 0.048
+angle = 0.0
+
+[mic.b]
+on = false
+model = "ribbon"
+x = 0.400
+y = 0.000
+distance = 0.100
+angle = 0.0
+shift = 0.000

@@ -51,6 +51,24 @@ std::string toToml (const State& s)
     (void) b.insert ("shift", decimal (s.shiftMs, 3));   // ms against A
     (void) mics.insert ("b", t::Value (std::move (b)));
     (void) root.insert ("mic", t::Value (std::move (mics)));
+    if (s.eq != Eq {})   // as it came, left out: a state of before has the same bytes
+    {
+        t::Table eq;
+        (void) eq.insert ("on", t::Value (s.eq.on));
+        (void) eq.insert ("high_pass", t::Value ((std::int64_t) std::lround (s.eq.highPassHz)));
+        (void) eq.insert ("low_pass", t::Value ((std::int64_t) std::lround (s.eq.lowPassHz)));
+        (void) eq.insert ("high_pass_slope", t::Value ((std::int64_t) s.eq.highPassSlope));
+        (void) eq.insert ("low_pass_slope", t::Value ((std::int64_t) s.eq.lowPassSlope));
+        for (size_t i = 0; i < s.eq.bells.size(); ++i)
+        {
+            t::Table bell;
+            (void) bell.insert ("hz", t::Value ((std::int64_t) std::lround (s.eq.bells[i].hz)));
+            (void) bell.insert ("db", decimal (s.eq.bells[i].db, 1));
+            (void) bell.insert ("q", decimal (s.eq.bells[i].q, 2));
+            (void) eq.insert ("bell" + std::to_string (i + 1), t::Value (std::move (bell)));
+        }
+        (void) root.insert ("eq", t::Value (std::move (eq)));
+    }
     // The writer heads the mics' parent table too; with nothing of its own it says nothing, and the file reads the
     // same without it — [mic.a] and [mic.b] imply it.
     auto text = t::write (root);
@@ -68,7 +86,7 @@ std::optional<State> fromToml (std::string_view text)
         return std::nullopt;
 
     State s;
-    std::int64_t version = 0, hornDb = 0;
+    std::int64_t version = 0, hornDb = 0, highSlope = 12, lowSlope = 12;
     std::string back = backNames[0];
     const auto report = t::read (*root, [&] (t::Reader& in)
     {
@@ -102,6 +120,21 @@ std::optional<State> fromToml (std::string_view text)
                 m.optional ("shift", s.shiftMs, { -2.0, 2.0 });
             });
         });
+        in.table ("eq", t::Need::Optional, [&] (t::Reader& eq)
+        {
+            eq.optional ("on", s.eq.on);
+            eq.optional ("high_pass", s.eq.highPassHz, { 0.0, 2000.0 });
+            eq.optional ("low_pass", s.eq.lowPassHz, { 0.0, 24000.0 });
+            eq.optional ("high_pass_slope", highSlope, { 6, 48 });
+            eq.optional ("low_pass_slope", lowSlope, { 6, 48 });
+            for (size_t i = 0; i < s.eq.bells.size(); ++i)
+                eq.table ("bell" + std::to_string (i + 1), t::Need::Optional, [&] (t::Reader& bell)
+                {
+                    bell.optional ("hz", s.eq.bells[i].hz, { 20.0, 20000.0 });
+                    bell.optional ("db", s.eq.bells[i].db, { -24.0, 24.0 });
+                    bell.optional ("q", s.eq.bells[i].q, { 0.1, 20.0 });
+                });
+        });
     }, t::ReadOptions { t::Severity::Warning });
     if (! report.ok() || s.box.empty())
         return std::nullopt;
@@ -111,6 +144,9 @@ std::optional<State> fromToml (std::string_view text)
         if (back == backNames[i])
             s.back = i - 1;
     s.hornDb = (double) hornDb;
+    const auto slope = [] (std::int64_t v) { return v < 9 ? 6 : v < 18 ? 12 : v < 36 ? 24 : 48; };   // the nearest of the four
+    s.eq.highPassSlope = slope (highSlope);
+    s.eq.lowPassSlope = slope (lowSlope);
     return s;
 }
 

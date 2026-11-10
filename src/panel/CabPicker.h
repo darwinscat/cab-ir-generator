@@ -40,6 +40,7 @@ public:
 
     // What a host sets and is told — the panel's own, by reference.
     std::function<void (int cab, Setup setup)>& onSetup { panel.onSetup };
+    std::function<void (int cab, Setup setup)>& onPlaced { panel.onPlaced };   // FRED's: kept, no search for B
     std::function<void (int cab, Setup setup)>& onMove { panel.onMove };
     std::function<void()>& onClose { panel.onClose };
     std::function<void()>& onDownload { panel.onDownload };
@@ -55,6 +56,18 @@ public:
     {
         panel.showResponse (std::move (now), std::move (before), std::move (comb));
     }
+
+    /** What plays, while the EQ is on: dBFS at spectrumHz, spectrumColumns of them (Panel::showSpectrum). */
+    static constexpr int spectrumColumns = Panel::spectrumColumns;
+    static float spectrumHz (int i) { return Panel::spectrumHz (i); }
+    void showSpectrum (std::vector<float> db, std::vector<float> pre) { panel.showSpectrum (std::move (db), std::move (pre)); }
+    bool eqOn() const { return panel.eqOn(); }
+    std::function<void()>& onEqMenu { panel.onEqMenu };   // a right click over the response: the host's EQ menu
+    void resetEq() { panel.resetEq(); }
+    void setEqOn (bool on) { panel.setEqOn (on); }
+    bool& hasSound { panel.hasSound };   // a host with sound: SPECTRUM drawn, switched in its menu
+    void setSpectrumOn (bool on) { panel.setSpectrumOn (on); }
+    bool spectrumOn() const { return panel.spectrumOn(); }
 
     static const std::vector<Cab>& cabs() { return Panel::cabs(); }
     static std::pair<int, Setup> setupOf (const State& s) { return Panel::setupOf (s); }
@@ -102,13 +115,17 @@ public:
     void mouseDrag (const juce::MouseEvent& e) override        { panel.mouseDrag (hand (e)); }
     void mouseDoubleClick (const juce::MouseEvent& e) override { panel.mouseDoubleClick (hand (e)); }
     void mouseUp (const juce::MouseEvent& e) override          { panel.mouseUp (hand (e)); }
+    void mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWheelDetails& w) override
+    {
+        panel.mouseWheelMove (hand (e), w.isReversed ? -w.deltaY : w.deltaY);
+    }
 
 private:
     Panel panel;
 
     void timerCallback() override { panel.tick (juce::Time::getMillisecondCounterHiRes() * 0.001); }
 
-    static ui::MouseEvent hand (const juce::MouseEvent& e) { return { { e.position.x, e.position.y } }; }
+    static ui::MouseEvent hand (const juce::MouseEvent& e) { return { { e.position.x, e.position.y }, e.mods.isPopupMenu() }; }
 
     /** The host's Look as the panel's: its colours, and its type to measure words by. */
     static void useHostLook()

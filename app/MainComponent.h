@@ -52,7 +52,7 @@ public:
     void mouseExit (const juce::MouseEvent&) override;
     bool keyPressed (const juce::KeyPress&) override;
 
-    bool isInterestedInFileDrag (const juce::StringArray&) override { return engine != nullptr; }
+    bool isInterestedInFileDrag (const juce::StringArray&) override;   // a sample for the player, where there is one
 
     /** The app's own settings — the window keeps where it was and how large there. */
     juce::PropertiesFile& settings() { return *properties.getUserSettings(); }
@@ -79,6 +79,7 @@ private:
     static constexpr const char* bypassWords[] { "A", "B", "A+B" };
     bool offA = false, offB = false;          // BYPASS A, BYPASS B
     std::vector<float> irMix, irA, irB;       // the last rendered: the pair and each mic's part of it (none with one mic)
+    float levelMix = 1, levelA = 1, levelB = 1;   // ...and what the EQ did to each one's loudness (PairParts)
     Hear hearing() const;                     // what plays: one mic out with one mic heard plays the pair
     void playHeard();
 
@@ -95,10 +96,22 @@ private:
     juce::String presetName;                       // the preset last loaded or saved — dim once edited
     std::string presetText;                        // ...as its state's TOML, to tell
     int riffNow = -1;                              // the riff playing, by its place in the menu; -1 for a file of the player's own
+    bool player = false;                           // the riffs are where the app was built (the owner's machine): OPEN, PLAY,
+                                                   // the songs' menu; else the input alone
 
     void render (const State&, bool live);
-    static State defaultState();                   // the first run's, and the preset menu's DEFAULT
-    void keep (const State&);                      // the panel's state, kept: what history and the next run see
+    State lastCabinet;                             // the last rendered, its EQ left out: what a hand on the EQ alone keeps
+    SpectrumView spectrumView { []                 // what plays, read for the EQ's spectrum at the panel's columns
+    {
+        std::vector<float> hz;
+        for (int i = 0; i < CabPicker::spectrumColumns; ++i)
+            hz.push_back (CabPicker::spectrumHz (i));
+        return hz;
+    }() };
+    SpectrumView spectrumPreView { spectrumView.columns() };   // ...and what goes into the cabinet, at the same columns
+    bool spectrumShown = false;                    // ...and handed to the panel at the last tick
+    static State defaultState();                  // the first run's, and the preset menu's DEFAULT
+    void keep (const State&, bool placed = false); // the panel's state, kept: what history and the next run see; placed, FRED's
     void carryFormerName();                        // a first run under the new name: the old one's settings and presets copied
     void loadWorkspace (const juce::String& xml);  // A/B/C/D as kept, else the default alone
     void keepSession();                            // ...and, in a plugin, the workspace handed to its session
@@ -114,7 +127,7 @@ private:
     void openSample();
     void loadSample (const juce::File&);
     void loadRiff (int);                           // one of the riffs the app carries, by its place in the menu
-    void useInput();                               // the live input instead, silent until played
+    void useInput (bool play = false);             // the live input instead, silent until played (Engine::useInput)
     void showSamples();
     void showAudio();
     void download();
@@ -144,6 +157,14 @@ private:
     juce::Rectangle<int> hearArea (int) const;     // BYPASS's A, B, A+B
     juce::Rectangle<int> audioArea() const;
     juce::Rectangle<int> versionArea() const;
+
+#if CABIR_LISTEN
+    /** THE OWNER'S SETUP (a listening build's alone): the table's options, each ticked while heard, the cabinet rendered
+        again at each click; kept between runs. */
+    juce::Rectangle<int> setupArea() const { return audioArea().translated (-82, 0); }
+    void showSetup();
+    void optionsChosen (const std::vector<std::string>& off);
+#endif
 };
 
 } // namespace cabir::app

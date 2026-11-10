@@ -1,0 +1,29 @@
+name = "PUNK: 1x12 FANZINE"
+style = "Punk"
+cabir = 1
+box = "1x12-open"
+back = "open"
+speaker = "bright"
+cone = "paper"
+horn = false
+horn_db = 0
+blend = 0.650
+align = true
+invert = false
+
+[mic.a]
+on = true
+model = "sm57"
+x = 0.500
+y = -0.150
+distance = 0.032
+angle = 0.0
+
+[mic.b]
+on = true
+model = "u87"
+x = -0.675
+y = 0.275
+distance = 0.137
+angle = 0.0
+shift = 0.000

@@ -177,9 +177,9 @@ async function find (state, thorough)
     call ('cabir_panel_show', 'number', ['string'], [placed]);
 }
 
-function keep (state)
+function keep (state, onPurpose = false)   // onPurpose: both mics where the panel put them (FRED), B not taken up
 {
-    const bTakenUp = ! call ('cabir_b_on', 'number', ['string'], [kept]) && call ('cabir_b_on', 'number', ['string'], [state]);
+    const bTakenUp = ! onPurpose && ! call ('cabir_b_on', 'number', ['string'], [kept]) && call ('cabir_b_on', 'number', ['string'], [state]);
     kept = state;
     said ();   // a room makes the whole IR longer
     render (state, false);
@@ -193,7 +193,7 @@ function pump ()
     for (let kind; (kind = call ('cabir_panel_event', 'number', [], [])) !== 0;)
     {
         const state = m.UTF8ToString (call ('cabir_panel_event_state', 'number', [], []));
-        if (kind === 1) { moving = null; keep (state); }
+        if (kind === 1) { moving = null; keep (state, call ('cabir_panel_event_placed', 'number', [], []) === 1); }
         else if (kind === 2) moving = state;   // only the last asked is rendered
         else if (kind === 3) find (state, true);
         else if (kind === 4)

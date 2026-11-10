@@ -17,14 +17,9 @@ Engine::~Engine()
     transport.setSource (nullptr);
 }
 
-bool Engine::loadSample (const juce::File& file)
+bool Engine::loadSample (const juce::File& file, const juce::String& title)
 {
-    return take (formats.createReaderFor (file), file.getFileNameWithoutExtension());
-}
-
-bool Engine::loadSample (const void* data, size_t size, const juce::String& title)
-{
-    return take (formats.createReaderFor (std::make_unique<juce::MemoryInputStream> (data, size, false)), title);
+    return take (formats.createReaderFor (file), title.isNotEmpty() ? title : file.getFileNameWithoutExtension());
 }
 
 bool Engine::take (juce::AudioFormatReader* read, const juce::String& title)
@@ -43,12 +38,20 @@ bool Engine::take (juce::AudioFormatReader* read, const juce::String& title)
     return true;
 }
 
-void Engine::useInput()
+void Engine::useInput (bool play)
 {
+    const bool playing = isPlaying();
     transport.stop();
-    live = false;
+    live = play && playing;
     input = true;
     listen (true);
+}
+
+void Engine::inputOnly()
+{
+    transport.stop();
+    input = true;
+    live = true;
 }
 
 void Engine::listen (bool on)
@@ -105,10 +108,11 @@ void Engine::play (bool on)
         transport.stop();
 }
 
-void Engine::setIr (std::vector<float> ir, double rate)
+void Engine::setIr (std::vector<float> ir, double rate, float levelOf)
 {
     irNow = std::move (ir);
     irRate = rate;
+    levelWanted = levelOf;
     loadIrIntoConvolver();
 }
 
@@ -134,6 +138,8 @@ void Engine::audioDeviceAboutToStart (juce::AudioIODevice* device)
     transport.prepareToPlay (block, rate);
     scratch.setSize (2, block);
     prepared = convolver.prepare (rate, block, 1, 1.0, true);   // reference-unity: the same loudness as a plugin's
+    spectrumFeed.prepare (rate);
+    spectrumPreFeed.prepare (rate);
     loadIrIntoConvolver();
 }
 
@@ -146,8 +152,9 @@ void Engine::audioDeviceStopped()
 void Engine::audioDeviceIOCallbackWithContext (const float* const* inputs, int numInputs, float* const* outputs, int numOutputs,
                                                int numSamples, const juce::AudioIODeviceCallbackContext&)
 {
-    // The first input open, while it is played — read before any output is written, the two may share memory — or the
-    // sample, folded to mono; through the cabinet, to every output.
+    // Every input open, summed, while it is played — whichever one the instrument is plugged into, the first left ticked
+    // beside it or not (the owner, 09.11); read before any output is written, the two may share memory — or the sample,
+    // folded to mono; through the cabinet, to every output.
     const bool fits = numSamples <= scratch.getNumSamples() && numOutputs > 0;
     float* mono = fits ? scratch.getWritePointer (0) : nullptr;
     if (fits)
@@ -155,8 +162,10 @@ void Engine::audioDeviceIOCallbackWithContext (const float* const* inputs, int n
         scratch.clear (0, numSamples);
         if (input.load())
         {
-            if (live.load() && numInputs > 0 && inputs[0] != nullptr)
-                juce::FloatVectorOperations::copy (mono, inputs[0], numSamples);
+            if (live.load())
+                for (int ch = 0; ch < numInputs; ++ch)
+                    if (inputs[ch] != nullptr)
+                        juce::FloatVectorOperations::add (mono, inputs[ch], numSamples);
         }
         else
         {
@@ -180,15 +189,18 @@ void Engine::audioDeviceIOCallbackWithContext (const float* const* inputs, int n
         // The sample as it came kept beside it, for BYPASS: the two crossfaded, the cabinet's share moving 20 ms end to end.
         float* dry = scratch.getWritePointer (1);
         juce::FloatVectorOperations::copy (dry, mono, numSamples);
+        spectrumPreFeed.feed (dry, nullptr, numSamples);   // what goes into the cabinet, for the spectrum's pre
         float* io[] { mono };
         if (! convolver.process (io, 1, numSamples))
             juce::FloatVectorOperations::clear (mono, numSamples);
-        const float target = bypass.load() ? 0.0f : 1.0f, step = (float) (1.0 / (0.02 * rateNow));
+        const float target = bypass.load() ? 0.0f : 1.0f, step = (float) (1.0 / (0.02 * rateNow)), wanted = levelWanted.load();
         for (int i = 0; i < numSamples; ++i)
         {
             wet = target > wet ? std::min (target, wet + step) : std::max (target, wet - step);
-            mono[i] = wet * mono[i] + (1.0f - wet) * dry[i];
+            level = wanted > level ? std::min (wanted, level + step) : std::max (wanted, level - step);
+            mono[i] = wet * level * mono[i] + (1.0f - wet) * dry[i];
         }
+        spectrumFeed.feed (mono, nullptr, numSamples);   // what is heard, for the EQ's spectrum
     }
     for (int ch = 0; ch < numOutputs; ++ch)
         if (outputs[ch] != nullptr)

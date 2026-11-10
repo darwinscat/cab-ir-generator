@@ -9,7 +9,7 @@ cmake_minimum_required(VERSION 3.22)
 set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "The oldest macOS the binaries run on")
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
-project(cab_ir_generator VERSION 0.2.0 LANGUAGES C CXX)
+project(cab_ir_generator VERSION 0.3.0 LANGUAGES C CXX)
 
 include(FetchContent)
 
@@ -131,7 +131,8 @@ if(CABIR_WEB)
     if(EMSCRIPTEN)
         target_link_options(irdump PRIVATE -sNODERAWFS=1 -sALLOW_MEMORY_GROWTH=1 -sENVIRONMENT=node)
         add_executable(cabir_web src/web/CabirWeb.cpp src/web/PanelWeb.cpp)
-        target_link_libraries(cabir_web PRIVATE cabir_synth felitronics::convolution)
+        target_link_libraries(cabir_web PRIVATE cabir_synth felitronics::convolution
+            felitronics::analysis)   # SPECTRUM, the app's pane, on what the page plays
         set_target_properties(cabir_web PROPERTIES OUTPUT_NAME cabir SUFFIX ".mjs")
         target_link_options(cabir_web PRIVATE
             -sMODULARIZE=1 -sEXPORT_ES6=1 -sEXPORT_NAME=createCabir -sENVIRONMENT=web,worker,node
@@ -174,10 +175,14 @@ if(CABIR_APP)
     execute_process(COMMAND git rev-parse --short HEAD WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
                     OUTPUT_VARIABLE cabirGitHash OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
 
+    # The owner's listening build: SETUP in the app's strip switches the table's options (app/Table.h). Never a release's.
+    option(CABIR_LISTEN "The owner's listening build: SETUP switches the table's options" OFF)
     # One app, built for each instrument (app/Flavour.h): its name, its bundle, its logo — the icon and the mark the header
     # draws, from `logo` (assets/logo, the bass's, or assets/logo/guitar) — and its data: the cabinet table, the factory's
-    # presets and the riffs the player carries, from `data` (the bass's) or `data/guitar`.
-    function(cabir_add_app target logo data dataTarget riffsTarget)
+    # presets, from `data` (the bass's) or `data/guitar`. Its riffs are not carried: the player reads them from the checkout
+    # it was built from (CABIR_RIFFS_DIR) and shows only where they are, the owner's machine (the owner, 09.11: choosing
+    # INPUT among songs, then PLAY, lost a player who came to play; the songs are for testing and for the site).
+    function(cabir_add_app target logo data dataTarget)
         cmake_parse_arguments(APP "GUITAR" "PRODUCT;BUNDLE;DESCRIPTION" "" ${ARGN})
         juce_add_gui_app(${target}
             PRODUCT_NAME  "${APP_PRODUCT}"
@@ -193,21 +198,21 @@ if(CABIR_APP)
         target_sources(${target} PRIVATE app/Main.cpp app/MainComponent.cpp app/Engine.cpp)
         file(GLOB presets CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/${data}/presets/*.toml")   # the factory's presets
         juce_add_binary_data(${dataTarget} SOURCES ${data}/cabinets.txt ${logo}/mark.svg ${presets})
-        file(GLOB riffs CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/${data}/riffs/*.flac")       # the riffs the player carries
-        juce_add_binary_data(${riffsTarget} HEADER_NAME RiffData.h NAMESPACE RiffData SOURCES ${riffs})
         target_compile_definitions(${target} PRIVATE
             JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0
             CABIR_PLUGIN=0
+            CABIR_RIFFS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/${data}/riffs"
             CABIR_GUITAR=$<BOOL:${APP_GUITAR}>
             CABIR_GIT_HASH="${cabirGitHash}"
             CABIR_CORE_VERSION="${cabirCoreVersion}"
             CABIR_TOML_VERSION="${cabirTomlVersion}"
-            CABIR_APPKIT_VERSION="${cabirAppkitVersion}")
+            CABIR_APPKIT_VERSION="${cabirAppkitVersion}"
+            $<$<BOOL:${CABIR_LISTEN}>:CABIR_LISTEN=1>)
         target_link_libraries(${target} PRIVATE
             ${dataTarget}
-            ${riffsTarget}
             cabir::panel
             felitronics::convolution
+            felitronics::analysis   # the EQ's spectrum: tabbyEQ's multi-length pane
             felitronics::appkit
             juce::juce_gui_extra
             juce::juce_audio_utils
@@ -217,14 +222,14 @@ if(CABIR_APP)
             juce::juce_recommended_warning_flags)
     endfunction()
 
-    cabir_add_app(OrbitBassCabBuilder assets/logo data CabIrData CabIrRiffs
+    cabir_add_app(OrbitBassCabBuilder assets/logo data CabIrData
         PRODUCT "Orbit Bass Cab Builder" BUNDLE com.darwinscat.orbitbasscabbuilder
         DESCRIPTION "Bass cabinet IR generator and cab sim")
 
     # THE GUITAR'S — the same app on the guitar's cabinets (data/guitar, src/panel/GuitarCatalog.h).
     option(CABIR_GUITAR_APP "Build the guitar's app too" ON)
     if(CABIR_GUITAR_APP)
-        cabir_add_app(OrbitGuitarCabBuilder assets/logo/guitar data/guitar GuitarCabIrData GuitarCabIrRiffs GUITAR
+        cabir_add_app(OrbitGuitarCabBuilder assets/logo/guitar data/guitar GuitarCabIrData GUITAR
             PRODUCT "Orbit Guitar Cab Builder" BUNDLE com.darwinscat.orbitguitarcabbuilder
             DESCRIPTION "Guitar cabinet IR generator and cab sim")
     endif()
@@ -286,6 +291,7 @@ if(CABIR_APP)
                 ${dataTarget}
                 cabir::panel
                 felitronics::convolution
+                felitronics::analysis
                 felitronics::appkit
                 juce::juce_gui_extra
                 juce::juce_audio_utils

@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "Spectrum.h"
+
 #include <juce_events/juce_events.h>
 
 #include <string>
@@ -17,14 +19,20 @@ class Sound
 public:
     virtual ~Sound() = default;
 
-    /** The cabinet: its IR, mono, at `rate`. Message thread. */
-    virtual void setIr (std::vector<float> ir, double rate) = 0;
+    /** The cabinet: its IR, mono, at `rate`, and what plays out of the convolver — which levels each IR by itself — times
+        `level`: what the EQ did to the cabinet's loudness (PairParts), so a pass only takes away. Message thread. */
+    virtual void setIr (std::vector<float> ir, double rate, float level) = 0;
 
     /** A load the convolver turned away mid-fade, offered again. Message thread, often. */
     virtual void flush() = 0;
 
     /** BYPASS: the signal heard as it is, the cabinet out, faded either way. Any thread. */
     virtual void setBypass (bool on) = 0;
+
+    /** What plays, for the EQ's spectrum: fed while the window asks (SpectrumFeed::want). */
+    virtual SpectrumFeed& spectrum() = 0;
+    /** ...and what goes into the cabinet, the same way: the spectrum's pre, as tabbyEQ draws its pre (the owner, 09.11). */
+    virtual SpectrumFeed& spectrumPre() = 0;
 };
 
 /** A PLUGIN'S SESSION: the window's in a plugin, where the track plays and the host keeps the project. Its workspace —

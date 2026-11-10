@@ -84,6 +84,28 @@ inline std::vector<float> responseOf (const std::vector<float>& ir, double rate)
     return db;
 }
 
+/** ...with the player's `eq` in it, levelled by the cabinet without it: the middle where the cabinet's own stands, so a
+    pass or a cut only takes away and the rest stays where it was (the owner, 09.11) — by its own middle, a low pass at
+    1 kHz pulled the middle down and lifted everything under it. */
+inline std::vector<float> responseOf (const std::vector<float>& ir, double rate, const Eq& eq)
+{
+    auto db = responseOf (ir, rate);
+    const auto stages = eqStages (eq, rate);
+    if (db.empty() || stages.empty())
+        return db;
+    double middle = 0;
+    int counted = 0;
+    for (int i = 0; i < responsePoints; ++i)
+        if (const double hz = responseHz (i); hz >= 100.0 && hz <= 5000.0)
+        {
+            middle += db[(size_t) i] - eqDb (stages, hz, rate);
+            ++counted;
+        }
+    for (auto& v : db)
+        v -= (float) (middle / std::max (1, counted));
+    return db;
+}
+
 /** ...and where a pair's two mics meet, at the same points — each mic's part of the pair at the mix's level, `rate` Hz:
     in dB, the mix against the two powers apart, above nought where they add in phase, below where they cancel. */
 inline std::vector<float> combOf (const std::vector<float>& partA, const std::vector<float>& partB, double rate = 48000.0)

@@ -14,7 +14,8 @@
 //                                      at half the size, as the app does while a hand is on a control
 //     cabir_mix / cabir_a / cabir_b    the IR, 48 kHz mono float, and each mic's part of it (empty with one mic on)
 //     cabir_response / cabir_comb      the band's curves, cabir_points() of them (the comb empty with one mic on)
-//     cabir_gain (rate)                the level the app plays it at: felitronics-core's CabConvolver, reference-unity
+//     cabir_gain (rate)                the level the app plays it at: felitronics-core's CabConvolver, reference-unity,
+//                                      times the EQ's change of loudness
 //     cabir_wav / cabir_wav_size       the IR as the app downloads it: a 24-bit WAV
 //   cabir_render_wav (toml, rate, bits, samples)   DOWNLOAD IR in a format (panel/Download.h): the WAV at cabir_wav() —
 //                                      44100|48000|96000, 16|24, 0 the whole IR|512|1024|2048 — its size, 0 for none
@@ -213,7 +214,7 @@ CABIR_EXPORT int cabir_render (const char* toml, int live)
         return 0;
     // The sizes the app renders at: half while a hand moves a control, full once it lets go.
     s.ir = s.renderer.render (s.table, state->box, synth::pairOf (*state), live != 0 ? (size_t) 1 << 13 : (size_t) 1 << 14);
-    s.response = synth::responseOf (synth::as24Bit (s.ir.mix), 48000.0);
+    s.response = synth::responseOf (synth::as24Bit (s.ir.mix), 48000.0, state->eq);
     s.comb = s.ir.a.empty() ? std::vector<float>() : synth::combOf (s.ir.a, s.ir.b);
     const auto meta = metaOf (*state);
     s.wav = synth::wav24 (s.ir.mix, 48000, &meta);
@@ -269,16 +270,17 @@ CABIR_EXPORT const float* cabir_comb()          { return dataOf (session().comb)
 CABIR_EXPORT float cabir_gain (double rate)
 {
     // The convolver the app plays through, asked what it does to this IR at `rate`: resampled there if it must be, then
-    // levelled to reference-unity. A page that plays at 48 kHz plays the IR as it is, times this.
-    const auto& mix = session().ir.mix;
-    if (mix.empty())
+    // levelled to reference-unity; times what the EQ did to its loudness, which that levelling takes back and the app puts
+    // in again (PairParts::levelMix). A page that plays at 48 kHz plays the IR as it is, times this.
+    const auto& ir = session().ir;
+    if (ir.mix.empty())
         return 1.0f;
     auto convolver = std::make_unique<felitronics::convolution::CabConvolver>();
     if (! convolver->prepare (rate, 128, 1, 1.0, true))
-        return 1.0f;
-    const float* planes[] { mix.data() };
-    convolver->loadIR (planes, 1, (int) mix.size(), 48000.0);
-    return convolver->irNormalizationGain();
+        return ir.levelMix;
+    const float* planes[] { ir.mix.data() };
+    convolver->loadIR (planes, 1, (int) ir.mix.size(), 48000.0);
+    return convolver->irNormalizationGain() * ir.levelMix;
 }
 
 CABIR_EXPORT const unsigned char* cabir_wav() { return session().wav.empty() ? nullptr : session().wav.data(); }

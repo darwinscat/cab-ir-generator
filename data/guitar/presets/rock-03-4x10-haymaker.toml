@@ -1,0 +1,28 @@
+name = "ROCK: 4x10 HAYMAKER"
+style = "Rock"
+cabir = 1
+box = "4x10-open"
+back = "closed"
+speaker = "mid"
+horn = false
+horn_db = 0
+blend = 0.350
+align = true
+invert = false
+
+[mic.a]
+on = true
+model = "sm57"
+x = 0.450
+y = -0.150
+distance = 0.020
+angle = 0.0
+
+[mic.b]
+on = true
+model = "e906"
+x = -0.400
+y = 0.300
+distance = 0.025
+angle = 0.0
+shift = -0.050

@@ -87,7 +87,7 @@ private:
     std::string box;
     size_t n;
     Spot heard;   // the one mic heard, as the synthesis renders it
-    double over;  // how much deeper than the bass's 3 dB the table's line reddens (pitRedOf): the guitar's 2
+    double over;  // how much deeper than the bass's 3 dB the table's line reddens (pitRedOf): the guitar's 4
 };
 
 /** ...run on this machine's threads: the place, `tried` hearing of each as it is judged (from whichever thread). */

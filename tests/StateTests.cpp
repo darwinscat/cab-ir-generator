@@ -7,6 +7,7 @@
 #include "panel/Download.h"
 #include "panel/Link.h"
 #include "synth/CabSynth.h"
+#include "synth/Response.h"
 #include "synth/State.h"
 
 #include <algorithm>
@@ -113,8 +114,18 @@ int main()
         check (! cabir::fromLink ("cab=1&box=9x9").has_value(), "a box the panel has not: none");
         for (const char* bad : { "cab=1&box=8x10&shift=nan", "cab=1&box=8x10&blend=inf", "cab=1&box=8x10&a=md421,nan,0,5,0",
                                  "cab=1&box=8x10&a=md421,0,0,-nan,0", "cab=1&box=8x10&b=u87,0,0,5,NAN(1)", "cab=1&box=8x10&horn=x",
-                                 "cab=1&box=8x10&a=md421,0,0" })
+                                 "cab=1&box=8x10&a=md421,0,0", "cab=1&box=8x10&lpf=6000", "cab=1&box=8x10&bell2=800,nan,1" })
             check (! cabir::fromLink (bad).has_value(), "a link with a value that is no number: none");
+        State eqd = full;
+        eqd.eq.on = true;
+        eqd.eq.lowPassHz = 6000;
+        eqd.eq.lowPassSlope = 24;
+        eqd.eq.bells[1] = { 800, -3.0, 1.4 };
+        check (cabir::fromLink (cabir::linkOf (eqd)) == eqd, "a link reads back the EQ");
+        check (cabir::linkOf (full).find ("eq=") == std::string::npos, "an EQ as it came is left out of the link");
+        State eqOff = eqd;
+        eqOff.eq.on = false;
+        check (cabir::fromLink (cabir::linkOf (eqOff)) == eqOff, "an EQ switched off keeps its settings in the link");
         State alone = full;
         alone.b.on = false;
         const auto one = cabir::fromLink (cabir::linkOf (alone));
@@ -151,6 +162,110 @@ int main()
         check (std::abs ((int) last) <= 1, "its end faded to nothing");
         check (cabir::downloadName (full, { 44100, 16, 1024 }).find (" 44k 16bit 1024") != std::string::npos, "the format in its name");
         check (cabir::formatNote ({ 44100, 16, 1024 }) == "44.1 kHz, 16 bit, 1024 samples", "the line under the button");
+    }
+
+    // An option lays its keys over its section; switched off, the table is the one without it.
+    {
+        const std::string plainText = "[a]\nx = 1\ny = 2\n[b]\nz = 3\n";
+        const std::string withOption = plainText + "[option loud: a]\nlabel = LOUD\ny = 5\nw = 6\n[option loud: b]\nz = 7\n";
+        const auto on = cabir::synth::parseTable (withOption), off = cabir::synth::parseTable (withOption, { "loud" });
+        check (off == cabir::synth::parseTable (plainText), "an option switched off leaves the table as it was");
+        check (on.size() == 2 && on[0].second.at ("y") == "5" && on[0].second.at ("w") == "6" && on[1].second.at ("z") == "7"
+                   && on[0].second.count ("label") == 0,
+               "an option on lays its keys over its sections, its label left out");
+        const auto names = cabir::synth::optionsOf (withOption);
+        check (names.size() == 1 && names[0].first == "loud" && names[0].second == "LOUD", "an option named once, with its label");
+    }
+
+    // The player's EQ: as it came, not written and nothing changed; set, read back the same; on, heard where it is set —
+    // a bell's +6 dB at 1 kHz reads about +6 there against the same cabinet without it — and off, the IR as before.
+    {
+        check (cabir::toToml (full).find ("[eq]") == std::string::npos, "an EQ as it came is not written");
+        State eqd = full;
+        eqd.eq.on = true;
+        eqd.eq.highPassHz = 80;
+        eqd.eq.lowPassHz = 7500;
+        eqd.eq.bells[1] = { 1000, 6.0, 1.4 };
+        const auto eqText = cabir::toToml (eqd);
+        const auto eqBack = cabir::fromToml (eqText);
+        check (eqBack.has_value() && *eqBack == eqd && cabir::toToml (*eqBack) == eqText, "an EQ reads back the same");
+
+        const auto table = cabir::synth::readTable (CABIR_TABLE);
+        const auto dry = cabir::synth::PairRenderer {}.render (table, full.box, cabir::synth::pairOf (full));
+        State off = eqd;
+        off.eq.on = false;
+        check (cabir::synth::PairRenderer {}.render (table, off.box, cabir::synth::pairOf (off)).mix == dry.mix, "an EQ off: the IR as before");
+
+        State bell = full;
+        bell.eq.on = true;
+        bell.eq.bells[1] = { 1000, 6.0, 1.0 };
+        const auto wet = cabir::synth::PairRenderer {}.render (table, bell.box, cabir::synth::pairOf (bell));
+        const auto at = [] (const std::vector<float>& ir, double hz)   // the IR's level at hz, dB
+        {
+            std::vector<cabir::synth::cd> x (1 << 15, 0.0);
+            for (size_t i = 0; i < ir.size() && i < x.size(); ++i)
+                x[i] = ir[i];
+            cabir::synth::fft (x, false);
+            const auto k = (size_t) std::lround (hz * (double) x.size() / 48000.0);
+            return 20.0 * std::log10 (std::abs (x[k]) + 1e-30);
+        };
+        const double lift = (at (wet.mix, 1000) - at (dry.mix, 1000)) - (at (wet.mix, 100) - at (dry.mix, 100));
+        check (std::abs (lift - 6.0) < 0.3, "a bell's +6 dB at 1 kHz is heard there");
+        check (std::abs (cabir::synth::eqDb (cabir::synth::eqStages (bell.eq), 1000) - 6.0) < 0.01, "...and drawn there");
+        float peak = 0;
+        for (const float v : wet.mix)
+            peak = std::max (peak, std::abs (v));
+        check (std::abs (peak - 0.5f) < 1e-6f, "its peak at -6 dBFS, as every IR's");
+
+        // A pass's slope: a Butterworth of order slope/6 an octave past its corner — about -7, -12.3, -24.1 and -48.2 dB,
+        // exactly as the bilinear transform warps it (tan of the frequency); read back the same, and a slope not one of the
+        // four read as the nearest.
+        const auto butterworth = [] (double f, double corner, int order, bool high)   // dB
+        {
+            const double w = std::tan (cabir::synth::pi * f / 48000.0) / std::tan (cabir::synth::pi * corner / 48000.0);
+            return -10.0 * std::log10 (1.0 + std::pow (high ? 1.0 / w : w, 2 * order));
+        };
+        for (const int slope : { 6, 12, 24, 48 })
+        {
+            State pass = full;
+            pass.eq.on = true;
+            pass.eq.highPassHz = 400;
+            pass.eq.highPassSlope = slope;
+            const auto high = cabir::synth::eqStages (pass.eq);
+            check (std::abs (cabir::synth::eqDb (high, 200) - butterworth (200, 400, slope / 6, true)) < 0.01
+                   && std::abs (cabir::synth::eqDb (high, 200) + 1.0 * slope) < 1.1,
+                   ("a high pass's slope, " + std::to_string (slope) + " dB an octave").c_str());
+            pass.eq.highPassHz = 0;
+            pass.eq.lowPassHz = 2000;
+            pass.eq.lowPassSlope = slope;
+            const auto low = cabir::synth::eqStages (pass.eq);
+            check (std::abs (cabir::synth::eqDb (low, 4000) - butterworth (4000, 2000, slope / 6, false)) < 0.01,
+                   ("a low pass's slope, " + std::to_string (slope) + " dB an octave").c_str());
+            pass.eq.highPassHz = 400;
+            const auto back = cabir::fromToml (cabir::toToml (pass));
+            check (back.has_value() && *back == pass, ("a pass's slope reads back the same, " + std::to_string (slope)).c_str());
+        }
+        auto odd = cabir::toToml (eqd);
+        odd.replace (odd.find ("high_pass_slope = 12"), std::string ("high_pass_slope = 12").size(), "high_pass_slope = 30");
+        const auto snapped = cabir::fromToml (odd);
+        check (snapped.has_value() && snapped->eq.highPassSlope == 24, "a slope between read as the nearest");
+
+        // A pass only takes away (the owner, 09.11): a low pass at 1 kHz leaves the line under it where the cabinet's stood,
+        // and the level a player that levels each IR multiplies by falls; an EQ off leaves it at one, a boost raises it.
+        State low = full;
+        low.eq.on = true;
+        low.eq.lowPassHz = 1000;
+        low.eq.lowPassSlope = 48;
+        const auto cut = cabir::synth::PairRenderer {}.render (table, low.box, cabir::synth::pairOf (low));
+        const auto plain = cabir::synth::responseOf (cabir::synth::as24Bit (dry.mix), 48000.0);
+        const auto passed = cabir::synth::responseOf (cabir::synth::as24Bit (cut.mix), 48000.0, low.eq);
+        double moved = 0;
+        for (int i = 0; i < cabir::synth::responsePoints; ++i)
+            if (const double hz = cabir::synth::responseHz (i); hz >= 60 && hz <= 300)
+                moved = std::max (moved, (double) std::abs (passed[(size_t) i] - plain[(size_t) i]));
+        check (moved < 0.5, "a low pass at 1 kHz leaves the line under 300 Hz where it stood");
+        check (cut.levelMix < 0.9f && dry.levelMix == 1.0f, "...and its level falls, an EQ off's stays at one");
+        check (wet.levelMix > 1.0f, "a bell's boost raises the level");
     }
 
     std::printf ("%s\n%s", failures == 0 ? "state: all passed" : "state: FAILED", text.c_str());

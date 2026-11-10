@@ -136,8 +136,24 @@ inline void writeWav24 (const std::string& path, const std::vector<double>& x, i
 using Section = std::map<std::string, std::string>;
 using Table = std::vector<std::pair<std::string, Section>>;
 
-/** The table out of its text. */
-inline Table parseTable (const std::string& text)
+/** AN OPTION: "[option <name>: <section>]" — its keys laid over that section's own, unless <name> is among those switched
+    off; its `label` what a listener's SETUP calls it, laid over nothing. A table without one reads as it did. */
+inline bool optionOf (const std::string& section, std::string& name, std::string& target)
+{
+    if (section.rfind ("option ", 0) != 0) return false;
+    const auto colon = section.find (':');
+    if (colon == std::string::npos) return false;
+    const auto trim = [] (std::string s) {
+        const auto a = s.find_first_not_of (' '), b = s.find_last_not_of (' ');
+        return a == std::string::npos ? std::string() : s.substr (a, b - a + 1);
+    };
+    name = trim (section.substr (7, colon - 7));
+    target = trim (section.substr (colon + 1));
+    return true;
+}
+
+/** The sections as the text has them, its options among them. */
+inline Table readSections (const std::string& text)
 {
     Table out;
     std::istringstream f (text);
@@ -156,6 +172,44 @@ inline Table parseTable (const std::string& text)
         out.back().second[trim (line.substr (0, eq))] = trim (line.substr (eq + 1));
     }
     return out;
+}
+
+/** The table out of its text, its options laid in but for those in `off`. */
+inline Table parseTable (const std::string& text, const std::vector<std::string>& off = {})
+{
+    Table kept;
+    std::vector<std::pair<std::string, Section>> laid;   // each option on: its section, its keys
+    for (auto& [n, s] : readSections (text))
+    {
+        std::string name, target;
+        if (! optionOf (n, name, target))
+            kept.push_back ({ n, std::move (s) });
+        else if (std::find (off.begin(), off.end(), name) == off.end())
+            laid.push_back ({ target, std::move (s) });
+    }
+    for (auto& [target, s] : laid)
+        for (auto& [n, own] : kept)
+            if (n == target)
+                for (const auto& [k, v] : s)
+                    if (k != "label") own[k] = v;
+    return kept;
+}
+
+/** The table's options, each name once in the order it first comes, with its label (else its name). */
+inline std::vector<std::pair<std::string, std::string>> optionsOf (const std::string& text)
+{
+    std::vector<std::pair<std::string, std::string>> names;
+    for (const auto& [n, s] : readSections (text))
+    {
+        std::string name, target;
+        if (! optionOf (n, name, target)) continue;
+        const auto it = std::find_if (names.begin(), names.end(), [&] (const auto& o) { return o.first == name; });
+        if (it == names.end())
+            names.push_back ({ name, s.count ("label") ? s.at ("label") : name });
+        else if (it->second == name && s.count ("label"))
+            it->second = s.at ("label");
+    }
+    return names;
 }
 
 inline Table readTable (const std::string& path)
@@ -292,6 +346,21 @@ struct Cab
     double wallM = 0, wallRefl = 0;
     // What of the box's own modes an open back keeps (open_back_cavity_share): 1, the bass's, as closed.
     double openCavity = 1;
+    // A closed box's Q against a sealed one's (box_q_factor): a guitar's closed back is no sealed box — it leaks, its
+    // panels give, nothing damps it — and its hump over the cone on its air is lower than Qts sqrt(1 + alpha) says.
+    // The sealed and the half closed; 1, the sealed box's — the bass's. And an open one's against the cone's free air
+    // (open_q_factor): a small open combo rings round the cone's own resonance, a big open box hardly at all.
+    double boxQ = 1, openQ = 1;
+    // The box's echo (box_echo = gain/low Hz/high Hz): what the cone's back sends into a closed box comes off its walls
+    // and out through the cone again — two depths, widths or heights round — `gain` of it each way round in the band
+    // the cone lets it through — the 5-80 ms a closed cabinet keeps ringing in its mids, which close mics hear (measured, some 11 dB
+    // under the whole at 1 kHz). A half closed back as much as it is closed; an open one none. 0, none — the bass's.
+    // A fourth number, its ways round (box_echo = gain/low/high/paths): 3, the three axes; 7, each face's diagonal and
+    // the box's own too — where a box's depth is half its width and its width its height, the three axes' trips come
+    // round in step near c/(2 depth) and comb the mids (a 4x12's 480 and 950 Hz), which more ways round smear; 1, the
+    // depth alone — the back the cone faces, the walls across sending it back no straighter than past it.
+    double echoGain = 0, echoLow = 300, echoHigh = 3000;
+    int echoPaths = 3;
     double fsd = 50, qts = 0.4, vas = 30, vb = 60, perChamber = 1, chambers = 1, fb = 45, ql = 8;
     bool portRear = false, hornAtMic = false;
     double fixedMass = 0, coilHz = 0, proxStrength = 1, proxCorner = 0, micTop = 12000, depth = 0.4;
@@ -303,6 +372,21 @@ struct Cab
     // A second section over it (woofer_lowpass_second = Hz/Q): a guitar's cone, flat to its knee and falling off a cliff
     // past it, which one second-order section cannot draw. 0, none — the bass's.
     double wooferLp2 = 0, wooferQ2 = 0.707;
+    // The cap and the coil past the cone's cliff (cap_top = dB/from Hz/top Hz/Q): they go on speaking where the paper has
+    // let go, the shelf measured guitar cabinets keep from 7.5 to 10 kHz some 25 dB under 1 kHz before falling off at
+    // their own corner. A small piston at each cone's centre, its level against the whole cone gathered there, coming in
+    // steeply from `from` — past the cone's cliff, so the two never meet where they would dig a pit — and falling off
+    // from `top`. None — the bass's, and a cliff all the way down.
+    double capTop = 0, capFrom = 8500, capHz = 11000, capQ = 0.707;
+    // The top's tail (top_tail = dB/from Hz/ms): past the cone's breakup what it sends goes on ringing — the 5-80 ms every
+    // measured cabinet keeps at 4-16 kHz, open or closed, some 28 dB under the whole — `dB` under the direct sound in
+    // every band from `from` up, rising over its first 6 ms, then dying away `ms` at a time. None — the bass's.
+    double tailTop = 0, tailFrom = 4000, tailMs = 12;
+    // The box's tail (box_tail = dB/low Hz/high Hz/ms/open dB): what its air and panels keep ringing in the mids — the
+    // 5-80 ms measured closed cabinets keep at 500 Hz-2 kHz some 11 dB under the whole, open ones some 8 dB less — `dB`
+    // under the direct sound from `low` to `high`, a half closed back between the two, the same rise and fall as the
+    // top's, its own noise. Not the echo's (box_echo): it rings without colouring. None — the bass's.
+    double boxTail = 0, boxTailOpen = 0, boxTailLow = 400, boxTailHigh = 2000, boxTailMs = 12;
     // The paper's way past its breakup (cone_decouple_floor, the guitar's PAPER cone): what of the cone lets go keeps
     // `floor` of its motion, but scattered — each patch late by its own 0..floorJitterMs (fixed per patch, no draw) —
     // and falling off at the knee (floorHz, cone_floor_lowpass_hz, the woofer's lowpass by default). Not a piston's: it
@@ -321,6 +405,8 @@ struct Cab
     double diffDb = -24, diffLp = 4000;
     // mic
     double micHp = 35, micHpQ = 0.707, micLp = 12000, proxHz = 140, prox50 = 2.5, proxMax = 6, offLoss = 4;
+    // mic_off_axis = dB/full Hz: the capsule's top lost past its pattern at 90 degrees, all of it from full Hz up
+    double offAxisDb = 4, offAxisFull = 8000;
     std::vector<std::array<double, 3>> presence;
     double micD = 0.05, micOff = 0, micOffY = 0, tilt = 0;
     // Where the table's horn level (horn_at_mic_db) was taken: its section's own mic. A live mic (cabAt) moves off it,
@@ -364,6 +450,15 @@ inline Cab build (const Section& s)
     c.openLoss = num (s, "open_back_loss", 0.48);
     const auto ts = nums (str (s, "ts", "50,0.4,30"));
     c.fsd = ts[0]; c.qts = ts[1]; c.vas = ts[2];
+    c.boxQ = num (s, "box_q_factor", 1);
+    c.openQ = num (s, "open_q_factor", 1);
+    if (const auto echo = nums (str (s, "box_echo")); echo.size() >= 3)
+    {
+        c.echoGain = echo[0];
+        c.echoLow = echo[1];
+        c.echoHigh = echo[2];
+        c.echoPaths = echo.size() < 4 ? 3 : echo[3] >= 7 ? 7 : echo[3] < 2 ? 1 : 3;
+    }
     const auto ch = nums (str (s, "chamber", "60,1,1"));
     c.vb = ch[0]; c.perChamber = ch.size() > 1 ? ch[1] : 1; c.chambers = ch.size() > 2 ? ch[2] : 1;
     c.depth = baffle.size() > 2 ? baffle[2] : 0.4;
@@ -393,8 +488,31 @@ inline Cab build (const Section& s)
         c.wooferLp2 = second[0];
         c.wooferQ2 = second[1];
     }
+    if (const auto cap = nums (str (s, "cap_top")); cap.size() >= 4)
+    {
+        c.capTop = std::pow (10.0, cap[0] / 20);
+        c.capFrom = cap[1];
+        c.capHz = cap[2];
+        c.capQ = cap[3];
+    }
+    if (const auto tail = nums (str (s, "top_tail")); tail.size() >= 3)
+    {
+        c.tailTop = std::pow (10.0, tail[0] / 20);
+        c.tailFrom = tail[1];
+        c.tailMs = tail[2];
+    }
+    if (const auto tail = nums (str (s, "box_tail")); tail.size() >= 5)
+    {
+        c.boxTail = std::pow (10.0, tail[0] / 20);
+        c.boxTailLow = tail[1];
+        c.boxTailHigh = tail[2];
+        c.boxTailMs = tail[3];
+        c.boxTailOpen = std::pow (10.0, tail[4] / 20);
+    }
     c.decoupleHz = num (s, "cone_decouple_hz", range (s, "breakup_hz", 1200, 7000).first);
     c.body = triples (s, "body_eq");
+    // top_eq: more of the speaker's voicing, past its knee — its own key, so a paper cone that sets its body_eq keeps it.
+    for (const auto& e : triples (s, "top_eq")) c.body.push_back (e);
     c.cavity = triples (s, "cavity_modes");
     if (c.cavity.empty()) c.cavity = triples (s, "cavity_modes_per_chamber");
     c.panel = triples (s, "panel_modes");
@@ -419,6 +537,11 @@ inline Cab build (const Section& s)
     c.prox50 = num (s, "proximity_gain_at_50mm_db", 2.5);
     c.proxMax = num (s, "proximity_max_db", 6);
     c.offLoss = num (s, "mic_extra_loss_at_6k_45deg_db", 4);
+    if (const auto off = nums (str (s, "mic_off_axis")); off.size() >= 2)
+    {
+        c.offAxisDb = off[0];
+        c.offAxisFull = off[1];
+    }
     c.micD = num (s, "mic_distance_m", num (s, "mic_distance_from_cap_plane_m", 0.05));
     c.micOff = num (s, "mic_radial_offset_fraction", 0);
     c.tilt = num (s, "mic_axis_tilt_deg", 0);
@@ -502,7 +625,7 @@ inline void lowEnd (const Cab& c, double f, cd& cone, cd& port)
     if (c.open && ! c.half)
     {
         const double ws = 2 * pi * c.fsd;
-        cone = s * s / (s * s + s * ws / c.qts + ws * ws);
+        cone = s * s / (s * s + s * ws / (c.qts * c.openQ) + ws * ws);
         port = 0;
         return;
     }
@@ -510,7 +633,7 @@ inline void lowEnd (const Cab& c, double f, cd& cone, cd& port)
     {
         // Half closed, a leaky box: the cone stiffened by as much of the box's air as the back holds.
         const double a = c.half ? alpha * c.halfClosed : alpha;
-        const double wc = 2 * pi * c.fsd * std::sqrt (1 + a), qtc = c.qts * std::sqrt (1 + a);
+        const double wc = 2 * pi * c.fsd * std::sqrt (1 + a), qtc = c.qts * std::sqrt (1 + a) * c.boxQ;
         cone = s * s / (s * s + s * wc / qtc + wc * wc);
         port = 0;
         return;
@@ -561,8 +684,10 @@ inline cd heard (const Cab& c, const Mic& m, double dx, double dy, double dz, do
     if (c.figure8)   // all gradient: its proximity whole, no front-only loss at the top
         return cosT * (1.0 + prox);
     const cd pattern = 0.5 + 0.5 * cosT * (1.0 + prox);
-    const double e = theta <= 60 ? 2.5 * theta / 60 : theta <= 90 ? 2.5 + 1.5 * (theta - 60) / 30 : 4 + 2 * (theta - 90) / 90;
-    const double top = std::clamp (std::log2 (f / 1000) / 3, 0.0, 1.0);
+    // Past its pattern the capsule loses its top off its axis, 4 dB at 90 degrees from 8 kHz up unless mic_off_axis says.
+    const double e = (theta <= 60 ? 2.5 * theta / 60 : theta <= 90 ? 2.5 + 1.5 * (theta - 60) / 30 : 4 + 2 * (theta - 90) / 90)
+                   * (c.offAxisDb == 4 ? 1.0 : c.offAxisDb / 4);
+    const double top = std::clamp (std::log2 (f / 1000) / (c.offAxisFull == 8000 ? 3.0 : std::log2 (c.offAxisFull / 1000)), 0.0, 1.0);
     return pattern * std::pow (10.0, -e * top / 20);
 }
 
@@ -802,6 +927,33 @@ inline std::vector<double> render (const Cab& c, size_t n, size_t threads = 0)
         tailLow = tail (c.roomAlpha);
         tailHigh = tail (c.roomAlphaHigh);
     }
+    // The top's tail (Cab::tailTop): one noise per box, the same at every place — rising from 1 ms to 6 ms, then dying
+    // away tailMs at a time — of a whole energy of one, so a bin's direct sound carries it on at tailTop of itself.
+    // The box's tail (Cab::boxTail) the same way, its noise its own.
+    const auto lateNoise = [&] (uint32_t salt, double decayMs)
+    {
+        uint32_t seed = 2166136261u;
+        for (const double v : { c.bw, c.bh, c.depth, (double) c.drivers.size() })
+            seed = (seed ^ (uint32_t) std::llround (v * 1000 + 1e6)) * 16777619u;
+        seed ^= salt;
+        std::vector<cd> x (n, 0.0);
+        double e = 0;
+        for (size_t i = 0; i < n; ++i)
+        {
+            seed ^= seed << 13; seed ^= seed >> 17; seed ^= seed << 5;
+            const double ms = 1000.0 * (double) i / c.rate, rise = std::clamp ((ms - 1) / 5, 0.0, 1.0);
+            const double v = ((double) seed / 2147483648.0 - 1.0) * rise * std::exp (-ms / decayMs);
+            x[i] = v;
+            e += v * v;
+        }
+        for (auto& v : x) v /= std::sqrt (e);
+        fft (x, false);
+        return x;
+    };
+    const std::vector<cd> topTail = c.tailTop > 0 ? lateNoise (0, c.tailMs) : std::vector<cd> {};
+    const std::vector<cd> boxTail = c.boxTail > 0 ? lateNoise (0x9e3779b9u, c.boxTailMs) : std::vector<cd> {};
+    const double boxTailNow = c.boxTail * (! c.open ? 1.0 : c.half ? c.halfClosed : 0.0)
+                            + c.boxTailOpen * (! c.open ? 0.0 : c.half ? 1 - c.halfClosed : 1.0);
     // What a room's images bring a mic: each off its walls (sqrt(1 - absorption), 1 kHz to 4 kHz from the low to the high)
     // and the floor, a piston beaming `ka` toward the mic from where it stands — behind it, the box's shadow.
     const auto roomHeard = [&] (const std::vector<RoomImage>& ims, double ka, double f) {
@@ -851,10 +1003,31 @@ inline std::vector<double> render (const Cab& c, size_t n, size_t threads = 0)
                 box += c.halfClosed * m[2] * resonance (f, m[0], m[1]);
         for (auto& m : c.panel) box += m[2] * resonance (f, m[0], m[1]);
         for (auto& b : bodyEq) box *= b.at (f, c.rate);
+        // The box's echo (Cab::echoGain): every two depths, through the cone again, in its band.
+        // Off the back, the sides and the top and bottom alike, a third of it each way round: the box's three round
+        // trips spread its echo's peaks and pits, as a box's many paths do, where one delay alone would comb it.
+        // Under zero it pulls: what comes back presses on the cone's back as the cone's back sent it, against its motion —
+        // a sealed box's dips where its trips come round in step (c/(2 depth), 476 Hz in a 4x12) and its rises between.
+        if (const double g = c.echoGain * (! c.open ? 1.0 : c.half ? c.halfClosed : 0.0); g != 0)
+        {
+            const auto trip = [f] (double metres) { return std::polar (1.0, -2 * pi * f * 2 * metres / c0); };
+            const double d = c.depth, w = c.bw, h = c.bh;
+            const cd ways = c.echoPaths == 7 ? (trip (d) + trip (w) + trip (h) + trip (std::hypot (d, w)) + trip (std::hypot (d, h))
+                                                + trip (std::hypot (w, h)) + trip (std::sqrt (d * d + w * w + h * h))) / 7.0
+                                             : c.echoPaths == 1 ? trip (d) : (trip (d) + trip (w) + trip (h)) / 3.0;
+            // The depth alone: its band a weight on what comes back, not a filter turning its phase — its dips stand where
+            // the depth puts them.
+            const cd band = highpass2 (f, c.echoLow, 0.707) * lowpass2 (f, c.echoHigh, 0.707);
+            const cd round = c.echoPaths == 1 ? g * std::abs (band) * ways : g * highpass2 (f, c.echoLow, 0.707) * lowpass2 (f, c.echoHigh, 0.707) * ways;
+            box *= 1.0 / (1.0 - round);
+        }
         // The baffle step: the low end, radiating into the whole room, a few tenths of a dB under the top.
         box *= std::pow (10.0, -stepDb / 20 * (1 / (1 + (f / stepHz) * (f / stepHz))));
 
         const cd piston = lowpass2 (f, c.wooferLp, c.wooferQ) * (c.wooferLp2 > 0 ? lowpass2 (f, c.wooferLp2, c.wooferQ2) : cd (1.0));
+        // The cap past the cone's knee (Cab::capTop), against a whole cone gathered at its centre.
+        const cd capped = c.capTop > 0 ? c.capTop * highpass2 (f, c.capFrom, 0.707) * highpass2 (f, c.capFrom, 0.707) * lowpass2 (f, c.capHz, c.capQ)
+                                       : cd (0.0);
         cd sum = 0.0;
         cd roomFed = 0.0;      // a room's: the cones' whole output, what its tail is fed
         double roomKa = 0;     // ...and how the cones beam it, their moving part a piston
@@ -900,6 +1073,15 @@ inline std::vector<double> render (const Cab& c, size_t n, size_t threads = 0)
                 if (c.roomW > 0)
                     whole1 += v * p.area * std::polar (1.0, 2 * pi * f * p.z / c0);
             }
+            // The cap: a small piston at the cone's centre, heard as it is — not as the paper round it lets go.
+            if (c.capTop > 0)
+                for (int img = 0; img < images; ++img)
+                {
+                    double r, dx, dy, dz;
+                    pathTo (c.drivers[d].x, mirrored (img, c.drivers[d].y), -c.depthFrac * c.radius, r, dx, dy, dz);
+                    drv += (img == 0 ? 1.0 : c.floorRefl) * capped * heard (c, mic, dx, dy, dz, f) / r
+                         * std::polar (1.0, -2 * pi * f * (r / c0 - minDelay));
+                }
             sum += drv * c.sens[d] * cone * box * coil[k];
             if (c.roomW > 0)   // the room's images of this cone, its moving part beaming as a piston
             {
@@ -960,26 +1142,27 @@ inline std::vector<double> render (const Cab& c, size_t n, size_t threads = 0)
                     double r, dx, dy, dz;
                     pathTo (c.drivers[d].x, mirrored (img, c.drivers[d].y), -c.depth, r, dx, dy, dz);
                     const double block = std::clamp (1 - 2 / pi * (disc - z * std::atan (disc / z)) * r / (c.depth * c.depth), 0.2, 1.0);
+                    // The guitar's full low end: whole and unshadowed under the baffle's step, half and blocked over it.
+                    const auto share = [&] (double blocked) { return (0.5 + 0.5 * low) * (blocked + (1 - blocked) * low); };
                     if (! c.openFullLow)
                         sum -= floorBy * cone * pipe * coil[k] * c.sens[d] * 0.5 * block * (r0 / r) * (c.half ? halfOut : lowpass1 (f, c.openLp))
                              * heard (c, mic, dx, dy, dz, f) * std::polar (1.0, -2 * pi * f * (r / c0 - minDelay));
                     else
-                    {
-                        // The guitar's: whole and unshadowed under the baffle's step, half and blocked over it.
-                        const auto share = [&] (double blocked) { return (0.5 + 0.5 * low) * (blocked + (1 - blocked) * low); };
                         sum -= floorBy * cone * pipe * coil[k] * c.sens[d] * share (block) * (r0 / r) * (c.half ? halfOut : lowpass1 (f, c.openLp))
                              * heard (c, mic, dx, dy, dz, f) * std::polar (1.0, -2 * pi * f * (r / c0 - minDelay));
-                        // ...and off the wall behind, where there is one: the back's image beyond it, round the box.
-                        // (A room's back wall stands in for it: cabAt leaves wallM nought with a room.)
-                        if (c.wallM > 0)
-                        {
-                            double rw, wx, wy, wz;
-                            pathTo (c.drivers[d].x, mirrored (img, c.drivers[d].y), -c.depth - 2 * c.wallM, rw, wx, wy, wz);
-                            const double blockW = std::clamp (1 - 2 / pi * (disc - z * std::atan (disc / z)) * rw / (c.depth * c.depth), 0.2, 1.0);
-                            sum -= floorBy * c.wallRefl * cone * pipe * coil[k] * c.sens[d] * share (blockW) * (r0 / rw)
-                                 * (c.half ? halfOut : lowpass1 (f, c.openLp)) * heard (c, mic, wx, wy, wz, f)
-                                 * std::polar (1.0, -2 * pi * f * (rw / c0 - minDelay));
-                        }
+                    // ...and off the wall behind, where there is one: the back's image beyond it, round the box — always
+                    // with the full low end, whatever the back's own: from a metre and more behind the box its long waves
+                    // wrap round it unshadowed (the owner, 10.11: since 08.11 the back's own is without, and WALL, kept
+                    // with it, changed nothing; as the back's own it moved 0.1 dB, so it does 0.2-0.8 dB at 65-120 Hz).
+                    // (A room's back wall stands in for it: cabAt leaves wallM nought with a room.)
+                    if (c.wallM > 0)
+                    {
+                        double rw, wx, wy, wz;
+                        pathTo (c.drivers[d].x, mirrored (img, c.drivers[d].y), -c.depth - 2 * c.wallM, rw, wx, wy, wz);
+                        const double blockW = std::clamp (1 - 2 / pi * (disc - z * std::atan (disc / z)) * rw / (c.depth * c.depth), 0.2, 1.0);
+                        sum -= floorBy * c.wallRefl * cone * pipe * coil[k] * c.sens[d] * share (blockW) * (r0 / rw)
+                             * (c.half ? halfOut : lowpass1 (f, c.openLp)) * heard (c, mic, wx, wy, wz, f)
+                             * std::polar (1.0, -2 * pi * f * (rw / c0 - minDelay));
                     }
                 }
             if (c.roomW > 0)   // the back's sound in the room too: out behind the box, half of it over the baffle's step
@@ -1022,6 +1205,14 @@ inline std::vector<double> render (const Cab& c, size_t n, size_t threads = 0)
                      * std::polar (1.0, -2 * pi * f * ((toEdge + r) / c0 - minDelay));
             }
         }
+
+        // The top's tail (Cab::tailTop): the direct sound's own spectrum, carried on late from tailFrom up. The box's
+        // (Cab::boxTail) the same in the mids, as closed as the back is, its band a weight on it and no turn of phase.
+        const double direct = std::abs (sum);
+        if (c.tailTop > 0)
+            sum += topTail[k] * direct * c.tailTop * highpass2 (f, c.tailFrom, 0.707);
+        if (c.boxTail > 0)
+            sum += boxTail[k] * direct * boxTailNow * std::abs (highpass2 (f, c.boxTailLow, 0.707) * lowpass2 (f, c.boxTailHigh, 0.707));
 
         // The room's tail: what the cones put into the whole room — beamed (sqrt(2 R1(2ka)) / ka of the axis, 1 low down)
         // — as the mic hears a sound from everywhere (its pattern's mean over six ways), the room keeping less of the top.
@@ -1148,7 +1339,7 @@ inline Cab cabAt (const Table& table, const std::string& cab, const Spot& spot, 
 }
 
 /** WHERE THE PANEL'S LINE REDDENS for a box of the table: its response this far under its neighbours, dB — the table's
-    pit_red_db (the guitar's 5: its speakers' own dips run deeper than a bass's, the owner, 07.11), else the bass's 3.
+    pit_red_db (the guitar's 7: its speakers' own dips run deeper than a bass's, the owner, 07.11 and 08.11), else the bass's 3.
     The panel's own is its catalog's (Panel::Catalog::pitRedDb), the same number. */
 inline double pitRedOf (const Table& table, const std::string& cab)
 {
@@ -1209,7 +1400,89 @@ struct Pair
     double blend = 0;
     bool align = false, invertB = false;
     double shiftB = 0;   // seconds B is moved against A, later positive
+    Eq eq;               // the player's, over the two (State's)
 };
+
+/** A pass of `slope` dB an octave, Butterworth, into `out`: 6 a first-order section alone, 12, 24 and 48 one, two and four
+    biquads at the Qs of that order — 12 the single one at Q √½. */
+inline void addPass (std::vector<Biquad>& out, bool high, double f0, int slope, double rate)
+{
+    if (slope <= 6)
+    {
+        const double k = std::tan (pi * f0 / rate), a1 = (k - 1) / (k + 1);
+        out.push_back (high ? Biquad { 1 / (1 + k), -1 / (1 + k), 0, a1, 0 } : Biquad { k / (1 + k), k / (1 + k), 0, a1, 0 });
+        return;
+    }
+    const int order = slope / 6;
+    for (int k = 1; k <= order / 2; ++k)
+        out.push_back (Biquad::make (high ? "hp" : "lp", f0, 1 / (2 * std::cos ((2 * k - 1) * pi / (2 * order))), 0, rate));
+}
+
+/** THE PLAYER'S EQ (State's Eq) as biquads at `rate`, in the order they run: the high pass and the low pass, Butterworth,
+    6 to 48 dB an octave, then the bells, RBJ peaks. None while it changes nothing; a pass or a bell past 0.45 of the rate
+    is left out — nothing there for it to do. */
+inline std::vector<Biquad> eqStages (const Eq& eq, double rate = fs)
+{
+    std::vector<Biquad> out;
+    if (! eq.heard())
+        return out;
+    const double top = 0.45 * rate;
+    if (eq.highPassHz > 0)
+        addPass (out, true, std::min (eq.highPassHz, top), eq.highPassSlope, rate);
+    if (eq.lowPassHz > 0 && eq.lowPassHz < top)
+        addPass (out, false, eq.lowPassHz, eq.lowPassSlope, rate);
+    for (const auto& b : eq.bells)
+        if (! b.flat() && b.hz < top)
+            out.push_back (Biquad::make ("peak", b.hz, b.q, b.db, rate));
+    return out;
+}
+
+/** ...its gain at `f`, dB: the line the panel draws it by. */
+inline double eqDb (const std::vector<Biquad>& stages, double f, double rate = fs)
+{
+    double g = 1;
+    for (const auto& s : stages)
+        g *= std::abs (s.at (f, rate));
+    return 20 * std::log10 (g + 1e-30);
+}
+
+/** ...run over `x` from rest, on doubles, one biquad after the other (transposed direct form II). */
+inline void equalise (std::vector<float>& x, const std::vector<Biquad>& stages)
+{
+    std::vector<double> y (x.begin(), x.end());
+    for (const auto& s : stages)
+    {
+        double z1 = 0, z2 = 0;
+        for (auto& v : y)
+        {
+            const double in = v, out = s.b0 * in + z1;
+            z1 = s.b1 * in - s.a1 * out + z2;
+            z2 = s.b2 * in - s.a2 * out;
+            v = out;
+        }
+    }
+    for (size_t i = 0; i < x.size(); ++i)
+        x[i] = (float) y[i];
+}
+
+/** AN IR'S LOUDNESS as a player that levels each IR at load measures it (felitronics-core's CabConvolver): its power for
+    white noise through a one-pole low pass at 2 kHz, at `rate`. Only a ratio of two means anything. */
+inline double loudnessOf (const std::vector<float>& ir, double rate = fs)
+{
+    size_t m = 256;
+    while (m < 2 * ir.size()) m <<= 1;
+    std::vector<cd> x (m, 0.0);
+    for (size_t i = 0; i < ir.size(); ++i) x[i] = ir[i];
+    fft (x, false);
+    double power = 0, weight = 0;
+    for (size_t k = 1; k <= m / 2; ++k)
+    {
+        const double f = rate * (double) k / (double) m, w = 1 / (1 + (f / 2000) * (f / 2000));
+        power += w * std::norm (x[k]);
+        weight += w;
+    }
+    return power / weight + 1e-30;
+}
 
 /** `ir` moved later by `seconds` — a fraction of a sample as well as whole ones, through the spectrum, its length kept. */
 inline std::vector<double> delayed (const std::vector<double>& ir, double seconds, double rate = fs)
@@ -1234,18 +1507,57 @@ inline std::vector<double> delayed (const std::vector<double>& ir, double second
 }
 
 /** The pair, and each mic's part of it at the mix's own level — `a` + `b` is `mix` — for a picture of where the two
-    meet in phase and where they cancel; a pair with one mic heard (blend 0) has no parts. */
-struct PairParts { std::vector<float> mix, a, b; };
+    meet in phase and where they cancel; a pair with one mic heard (blend 0) has no parts. With the player's EQ in, each
+    one's level too: what the EQ did to its loudness — a player that levels each IR at load times this keeps the cabinet's
+    level, so a pass only takes away (the owner, 09.11); 1 without it. */
+struct PairParts
+{
+    std::vector<float> mix, a, b;
+    float levelMix = 1, levelA = 1, levelB = 1;
+};
 
 
 /** A PAIR RENDERED AGAIN AND AGAIN, as a hand moves one mic: each mic's own IR kept by what made it — the box, the spot,
     the clock it stands on, the size it was rendered at — so the mic that did not move is not rendered again; and the two
-    rendered side by side, on two threads, when both did. One renderer to one thread: it keeps what it last made. */
+    rendered side by side, on two threads, when both did. One renderer to one thread: it keeps what it last made.
+    The player's EQ over what they make, the mix and its two parts alike, the mix's peak put back at -6 dBFS: a hand on
+    the EQ renders no mic again. */
 class PairRenderer
 {
 public:
     PairParts render (const Table& table, const std::string& cab, const Pair& p, size_t n = 1 << 14, double rate = fs)
     {
+        auto out = mixed (table, cab, p, n, rate);
+        if (const auto stages = eqStages (p.eq, rate); ! stages.empty())
+        {
+            const std::pair<std::vector<float>*, float*> parts[] { { &out.mix, &out.levelMix }, { &out.a, &out.levelA }, { &out.b, &out.levelB } };
+            for (auto [x, level] : parts)
+            {
+                if (x->empty())
+                    continue;
+                const double before = loudnessOf (*x, rate);
+                equalise (*x, stages);
+                *level = (float) std::sqrt (loudnessOf (*x, rate) / before);
+            }
+            float peak = 1e-12f;
+            for (const float v : out.mix)
+                peak = std::max (peak, std::abs (v));
+            for (auto* x : { &out.mix, &out.a, &out.b })
+                for (auto& v : *x)
+                    v *= 0.5f / peak;
+        }
+        return out;
+    }
+
+private:
+    PairParts mixed (const Table& table, const std::string& cab, const Pair& p, size_t n, double rate)
+    {
+        if (&table != lastTable)   // another table (a listener's SETUP): nothing kept from the last one is its
+        {
+            lastA = {};
+            lastB = {};
+            lastTable = &table;
+        }
         if (p.blend <= 0)
         {
             auto ca = cabAt (table, cab, p.a, rate);
@@ -1306,9 +1618,9 @@ public:
         return out;
     }
 
-private:
     struct Kept { std::string key; std::vector<double> ir; };
     Kept lastA, lastB;
+    const Table* lastTable = nullptr;
 
     static std::string keyOf (const std::string& cab, const Spot& s, double refDelay, size_t n, double rate)
     {
@@ -1357,7 +1669,7 @@ inline Pair pairOf (const State& s)
         p.room = s.room;
         return p;
     };
-    Pair pair { spot (s.a), spot (s.b), s.blend, s.align, s.invert, s.shiftMs / 1000.0 };
+    Pair pair { spot (s.a), spot (s.b), s.blend, s.align, s.invert, s.shiftMs / 1000.0, s.eq };
     if (! s.b.on)
         pair.blend = 0;            // A alone: the blend not heard
     else if (! s.a.on)

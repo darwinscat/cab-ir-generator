@@ -3,11 +3,9 @@
 
 #include "MainComponent.h"
 #include "Flavour.h"
+#include "Table.h"
 
 #include <BinaryData.h>
-#if ! CABIR_PLUGIN
- #include <RiffData.h>
-#endif
 #include <felitronics/appkit/AudioSettingsPanel.h>
 #include <felitronics/appkit/BrandAssets.h>
 #include <felitronics/toml/Toml.h>
@@ -45,30 +43,34 @@ namespace
     const juce::String productUrl = juce::String (flavour::page) + "?utm_source=" + flavour::utmSource
                                   + "&utm_medium=" + (flavour::plugin ? "plugin" : "app");
 
-    // The riffs the app carries (Flavour.h); a plugin carries none, the track plays through it.
+    // The riffs the player plays (Flavour.h), read from the checkout the app was built from (CABIR_RIFFS_DIR) — the owner's
+    // machine, nowhere else: where they are not, there is no player (the owner, 09.11). A plugin has none, the track plays.
     using flavour::riffs;
     using flavour::numRiffs;
     const juce::String riffKey = "riff:";   // the setting's prefix for one of these, else a file's path
     const juce::String inputKey = "input:"; // ...or the setting for the live input
 
-    const char* riffBytes (int i, int& size)
+    juce::File riffFile (int i)
     {
-#if ! CABIR_PLUGIN
-        for (int r = 0; r < RiffData::namedResourceListSize; ++r)
-            if (juce::String (RiffData::originalFilenames[r]) == riffs[i].file)
-                return RiffData::getNamedResource (RiffData::namedResourceList[r], size);
-#endif
+#ifdef CABIR_RIFFS_DIR
+        return juce::File (CABIR_RIFFS_DIR).getChildFile (riffs[i].file);
+#else
         juce::ignoreUnused (i);
-        size = 0;
-        return nullptr;
+        return {};
+#endif
     }
 
-    /** The cabinet table, once: what the download's note reads the IR's length from. */
-    const synth::Table& cabinetTable()
+    /** The first riff on disk, -1 for none: the player shows only with one. */
+    int firstRiff()
     {
-        static const auto table = synth::parseTable (std::string (BinaryData::cabinets_txt, (size_t) BinaryData::cabinets_txtSize));
-        return table;
+        for (int i = 0; i < numRiffs; ++i)
+            if (riffFile (i).existsAsFile())
+                return i;
+        return -1;
     }
+
+    /** The cabinet table: what the download's note reads the IR's length from. */
+    const synth::Table& cabinetTable() { return playedTable(); }
 
     juce::PropertiesFile::Options storage()
     {
@@ -85,6 +87,75 @@ namespace
     {
         return felitronics::appkit::brand::wordmarkFont (felitronics::appkit::brand::wordmarkTypeface(), height);
     }
+
+#if CABIR_LISTEN
+    /** THE OWNER'S SETUP: a row for each of the table's options, ticked while heard; a click turns it, and the cabinet is
+        rendered again. */
+    class SetupView : public juce::Component
+    {
+    public:
+        static constexpr int rowH = 36, top = 44, bottom = 24, width = 460;
+
+        SetupView (std::vector<std::pair<std::string, std::string>> all, std::vector<std::string> off,
+                   std::function<void (const std::vector<std::string>&)> chosen)
+            : options (std::move (all)), switchedOff (std::move (off)), onChosen (std::move (chosen))
+        {
+            setSize (width, top + rowH * (int) options.size() + bottom);
+        }
+
+        void paint (juce::Graphics& g) override
+        {
+            g.fillAll (look().panel);
+            const auto font = look().font (13.0f), name = look().font (15.0f);
+            g.setColour (look().txDim);
+            look().drawTracked (g, "TICKED, HEARD. UNTICKED, AS BEFORE (V6).", getLocalBounds().removeFromTop (top).reduced (18, 0).toFloat(),
+                                font, 0.06f, juce::Justification::centredLeft);
+            for (size_t i = 0; i < options.size(); ++i)
+            {
+                const auto row = rowArea ((int) i);
+                const bool on = isOn (i);
+                const auto box = juce::Rectangle<float> (20.0f, 20.0f).withCentre ({ (float) row.getX() + 28.0f, (float) row.getCentreY() });
+                g.setColour (look().panel2);
+                g.fillRoundedRectangle (box, 4.0f);
+                g.setColour (on ? look().orange : look().txFaint);
+                g.drawRoundedRectangle (box, 4.0f, on ? 1.6f : 1.0f);
+                if (on)
+                {
+                    juce::Path tick;
+                    tick.startNewSubPath (box.getX() + 5.0f, box.getCentreY());
+                    tick.lineTo (box.getX() + 9.0f, box.getBottom() - 5.5f);
+                    tick.lineTo (box.getRight() - 4.5f, box.getY() + 5.0f);
+                    g.strokePath (tick, juce::PathStrokeType (2.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+                }
+                g.setColour (on ? look().tx : look().txDim);
+                look().drawTracked (g, options[i].second, row.withTrimmedLeft (50).toFloat(), name, 0.06f, juce::Justification::centredLeft);
+            }
+        }
+
+        void mouseDown (const juce::MouseEvent& e) override
+        {
+            for (size_t i = 0; i < options.size(); ++i)
+                if (rowArea ((int) i).contains (e.getPosition()))
+                {
+                    const auto n = options[i].first;
+                    if (isOn (i))
+                        switchedOff.push_back (n);
+                    else
+                        switchedOff.erase (std::remove (switchedOff.begin(), switchedOff.end(), n), switchedOff.end());
+                    repaint();
+                    onChosen (switchedOff);
+                }
+        }
+
+    private:
+        std::vector<std::pair<std::string, std::string>> options;
+        std::vector<std::string> switchedOff;
+        std::function<void (const std::vector<std::string>&)> onChosen;
+
+        bool isOn (size_t i) const { return std::find (switchedOff.begin(), switchedOff.end(), options[i].first) == switchedOff.end(); }
+        juce::Rectangle<int> rowArea (int i) const { return { 0, top + i * rowH, getWidth(), rowH }; }
+    };
+#endif
 
     /** What the version window says that the badge cannot know: who we are, what this build is and was built against. */
     felitronics::appkit::VersionBadge::Config about()
@@ -136,6 +207,13 @@ MainComponent::MainComponent (Session* host)
     {
         carryFormerName();
         engine = std::make_unique<Engine>();
+#if CABIR_LISTEN
+        // The options the owner's SETUP switched off the last run, before the first cabinet is rendered.
+        std::vector<std::string> off;
+        for (const auto& n : juce::StringArray::fromTokens (properties.getUserSettings()->getValue ("optionsOff"), " ", ""))
+            off.push_back (n.toStdString());
+        PlayedTable::get().setOptionsOff (off);
+#endif
     }
     mark = markOf();
     cat = catOf();
@@ -144,9 +222,28 @@ MainComponent::MainComponent (Session* host)
     look().font = brandFont;
 
     picker.onSetup    = [this] (int cab, CabPicker::Setup setup) { keep (CabPicker::stateOf (cab, setup)); };
+    picker.onPlaced   = [this] (int cab, CabPicker::Setup setup) { keep (CabPicker::stateOf (cab, setup), true); };   // FRED's: B stays where it was put
     picker.onMove     = [this] (int cab, CabPicker::Setup setup) { render (CabPicker::stateOf (cab, setup), true); };
     picker.onDownload = [this] { download(); };
     picker.onDownloadFormat = [this] { showFormats(); };
+    // SPECTRUM, the player's view: on until switched off in the menu below, kept between runs (the owner, 09.11).
+    picker.hasSound = true;
+    picker.setSpectrumOn (properties.getUserSettings()->getBoolValue ("spectrum", true));
+    // A right click over the response: EQ and SPECTRUM, each ticked while on, and RESET EQ (the owner, 09.11).
+    picker.onEqMenu = [this]
+    {
+        juce::PopupMenu menu;
+        const bool eq = picker.eqOn(), spectrum = picker.spectrumOn();
+        menu.addItem ("EQ", true, eq, [this, eq] { picker.setEqOn (! eq); });
+        menu.addItem ("SPECTRUM", true, spectrum, [this, spectrum]
+        {
+            picker.setSpectrumOn (! spectrum);
+            properties.getUserSettings()->setValue ("spectrum", ! spectrum);
+        });
+        menu.addSeparator();
+        menu.addItem ("RESET EQ", [this] { picker.resetEq(); });
+        menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition());
+    };
     picker.onFind     = [this] (int cab, CabPicker::Setup setup) { findPlace (CabPicker::stateOf (cab, setup), true); };   // FIND looks harder
     picker.showDefault = false;   // DEFAULT is the preset menu's first item here
     addAndMakeVisible (picker);
@@ -182,15 +279,21 @@ MainComponent::MainComponent (Session* host)
         noteDownload();
     }
 
-    // The sample the last run played — a riff of ours, a file, or the live input (silent until played) — else the first riff.
-    if (engine != nullptr)
+    // No riffs where the app was built — anyone's machine but the owner's: no player, the input AUDIO opened heard at once;
+    // none until one is picked there, so a laptop's own mic does not howl through its speakers on the first run (the device
+    // starts with no input and keeps what was picked).
+    player = engine != nullptr && firstRiff() >= 0;
+    if (engine != nullptr && ! player)
+        engine->inputOnly();
+    // With them, the sample the last run played — a riff, a file, or the live input (silent until played) — else the first riff.
+    if (player)
     {
         const auto last = properties.getUserSettings()->getValue ("sample");
         if (last == inputKey)
             useInput();
-        int riff = 0;
+        int riff = firstRiff();
         for (int i = 0; i < numRiffs; ++i)
-            if (last == riffKey + riffs[i].file)
+            if (last == riffKey + riffs[i].file && riffFile (i).existsAsFile())
                 riff = i;
         if (! last.startsWith (riffKey) && juce::File::isAbsolutePath (last) && juce::File (last).existsAsFile())
             loadSample (juce::File (last));
@@ -206,6 +309,8 @@ MainComponent::MainComponent (Session* host)
 MainComponent::~MainComponent()
 {
     alive.reset();
+    sound().spectrum().want (false);   // a plugin plays on with its window closed: nothing fed for it
+    sound().spectrumPre().want (false);
     worker.removeAllJobs (true, 2000);
     if (session != nullptr)
     {
@@ -267,7 +372,13 @@ void MainComponent::changeListenerCallback (juce::ChangeBroadcaster* from)
     if (session != nullptr && from == session)
         loadWorkspace (session->workspace());
     else
-        repaint (strip());   // the app's audio device changed: the input the strip names
+    {
+        // The app's audio device changed: an input opened in AUDIO is what plays now (the owner, 09.11: its meter moved
+        // while a riff stood silent) — at once if the riff was playing; and the strip names it.
+        if (player && ! engine->usingInput() && engine->inputName().isNotEmpty())
+            useInput (true);
+        repaint (strip());
+    }
 }
 
 void MainComponent::render (const State& s, bool live)
@@ -275,13 +386,18 @@ void MainComponent::render (const State& s, bool live)
     const int mine = ++latest;
     std::weak_ptr<int> stillHere = alive;
     const auto meta = metaOf (s);
-    worker.addJob ([this, stillHere, mine, s, live, meta]
+    // A hand on the EQ alone moves no mic: the mics as last rendered are kept, at full size, so the live one is full too.
+    auto cabinet = s;
+    cabinet.eq = {};
+    const bool small = live && cabinet != lastCabinet;
+    lastCabinet = cabinet;
+    worker.addJob ([this, stillHere, mine, s, live, small, meta]
     {
         if (mine != latest.load())
             return;   // superseded before it began
-        static const auto table = synth::parseTable (std::string (BinaryData::cabinets_txt, (size_t) BinaryData::cabinets_txtSize));
+        const auto& table = playedTable();
         // The mic that did not move kept, the one that did rendered at half the size while the hand is on it.
-        auto ir = renderer.render (table, s.box, synth::pairOf (s), live ? (size_t) 1 << 13 : (size_t) 1 << 14);
+        auto ir = renderer.render (table, s.box, synth::pairOf (s), small ? (size_t) 1 << 13 : (size_t) 1 << 14);
         auto wav = synth::wav24 (ir.mix, 48000, &meta);
 
         juce::MessageManager::callAsync ([this, stillHere, mine, s, live, ir, wav]() mutable
@@ -294,12 +410,15 @@ void MainComponent::render (const State& s, bool live)
             heard = mine;
 
             juce::MemoryBlock bytes (wav.data(), wav.size());
-            auto now = synth::responseOf (synth::as24Bit (ir.mix), 48000.0);   // the IR as the WAV holds it, as the page draws it
+            auto now = synth::responseOf (synth::as24Bit (ir.mix), 48000.0, s.eq);   // the IR as the WAV holds it, as the page draws it
             auto comb = ir.a.empty() ? std::vector<float>() : synth::combOf (ir.a, ir.b);
             auto before = keptCurve;
             irMix = std::move (ir.mix);
             irA = std::move (ir.a);
             irB = std::move (ir.b);
+            levelMix = ir.levelMix;
+            levelA = ir.levelA;
+            levelB = ir.levelB;
             playHeard();
             repaint (strip());   // BYPASS's A and B, live with two mics heard
             if (! live)
@@ -322,7 +441,7 @@ int MainComponent::writeStills (const juce::File& folder, float scale)
     if (! folder.createDirectory())
         return 1;
     look().font = brandFont;
-    const auto table = synth::parseTable (std::string (BinaryData::cabinets_txt, (size_t) BinaryData::cabinets_txtSize));
+    const auto& table = playedTable();
 
     // The panel as the app has it: no foot, FIND and DOWNLOAD IR offered.
     CabPicker picker;
@@ -337,7 +456,7 @@ int MainComponent::writeStills (const juce::File& folder, float scale)
         const auto ir = renderer.render (table, s.box, synth::pairOf (s), (size_t) 1 << 14);
         const auto [cab, setup] = CabPicker::setupOf (s);
         picker.show (cab, setup);
-        picker.showResponse (synth::responseOf (synth::as24Bit (ir.mix), 48000.0), {},
+        picker.showResponse (synth::responseOf (synth::as24Bit (ir.mix), 48000.0, s.eq), {},
                              ir.a.empty() ? std::vector<float>() : synth::combOf (ir.a, ir.b));
     };
     int failed = 0;
@@ -398,6 +517,64 @@ int MainComponent::writeStills (const juce::File& folder, float scale)
     shown (found);
     write ("panel-find@2x.png");
 
+    // The EQ on (the owner, 09.11): both passes in, two bells off nought, and under them what plays — noise through the
+    // cabinet, read as the window reads it.
+    {
+        auto eqd = first;
+        eqd.eq.on = true;
+        eqd.eq.highPassHz = 90;
+        eqd.eq.highPassSlope = 24;
+        eqd.eq.lowPassHz = 7000;
+        eqd.eq.bells[0].db = -3.0;
+        eqd.eq.bells[2] = { 3500, 2.5, 1.4 };
+        shown (eqd);
+        const auto ir = renderer.render (table, eqd.box, synth::pairOf (eqd), (size_t) 1 << 14).mix;
+        juce::Random random (9);
+        std::vector<synth::cd> x ((size_t) 1 << 17, 0.0), h (x.size(), 0.0);   // 64k of noise through the IR, by FFT
+        for (size_t i = 0; i < x.size() / 2; ++i)
+            x[i] = random.nextFloat() * 2.0f - 1.0f;
+        for (size_t i = 0; i < ir.size(); ++i)
+            h[i] = ir[i];
+        std::vector<float> into (x.size() / 2);   // what goes in, a little under what comes out
+        for (size_t i = 0; i < into.size(); ++i)
+            into[i] = 0.05f * (float) x[i].real();
+        synth::fft (x, false);
+        synth::fft (h, false);
+        for (size_t k = 0; k < x.size(); ++k)
+            x[k] *= h[k];
+        synth::fft (x, true);
+        std::vector<float> played (x.size() / 2);
+        for (size_t i = 0; i < played.size(); ++i)
+            played[i] = 0.25f * (float) x[i].real();
+        SpectrumFeed feed, feedPre;
+        for (auto* f : { &feed, &feedPre })
+        {
+            f->prepare (48000.0);
+            f->want (true);
+        }
+        std::vector<float> hz;
+        for (int i = 0; i < CabPicker::spectrumColumns; ++i)
+            hz.push_back (CabPicker::spectrumHz (i));
+        SpectrumView view (hz), viewPre (hz);
+        std::vector<float> columns, columnsPre;
+        for (size_t at = 0; at + 1600 <= played.size(); at += 1600)
+        {
+            feed.feed (played.data() + at, nullptr, 1600);
+            feedPre.feed (into.data() + at, nullptr, 1600);
+            columns = view.tick (feed);
+            columnsPre = viewPre.tick (feedPre);
+        }
+        picker.hasSound = true;   // a host with sound, for these two alone: the page has none
+        picker.showSpectrum (columns, columnsPre);
+        write ("panel-eq@2x.png");
+        auto flat = first;   // ...and as it is first switched on: the passes out at their edges, the bells flat
+        flat.eq.on = true;
+        shown (flat);
+        write ("panel-eq-flat@2x.png");
+        picker.showSpectrum ({}, {});
+        picker.hasSound = false;
+    }
+
     // The whole window as the app opens on its DEFAULT — its header, the panel, its strip, 960 x 540 — twice the stills'
     // scale, 3840 x 2160 at their 2x: a page's 16:9 picture, larger than a screen holds the window (the owner, 07.11);
     // and the same with the pair that combs, its zebra across the response.
@@ -408,7 +585,7 @@ int MainComponent::writeStills (const juce::File& folder, float scale)
             auto ir = renderer.render (table, s.box, synth::pairOf (s), (size_t) 1 << 14);
             const auto [cab, setup] = CabPicker::setupOf (s);
             main.picker.show (cab, setup);
-            main.picker.showResponse (synth::responseOf (synth::as24Bit (ir.mix), 48000.0), {},
+            main.picker.showResponse (synth::responseOf (synth::as24Bit (ir.mix), 48000.0, s.eq), {},
                                       ir.a.empty() ? std::vector<float>() : synth::combOf (ir.a, ir.b));
             main.irMix = std::move (ir.mix);   // BYPASS's A and B live with two mics heard
             main.irA = std::move (ir.a);
@@ -480,9 +657,9 @@ int MainComponent::writeStills (const juce::File& folder, float scale)
     return failed;
 }
 
-void MainComponent::keep (const State& s)
+void MainComponent::keep (const State& s, bool placed)
 {
-    const bool bTakenUp = ! state.b.on && s.b.on;
+    const bool bTakenUp = ! placed && ! state.b.on && s.b.on;   // B the panel placed (FRED) is not taken up: no search moves it
     state = s;
     noteDownload();
     render (s, false);
@@ -500,7 +677,7 @@ void MainComponent::findPlace (const State& s, bool thorough)
     std::weak_ptr<int> stillHere = alive;
     worker.addJob ([this, stillHere, s, thorough, pair, alone]
     {
-        static const auto table = synth::parseTable (std::string (BinaryData::cabinets_txt, (size_t) BinaryData::cabinets_txtSize));
+        const auto& table = playedTable();
         const auto tried = [this, stillHere] (const synth::Place& p, double score)
         {
             juce::MessageManager::callAsync ([this, stillHere, p, score]
@@ -733,10 +910,8 @@ void MainComponent::loadRiff (int i)
 {
     if (engine == nullptr)
         return;
-    int size = 0;
-    const char* data = riffBytes (i, size);
     const bool wasPlaying = engine->isPlaying();
-    if (data == nullptr || ! engine->loadSample (data, (size_t) size, riffs[i].title))
+    if (i < 0 || ! engine->loadSample (riffFile (i), riffs[i].title))
         return;
     properties.getUserSettings()->setValue ("sample", riffKey + riffs[i].file);
     riffNow = i;
@@ -744,11 +919,11 @@ void MainComponent::loadRiff (int i)
     repaint (strip());
 }
 
-void MainComponent::useInput()
+void MainComponent::useInput (bool play)
 {
     if (engine == nullptr)
         return;
-    engine->useInput();   // silent until PLAY: a laptop's own mic beside its speakers would howl
+    engine->useInput (play);   // silent until PLAY: a laptop's own mic beside its speakers would howl
     properties.getUserSettings()->setValue ("sample", inputKey);
     riffNow = -1;
     repaint (strip());
@@ -762,7 +937,8 @@ void MainComponent::showSamples()
     menu.addItem (inputId, "INPUT (AUDIO INTERFACE)", true, engine->usingInput());
     menu.addSeparator();
     for (int i = 0; i < numRiffs; ++i)
-        menu.addItem (i + 1, riffs[i].title, true, i == riffNow);
+        if (riffFile (i).existsAsFile())
+            menu.addItem (i + 1, riffs[i].title, true, i == riffNow);
     menu.addSeparator();
     constexpr int fileId = 1000;
     menu.addItem (fileId, "OPEN A FILE...");
@@ -786,15 +962,17 @@ void MainComponent::openSample()
                           [this] (const juce::FileChooser& c) { if (c.getResult().existsAsFile()) loadSample (c.getResult()); });
 }
 
+bool MainComponent::isInterestedInFileDrag (const juce::StringArray&) { return player; }   // a sample for the player
+
 void MainComponent::filesDropped (const juce::StringArray& files, int, int)
 {
-    if (! files.isEmpty())
+    if (player && ! files.isEmpty())
         loadSample (juce::File (files[0]));
 }
 
 void MainComponent::showAudio()
 {
-    // The output, and the input INPUT plays: a device and its channels, the first one open heard.
+    // The output, and the input INPUT plays: a device and its channels, every one open heard, summed; opening one plays it.
     felitronics::appkit::AudioSettingsPanel::Options o;
     o.minInputs = 0;
     o.maxInputs = 2;
@@ -802,6 +980,26 @@ void MainComponent::showAudio()
     panel->setSize (460, 380);
     juce::CallOutBox::launchAsynchronously (std::move (panel), audioArea().translated (0, 0), this);
 }
+
+#if CABIR_LISTEN
+void MainComponent::showSetup()
+{
+    auto view = std::make_unique<SetupView> (PlayedTable::options(), PlayedTable::get().optionsOff(),
+                                             [this] (const std::vector<std::string>& off) { optionsChosen (off); });
+    juce::CallOutBox::launchAsynchronously (std::move (view), setupArea(), this);
+}
+
+void MainComponent::optionsChosen (const std::vector<std::string>& off)
+{
+    // The table without the options switched off, kept for the next run, and the cabinet heard through it.
+    PlayedTable::get().setOptionsOff (off);
+    juce::StringArray words;
+    for (const auto& n : off)
+        words.add (n);
+    properties.getUserSettings()->setValue ("optionsOff", words.joinIntoString (" "));
+    render (state, false);
+}
+#endif
 
 synth::WavMeta MainComponent::metaOf (const State& s) const
 {
@@ -834,7 +1032,7 @@ void MainComponent::download()
                               const auto file = c.getResult();
                               if (file == juce::File())
                                   return;
-                              static const auto table = synth::parseTable (std::string (BinaryData::cabinets_txt, (size_t) BinaryData::cabinets_txtSize));
+                              const auto& table = playedTable();
                               const auto wav = downloadWav (table, s, f, meta);
                               file.withFileExtension ("wav").replaceWithData (wav.data(), wav.size());
                           });
@@ -876,6 +1074,20 @@ void MainComponent::timerCallback()
 {
     history.tick();
     sound().flush();
+
+    // SPECTRUM: what plays and what goes in, while it is ticked, the EQ on or off — the feeds asked for them only then.
+    const bool on = picker.spectrumOn();
+    sound().spectrum().want (on);
+    sound().spectrumPre().want (on);
+    if (on)
+        picker.showSpectrum (spectrumView.tick (sound().spectrum()), spectrumPreView.tick (sound().spectrumPre()));
+    else if (spectrumShown)
+    {
+        picker.showSpectrum ({}, {});
+        spectrumView.reset();
+        spectrumPreView.reset();
+    }
+    spectrumShown = on;
 }
 
 void MainComponent::mouseMove (const juce::MouseEvent& e)
@@ -903,8 +1115,8 @@ bool MainComponent::keyPressed (const juce::KeyPress& key)
         return history.undo(), true;
     if (key == juce::KeyPress ('z', command | juce::ModifierKeys::shiftModifier, 0) || key == juce::KeyPress ('y', command, 0))
         return history.redo(), true;
-    // SPACE plays and stops the sample; the arrows step through the presets, as ◀ ▶ do (the owner, 05.11).
-    if (key == juce::KeyPress::spaceKey && engine != nullptr && engine->hasSample())
+    // SPACE plays and stops the sample (the player's); the arrows step through the presets, as ◀ ▶ do (the owner, 05.11).
+    if (key == juce::KeyPress::spaceKey && player && engine->hasSample())
     {
         engine->play (! engine->isPlaying());
         repaint (strip());
@@ -948,7 +1160,10 @@ juce::Rectangle<int> MainComponent::brandLink() const
 // ---------------------------------------------------------------- the strip
 juce::Rectangle<int> MainComponent::openArea() const    { return strip().reduced (8, 5).withWidth (70); }
 juce::Rectangle<int> MainComponent::playArea() const    { return openArea().translated (78, 0).withWidth (70); }
-juce::Rectangle<int> MainComponent::sampleArea() const  { return playArea().translated (78, 0).withWidth (300); }
+juce::Rectangle<int> MainComponent::sampleArea() const   // the sample after OPEN and PLAY; with no player, the input first
+{
+    return (player ? playArea().translated (78, 0) : openArea()).withWidth (300);
+}
 juce::Rectangle<int> MainComponent::audioArea() const   { return versionArea().translated (-82, 0).withWidth (74); }
 
 juce::Rectangle<int> MainComponent::bypassWordArea() const   // after the sample, BYPASS; a plugin's first in the strip
@@ -978,7 +1193,7 @@ void MainComponent::playHeard()
     const auto now = hearing();
     const auto& ir = now == Hear::a ? irA : now == Hear::b ? irB : irMix;
     if (! ir.empty())
-        sound().setIr (ir, 48000.0);
+        sound().setIr (ir, 48000.0, now == Hear::a ? levelA : now == Hear::b ? levelB : levelMix);
     sound().setBypass (now == Hear::bypass);
 }
 juce::Rectangle<int> MainComponent::versionArea() const { return strip().reduced (8, 5).removeFromRight (70); }
@@ -1101,26 +1316,42 @@ void MainComponent::paint (juce::Graphics& g)
         button (bypassWords[2], hearArea (2), offA && offB);
     }
 
-    if (engine != nullptr)   // the app's player; a plugin's track plays through it, set in the host
+    if (engine != nullptr)   // the app's input and, where its riffs are, its player; a plugin's track plays through it
     {
-        button ("OPEN", openArea(), false);
-        if (engine->hasSample())
-            button (engine->isPlaying() ? "STOP" : "PLAY", playArea(), engine->isPlaying());
+        if (player)
+        {
+            button ("OPEN", openArea(), false);
+            if (engine->hasSample())
+                button (engine->isPlaying() ? "STOP" : "PLAY", playArea(), engine->isPlaying());
+        }
         button ("AUDIO", audioArea(), false);
+#if CABIR_LISTEN
+        button ("SETUP", setupArea(), false);
+#endif
 
-        // The sample: a box like the preset's, its menu the riffs we carry and a file of the player's own.
+        // The sample: a box like the preset's, its menu the riffs we carry and a file of the player's own; without the
+        // player, the input alone, a click on it AUDIO.
         const auto sa = sampleArea().toFloat().reduced (0.5f);
         g.setColour (look().panel2);
         g.fillRoundedRectangle (sa, 4.0f);
         g.setColour (look().txFaint);
         g.drawRoundedRectangle (sa, 4.0f, 1.0f);
-        g.setColour (engine->hasSample() ? look().tx : look().txFaint);
-        const auto source = engine->usingInput() ? "INPUT: " + (engine->inputName().isNotEmpty() ? engine->inputName().toUpperCase() : juce::String ("NONE, SEE AUDIO"))
-                          : engine->hasSample()  ? engine->sampleName().toUpperCase()
-                                                 : juce::String ("DROP A ") + flavour::sampleWord + " SAMPLE ON THE WINDOW";
-        look().drawTracked (g, source,
-                            sa.reduced (10.0f, 0.0f), font, 0.06f, juce::Justification::centredLeft);
-        look().drawTracked (g, juce::String::fromUTF8 ("\xe2\x96\xbe"), sa.reduced (10.0f, 0.0f), font, 0.0f, juce::Justification::centredRight);
+        const auto input = "INPUT: " + (engine->inputName().isNotEmpty() ? engine->inputName().toUpperCase() : juce::String ("NONE, SEE AUDIO"));
+        if (player)
+        {
+            g.setColour (engine->hasSample() ? look().tx : look().txFaint);
+            const auto source = engine->usingInput() ? input
+                              : engine->hasSample()  ? engine->sampleName().toUpperCase()
+                                                     : juce::String ("DROP A ") + flavour::sampleWord + " SAMPLE ON THE WINDOW";
+            look().drawTracked (g, source,
+                                sa.reduced (10.0f, 0.0f), font, 0.06f, juce::Justification::centredLeft);
+            look().drawTracked (g, juce::String::fromUTF8 ("\xe2\x96\xbe"), sa.reduced (10.0f, 0.0f), font, 0.0f, juce::Justification::centredRight);
+        }
+        else
+        {
+            g.setColour (engine->inputName().isNotEmpty() ? look().tx : look().txFaint);
+            look().drawTracked (g, input, sa.reduced (10.0f, 0.0f), font, 0.06f, juce::Justification::centredLeft);
+        }
     }
 
     g.setColour (checker.updateAvailable() ? look().orange : look().txDim);
@@ -1164,17 +1395,21 @@ void MainComponent::mouseDown (const juce::MouseEvent& e)
             history.switchTo (reg);
         repaint (header());
     }
-    else if (engine != nullptr && openArea().contains (p))
+    else if (player && openArea().contains (p))
         openSample();
-    else if (engine != nullptr && sampleArea().contains (p))
+    else if (player && sampleArea().contains (p))
         showSamples();
-    else if (engine != nullptr && playArea().contains (p) && engine->hasSample())
+    else if (player && playArea().contains (p) && engine->hasSample())
     {
         engine->play (! engine->isPlaying());
         repaint (strip());
     }
-    else if (engine != nullptr && audioArea().contains (p))
+    else if (engine != nullptr && (audioArea().contains (p) || sampleArea().contains (p)))   // the input's box: AUDIO, without the player
         showAudio();
+#if CABIR_LISTEN
+    else if (engine != nullptr && setupArea().contains (p))
+        showSetup();
+#endif
     else if (const int h = [&] { for (int i = 0; i < 3; ++i) if (hearArea (i).contains (p)) return i; return -1; }(); h >= 0)
     {
         if (h < 2 && (irA.empty() || irB.empty()))

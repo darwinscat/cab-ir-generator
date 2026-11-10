@@ -34,7 +34,7 @@ namespace cabir::synth::green
 constexpr double apartRadii = 0.5;   // B at least this far across from A
 constexpr double greenDb = -3.0;     // a worst point above this: the band green
 constexpr double pitDb = 3.0;        // the response at most this far under its neighbours: where the panel's line reddens
-                                     // (the bass's; a table's own, synth::pitRedOf — the guitar's 5 — where it says one)
+                                     // (the bass's; a table's own, synth::pitRedOf — the guitar's 7 — where it says one)
 
 /** How far the response falls under its own third of an octave either side, 40 Hz to 8 kHz, at its worst. */
 inline double pitOf (const std::vector<double>& db)
