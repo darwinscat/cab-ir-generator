@@ -45,6 +45,9 @@ All notable changes to **Orbit Bass Cab Builder** and **Orbit Guitar Cab Builder
 - **WALL fainter, with the open back as measured**: the guitar's open back now heard low down as measured open combos
   are, half and shadowed by the box, the wall's reflection keeps its low end whole, coming round the box from a metre
   behind — 0.2-0.8 dB at 65-120 Hz on the open and half-closed boxes, the most on HALF, where 0.2.0 gave 1-2 dB.
+- **The guitar's TOP 12 picked again**, the brightest and densest of Rock, Metal and Punk as the forty now sound, eight of
+  them 4x12s: ANVIL, RIOT, SNEER, PRISM, VENOM, SHINE, FORGE, SPIKE, and 2x10 BARK, 2x12 QUAKE, 1x10 GIANT, 4x10 POGO.
+  GRIT, SHADOW, INVASION, SNARL and HAYMAKER leave it, kept in their styles.
 
 ## [0.2.0] — 2026-11-08 — two builders, their plugins, and a window in 16:9
 
