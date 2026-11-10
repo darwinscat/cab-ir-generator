@@ -1,0 +1,52 @@
+name = "TOP 12: 4x12 WRECK"
+style = "Top 12"
+cabir = 1
+box = "4x12-closed"
+back = "open"
+speaker = "bright"
+wall = true
+cone = "paper"
+horn = false
+horn_db = 0
+blend = 0.472
+align = true
+invert = false
+
+[mic.a]
+on = true
+model = "md421"
+x = -0.162
+y = -0.114
+distance = 0.030
+angle = 0.0
+
+[mic.b]
+on = true
+model = "u87"
+x = 0.987
+y = 0.068
+distance = 0.120
+angle = 0.0
+shift = -0.050
+
+[eq]
+on = true
+high_pass = 59
+low_pass = 8297
+high_pass_slope = 48
+low_pass_slope = 12
+
+[eq.bell1]
+hz = 250
+db = 0.0
+q = 1.00
+
+[eq.bell2]
+hz = 800
+db = 0.0
+q = 1.00
+
+[eq.bell3]
+hz = 3500
+db = 0.0
+q = 1.00

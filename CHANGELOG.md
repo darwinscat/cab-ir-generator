@@ -8,6 +8,11 @@ All notable changes to **Orbit Bass Cab Builder** and **Orbit Guitar Cab Builder
 
 ## [Unreleased]
 
+### Changed
+- **The guitar's TOP 12 are twelve new cabinets**, made by ear in OrbitAmp: 4x12 ROAR, STEEL, CRATER, THUNDER and BLADE,
+  2x12 TOTEM, 1x10 PUNCH and BUZZ, 4x12 VENOM, RUMBLE, WRECK and IRON. Most carry their own EQ. VENOM is still the one
+  of Metal; the other eleven are no longer among the forty.
+
 ## [0.3.1] — 2026-11-10 — the builders beside the amps
 
 0.3.0's builders, released: the same apps and plugins, installed where the family's are.

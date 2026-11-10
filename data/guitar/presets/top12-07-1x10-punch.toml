@@ -1,0 +1,51 @@
+name = "TOP 12: 1x10 PUNCH"
+style = "Top 12"
+cabir = 1
+box = "1x10-open"
+back = "open"
+speaker = "mid"
+cone = "paper"
+horn = false
+horn_db = 0
+blend = 0.500
+align = true
+invert = false
+
+[mic.a]
+on = true
+model = "sm57"
+x = -0.250
+y = 0.000
+distance = 0.020
+angle = 0.0
+
+[mic.b]
+on = true
+model = "e906"
+x = -0.150
+y = 0.000
+distance = 0.156
+angle = 45.0
+shift = 0.000
+
+[eq]
+on = true
+high_pass = 67
+low_pass = 7605
+high_pass_slope = 6
+low_pass_slope = 6
+
+[eq.bell1]
+hz = 250
+db = 0.0
+q = 1.00
+
+[eq.bell2]
+hz = 800
+db = 0.0
+q = 1.00
+
+[eq.bell3]
+hz = 3500
+db = 0.0
+q = 1.00
