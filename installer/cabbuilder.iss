@@ -79,8 +79,13 @@ Source: "{#SourceDir}\VST3\{#AppName}.vst3\*"; DestDir: "{commoncf64}\VST3\{#App
 ; A CLAP is one file on Windows.
 Source: "{#SourceDir}\CLAP\{#AppName}.clap"; DestDir: "{commoncf64}\CLAP"; Flags: ignoreversion; Components: clap
 
+; The Start menu's shortcut in the family's group, Darwin's Cat, beside the amps' (from 0.3.1); the one an earlier
+; release left at the menu's top goes.
+[InstallDelete]
+Type: files; Name: "{autoprograms}\{#AppName}.lnk"
+
 [Icons]
-Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppName}.exe"; Components: app
+Name: "{autoprograms}\Darwin's Cat\{#AppName}"; Filename: "{app}\{#AppName}.exe"; Components: app
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{commoncf64}\VST3\{#AppName}.vst3"

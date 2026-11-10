@@ -3,8 +3,8 @@
 # Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko & Alisa Lafoks. Part of Orbit Bass Cab Builder and Orbit Guitar Cab Builder — see LICENSE.
 #
 # THE macOS FILES OF A RELEASE — an installer for each instrument, OrbitBassCabBuilder-<ver>-macOS.pkg and
-# OrbitGuitarCabBuilder-<ver>-macOS.pkg: its app into /Applications, its plugins (VST3, AU, CLAP) into
-# /Library/Audio/Plug-Ins, for Apple silicon and Intel alike.
+# OrbitGuitarCabBuilder-<ver>-macOS.pkg: its app into /Applications/Darwin's Cat, beside the family's amps, its
+# plugins (VST3, AU, CLAP) into /Library/Audio/Plug-Ins, for Apple silicon and Intel alike.
 #
 #   installer/macos-release.sh <build-dir> <version> <out-dir>
 #
@@ -72,12 +72,31 @@ for b in "${bundles[@]}"; do
 done
 
 # A package for each instrument: installed where it is staged, never moved onto an older copy found elsewhere.
+# THE APPS OF EARLIER RELEASES STOOD IN /Applications ITSELF (up to 0.3.0); now in the family's folder there. Once the
+# app is in its folder, the one of the same name left in /Applications goes — only when it is this builder's, by its
+# bundle id, so an app of somebody else's that happens to carry the name stays (the amps' installer does the same).
 for inst in Bass Guitar; do
     stage="$WORK/stage-$inst"
     plugins="$stage/Library/Audio/Plug-Ins"
-    mkdir -p "$stage/Applications" "$plugins/VST3" "$plugins/Components" "$plugins/CLAP"
+    mkdir -p "$stage/Applications/Darwin's Cat" "$plugins/VST3" "$plugins/Components" "$plugins/CLAP"
     p="$(plug "$inst")"
-    cp -R "$(app "$inst")" "$stage/Applications/"
+    cp -R "$(app "$inst")" "$stage/Applications/Darwin's Cat/"
+
+    lower="$(echo "$inst" | tr '[:upper:]' '[:lower:]')"
+    scripts="$WORK/scripts-$inst"
+    mkdir -p "$scripts"
+    cat > "$scripts/postinstall" <<EOF
+#!/bin/sh
+# The app is in /Applications/Darwin's Cat: its copy of an earlier release, in /Applications itself, goes.
+# \$3 is the volume being installed on ("/" for the startup disk).
+[ -n "\${3:-}" ] || exit 0
+old="\${3%/}/Applications/Orbit $inst Cab Builder.app"
+if [ -d "\$old" ] && [ "\$(/usr/bin/plutil -extract CFBundleIdentifier raw "\$old/Contents/Info.plist" 2>/dev/null)" = "com.darwinscat.orbit${lower}cabbuilder" ]; then
+  /bin/rm -rf "\$old" && echo "removed \$old"
+fi
+exit 0
+EOF
+    chmod 755 "$scripts/postinstall"
     cp -R "$p/VST3/Orbit $inst Cab Builder.vst3" "$plugins/VST3/"
     cp -R "$p/AU/Orbit $inst Cab Builder.component" "$plugins/Components/"
     cp -R "$p/CLAP/Orbit $inst Cab Builder.clap" "$plugins/CLAP/"
@@ -93,9 +112,8 @@ for i in items:
     i['BundleOverwriteAction'] = 'upgrade'
 plistlib.dump(items, open(p, 'wb'))
 EOF
-    lower="$(echo "$inst" | tr '[:upper:]' '[:lower:]')"
     pkg="$OUT/Orbit${inst}CabBuilder-$VER-macOS.pkg"
-    pkgbuild --root "$stage" --install-location / --component-plist "$plist" \
+    pkgbuild --root "$stage" --install-location / --component-plist "$plist" --scripts "$scripts" \
         --identifier "com.darwinscat.orbit${lower}cabbuilder.pkg" --version "$VER" \
         --sign "$INST_ID" --timestamp "$pkg"
     xcrun notarytool submit "$pkg" --keychain-profile "$NOTARY" --keychain "$KEYCHAIN" --wait
