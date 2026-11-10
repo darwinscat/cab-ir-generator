@@ -1,39 +1,40 @@
-name = "TOP 12: 4x12 RUMBLE"
+name = "TOP 12: 4x12 SELFISH GENE"
 style = "Top 12"
 cabir = 1
 box = "4x12-closed"
 back = "open"
-speaker = "mid"
+speaker = "scoop"
+wall = true
 cone = "paper"
 horn = false
 horn_db = 0
-blend = 0.350
+blend = 0.500
 align = true
 invert = false
 
 [mic.a]
 on = true
-model = "md421"
-x = -0.207
-y = -0.037
-distance = 0.030
+model = "sm57"
+x = 0.366
+y = -0.187
+distance = 0.032
 angle = 0.0
 
 [mic.b]
 on = true
-model = "ribbon"
-x = 0.400
-y = 0.000
-distance = 0.120
+model = "e906"
+x = -0.308
+y = -0.130
+distance = 0.020
 angle = 0.0
 shift = 0.000
 
 [eq]
 on = true
-high_pass = 58
-low_pass = 8078
+high_pass = 77
+low_pass = 6795
 high_pass_slope = 48
-low_pass_slope = 12
+low_pass_slope = 24
 
 [eq.bell1]
 hz = 250

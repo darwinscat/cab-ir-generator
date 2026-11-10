@@ -1,38 +1,38 @@
-name = "TOP 12: 4x12 IRON"
+name = "TOP 12: 1x10 BEAGLE 2"
 style = "Top 12"
 cabir = 1
-box = "4x12-closed"
-back = "closed"
+box = "1x10-open"
+back = "open"
 speaker = "mid"
 cone = "paper"
 horn = false
 horn_db = 0
-blend = 0.371
+blend = 0.500
 align = true
 invert = false
 
 [mic.a]
 on = true
-model = "u87"
-x = -0.087
-y = -0.279
-distance = 0.032
+model = "sm57"
+x = -0.250
+y = 0.000
+distance = 0.020
 angle = 0.0
 
 [mic.b]
 on = true
 model = "e906"
-x = 0.263
-y = 0.043
-distance = 0.054
-angle = 0.0
+x = -0.150
+y = 0.000
+distance = 0.020
+angle = 60.0
 shift = 0.000
 
 [eq]
 on = true
-high_pass = 85
-low_pass = 5332
-high_pass_slope = 48
+high_pass = 80
+low_pass = 6748
+high_pass_slope = 24
 low_pass_slope = 12
 
 [eq.bell1]

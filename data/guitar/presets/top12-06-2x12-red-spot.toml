@@ -1,39 +1,39 @@
-name = "TOP 12: 4x12 BLADE"
+name = "TOP 12: 2x12 RED SPOT"
 style = "Top 12"
 cabir = 1
-box = "4x12-closed"
-back = "closed"
-speaker = "snap"
+box = "2x12-vertical"
+back = "open"
+speaker = "mid"
 cone = "paper"
 horn = false
 horn_db = 0
-blend = 0.250
-align = true
+blend = 0.350
+align = false
 invert = false
 
 [mic.a]
 on = true
 model = "md421"
-x = 0.037
-y = -0.116
-distance = 0.018
+x = -0.097
+y = -0.191
+distance = 0.300
 angle = 0.0
 
 [mic.b]
 on = true
-model = "ribbon"
-x = 0.194
-y = -0.162
+model = "e906"
+x = 0.143
+y = -0.155
 distance = 0.120
 angle = 0.0
-shift = 0.000
+shift = 0.500
 
 [eq]
 on = true
-high_pass = 87
-low_pass = 5962
-high_pass_slope = 48
-low_pass_slope = 12
+high_pass = 67
+low_pass = 7605
+high_pass_slope = 6
+low_pass_slope = 6
 
 [eq.bell1]
 hz = 250
