@@ -1142,26 +1142,26 @@ inline std::vector<double> render (const Cab& c, size_t n, size_t threads = 0)
                     double r, dx, dy, dz;
                     pathTo (c.drivers[d].x, mirrored (img, c.drivers[d].y), -c.depth, r, dx, dy, dz);
                     const double block = std::clamp (1 - 2 / pi * (disc - z * std::atan (disc / z)) * r / (c.depth * c.depth), 0.2, 1.0);
+                    // The guitar's full low end: whole and unshadowed under the baffle's step, half and blocked over it.
+                    const auto share = [&] (double blocked) { return (0.5 + 0.5 * low) * (blocked + (1 - blocked) * low); };
                     if (! c.openFullLow)
                         sum -= floorBy * cone * pipe * coil[k] * c.sens[d] * 0.5 * block * (r0 / r) * (c.half ? halfOut : lowpass1 (f, c.openLp))
                              * heard (c, mic, dx, dy, dz, f) * std::polar (1.0, -2 * pi * f * (r / c0 - minDelay));
                     else
-                    {
-                        // The guitar's: whole and unshadowed under the baffle's step, half and blocked over it.
-                        const auto share = [&] (double blocked) { return (0.5 + 0.5 * low) * (blocked + (1 - blocked) * low); };
                         sum -= floorBy * cone * pipe * coil[k] * c.sens[d] * share (block) * (r0 / r) * (c.half ? halfOut : lowpass1 (f, c.openLp))
                              * heard (c, mic, dx, dy, dz, f) * std::polar (1.0, -2 * pi * f * (r / c0 - minDelay));
-                        // ...and off the wall behind, where there is one: the back's image beyond it, round the box.
-                        // (A room's back wall stands in for it: cabAt leaves wallM nought with a room.)
-                        if (c.wallM > 0)
-                        {
-                            double rw, wx, wy, wz;
-                            pathTo (c.drivers[d].x, mirrored (img, c.drivers[d].y), -c.depth - 2 * c.wallM, rw, wx, wy, wz);
-                            const double blockW = std::clamp (1 - 2 / pi * (disc - z * std::atan (disc / z)) * rw / (c.depth * c.depth), 0.2, 1.0);
-                            sum -= floorBy * c.wallRefl * cone * pipe * coil[k] * c.sens[d] * share (blockW) * (r0 / rw)
-                                 * (c.half ? halfOut : lowpass1 (f, c.openLp)) * heard (c, mic, wx, wy, wz, f)
-                                 * std::polar (1.0, -2 * pi * f * (rw / c0 - minDelay));
-                        }
+                    // ...and off the wall behind, where there is one: the back's image beyond it, round the box, heard as
+                    // the back is — with the full low end or without it (since 08.11 the guitar's is without, and WALL
+                    // lived only with it: switched, it changed nothing; the owner, 10.11).
+                    // (A room's back wall stands in for it: cabAt leaves wallM nought with a room.)
+                    if (c.wallM > 0)
+                    {
+                        double rw, wx, wy, wz;
+                        pathTo (c.drivers[d].x, mirrored (img, c.drivers[d].y), -c.depth - 2 * c.wallM, rw, wx, wy, wz);
+                        const double blockW = std::clamp (1 - 2 / pi * (disc - z * std::atan (disc / z)) * rw / (c.depth * c.depth), 0.2, 1.0);
+                        sum -= floorBy * c.wallRefl * cone * pipe * coil[k] * c.sens[d] * (c.openFullLow ? share (blockW) : 0.5 * blockW) * (r0 / rw)
+                             * (c.half ? halfOut : lowpass1 (f, c.openLp)) * heard (c, mic, wx, wy, wz, f)
+                             * std::polar (1.0, -2 * pi * f * (rw / c0 - minDelay));
                     }
                 }
             if (c.roomW > 0)   // the back's sound in the room too: out behind the box, half of it over the baffle's step
