@@ -42,6 +42,9 @@ All notable changes to **Orbit Bass Cab Builder** and **Orbit Guitar Cab Builder
   ANVIL, PRISM, POGO, SNEER: the ones paper changes least or brightens); the mics moved where paper opened a pit or a comb.
 - **Eight Fredman pairs among the guitar's presets**, as FRED puts them: Metal's VENOM, SPIKE, SHADOW, HAVOC and FANG, Rock's
   BLAZE and TOWER, Punk's SQUAT — each on its own box and speaker, so no two are one IR.
+- **WALL fainter, with the open back as measured**: the guitar's open back now heard low down as measured open combos
+  are, half and shadowed by the box, the wall's reflection keeps its low end whole, coming round the box from a metre
+  behind — 0.2-0.8 dB at 65-120 Hz on the open and half-closed boxes, the most on HALF, where 0.2.0 gave 1-2 dB.
 
 ## [0.2.0] — 2026-11-08 — two builders, their plugins, and a window in 16:9
 
