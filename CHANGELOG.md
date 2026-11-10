@@ -8,6 +8,8 @@ All notable changes to **Orbit Bass Cab Builder** and **Orbit Guitar Cab Builder
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-11-10 — an EQ in the IR, FRED, and forty presets a builder
+
 ### Removed
 - **The guitar's Clean style**: its twenty presets were jazz and country, far from the rock the builder is for. A clean
   sound for rock stays in Blues and Indie, on the same open 1x12 and 2x12. 140 presets in seven styles, and the TOP 12.
@@ -38,6 +40,12 @@ All notable changes to **Orbit Bass Cab Builder** and **Orbit Guitar Cab Builder
   2x12 and 2x10 combos, no horn, vintage mics (U47, ribbon, RE20), each off its pits.
 
 ### Changed
+- **The guitar's cabinets as measured**, against 27 packs of real cabinets, like for like: the cap and the coil speaking on
+  past the paper's cliff (a shelf at 7.5-10 kHz), the top ringing on after the breakup, a closed box ringing in its mids
+  and sending its back out through the cone, its hump lower than a sealed box's, each open box its own, the open back heard
+  low down half and shadowed as measured open combos are; the speakers lower in Q, the mics' proximity gentler, a capsule's
+  top lost off its axis, the E906 darker than the SM57 up top and the MD421 open past it; the speakers' difference where
+  the real twelves keep it, the ribbon as measured, the 4x12's air at 8 kHz. The guitar's line reddens with a pit from 7 dB.
 - **The guitar's presets on the PAPER cone**: 32 of the forty, two a style left without (TEXAS, HARP, HAYMAKER, BARK,
   ANVIL, PRISM, POGO, SNEER: the ones paper changes least or brightens); the mics moved where paper opened a pit or a comb.
 - **Eight Fredman pairs among the guitar's presets**, as FRED puts them: Metal's VENOM, SPIKE, SHADOW, HAVOC and FANG, Rock's
@@ -48,6 +56,8 @@ All notable changes to **Orbit Bass Cab Builder** and **Orbit Guitar Cab Builder
 - **The guitar's TOP 12 picked again**, the brightest and densest of Rock, Metal and Punk as the forty now sound, eight of
   them 4x12s: ANVIL, RIOT, SNEER, PRISM, VENOM, SHINE, FORGE, SPIKE, and 2x10 BARK, 2x12 QUAKE, 1x10 GIANT, 4x10 POGO.
   GRIT, SHADOW, INVASION, SNARL and HAYMAKER leave it, kept in their styles.
+- **The guitar's typical cabinets spread again** on the cabinets as they now sound: six of the seventeen had come to comb
+  3-4 dB low down, a red line; none does now.
 
 ## [0.2.0] — 2026-11-08 — two builders, their plugins, and a window in 16:9
 
