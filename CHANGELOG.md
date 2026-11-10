@@ -8,7 +8,20 @@ All notable changes to **Orbit Bass Cab Builder** and **Orbit Guitar Cab Builder
 
 ## [Unreleased]
 
+## [0.3.1] — 2026-11-10 — the builders beside the amps
+
+0.3.0's builders, released: the same apps and plugins, installed where the family's are.
+
+### Changed
+- **On macOS the apps install to /Applications/Darwin's Cat**, beside the Darwin's Cat amps. The copy an earlier
+  release left in /Applications itself is removed when the new one is in place, only if it is this builder's.
+- **On Windows the Start menu shortcut is in the Darwin's Cat group**, with the amps'; the one an earlier release left
+  at the top of the menu goes.
+
 ## [0.3.0] — 2026-11-10 — an EQ in the IR, FRED, and forty presets a builder
+
+Tagged, never released: its macOS installers could not be signed. Everything it brought ships in 0.3.1.
+
 
 ### Removed
 - **The guitar's Clean style**: its twenty presets were jazz and country, far from the rock the builder is for. A clean
