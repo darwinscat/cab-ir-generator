@@ -1150,16 +1150,17 @@ inline std::vector<double> render (const Cab& c, size_t n, size_t threads = 0)
                     else
                         sum -= floorBy * cone * pipe * coil[k] * c.sens[d] * share (block) * (r0 / r) * (c.half ? halfOut : lowpass1 (f, c.openLp))
                              * heard (c, mic, dx, dy, dz, f) * std::polar (1.0, -2 * pi * f * (r / c0 - minDelay));
-                    // ...and off the wall behind, where there is one: the back's image beyond it, round the box, heard as
-                    // the back is — with the full low end or without it (since 08.11 the guitar's is without, and WALL
-                    // lived only with it: switched, it changed nothing; the owner, 10.11).
+                    // ...and off the wall behind, where there is one: the back's image beyond it, round the box — always
+                    // with the full low end, whatever the back's own: from a metre and more behind the box its long waves
+                    // wrap round it unshadowed (the owner, 10.11: since 08.11 the back's own is without, and WALL, kept
+                    // with it, changed nothing; as the back's own it moved 0.1 dB, so it does 0.2-0.8 dB at 65-120 Hz).
                     // (A room's back wall stands in for it: cabAt leaves wallM nought with a room.)
                     if (c.wallM > 0)
                     {
                         double rw, wx, wy, wz;
                         pathTo (c.drivers[d].x, mirrored (img, c.drivers[d].y), -c.depth - 2 * c.wallM, rw, wx, wy, wz);
                         const double blockW = std::clamp (1 - 2 / pi * (disc - z * std::atan (disc / z)) * rw / (c.depth * c.depth), 0.2, 1.0);
-                        sum -= floorBy * c.wallRefl * cone * pipe * coil[k] * c.sens[d] * (c.openFullLow ? share (blockW) : 0.5 * blockW) * (r0 / rw)
+                        sum -= floorBy * c.wallRefl * cone * pipe * coil[k] * c.sens[d] * share (blockW) * (r0 / rw)
                              * (c.half ? halfOut : lowpass1 (f, c.openLp)) * heard (c, mic, wx, wy, wz, f)
                              * std::polar (1.0, -2 * pi * f * (rw / c0 - minDelay));
                     }
