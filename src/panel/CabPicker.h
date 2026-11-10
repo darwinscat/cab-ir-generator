@@ -83,6 +83,19 @@ public:
         Panel::paintSketch (drawn, cab, setup, { area.getX(), area.getY(), area.getWidth(), area.getHeight() });
     }
 
+    /** ...the box alone, at the right of `area` and as tall as it, its mics twice the size (Panel::paintBoxSketch), the
+        whole of it at `opacity` so the IR shows through — OrbitAmp's CAB (the owner, 10.11). */
+    static void paintBoxSketch (juce::Graphics& g, int cab, const Setup& setup, juce::Rectangle<float> area, float opacity = 0.85f)
+    {
+        useHostLook();
+        g.beginTransparencyLayer (opacity);
+        {
+            Drawn drawn (g);
+            Panel::paintBoxSketch (drawn, cab, setup, { area.getX(), area.getY(), area.getWidth(), area.getHeight() });
+        }
+        g.endTransparencyLayer();
+    }
+
     /** One box alone in `box`, as the pile draws it unchosen: its speakers, its own back's port, its horn — no mics. */
     static void paintBox (juce::Graphics& g, int cab, juce::Rectangle<float> box)
     {
