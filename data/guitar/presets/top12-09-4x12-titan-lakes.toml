@@ -1,9 +1,9 @@
-name = "TOP 12: 4x12 SPIKE"
+name = "TOP 12: 4x12 TITAN LAKES"
 style = "Top 12"
 cabir = 1
 box = "4x12-closed"
 back = "closed"
-speaker = "bright"
+speaker = "scoop"
 cone = "paper"
 horn = false
 horn_db = 0

@@ -1,0 +1,52 @@
+name = "TOP 12: 4x12 GREEN MARS"
+style = "Top 12"
+cabir = 1
+box = "4x12-closed"
+back = "half"
+speaker = "flat"
+wall = true
+cone = "paper"
+horn = false
+horn_db = 0
+blend = 0.500
+align = true
+invert = false
+
+[mic.a]
+on = true
+model = "e906"
+x = -0.254
+y = 0.053
+distance = 0.020
+angle = 0.0
+
+[mic.b]
+on = true
+model = "md421"
+x = 0.147
+y = 0.102
+distance = 0.040
+angle = 0.0
+shift = 0.000
+
+[eq]
+on = true
+high_pass = 82
+low_pass = 7442
+high_pass_slope = 48
+low_pass_slope = 24
+
+[eq.bell1]
+hz = 250
+db = 0.0
+q = 1.00
+
+[eq.bell2]
+hz = 800
+db = 0.0
+q = 1.00
+
+[eq.bell3]
+hz = 3500
+db = 0.0
+q = 1.00

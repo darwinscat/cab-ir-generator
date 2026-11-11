@@ -6,7 +6,13 @@ All notable changes to **Orbit Bass Cab Builder** and **Orbit Guitar Cab Builder
 [Keep a Changelog](https://keepachangelog.com/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.4.0] — 2026-11-11 — a new guitar TOP 12
+
+### Changed
+- **The guitar's TOP 12 are twelve new cabinets**, made by ear in OrbitAmp and named for genes and the solar system:
+  4x12 SELFISH GENE, ANCESTOR'S TALE, GREEN MARS, MOONBOW and NEPTUNE'S ARCS, 2x12 RED SPOT, 1x12 TIKTAALIK, 1x10 BEAGLE 2,
+  4x12 TITAN LAKES, KUIPER BELT, QUANTUM LEAP and SUPERSTRING. Most carry their own EQ. TITAN LAKES is Metal's VENOM;
+  the other eleven are not among the forty.
 
 ## [0.3.1] — 2026-11-10 — the builders beside the amps
 

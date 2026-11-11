@@ -1946,7 +1946,7 @@ public:
         unless `plainFrame`; its tolex `body` opaque — the block's picture draws it over its IR (paintSketch) with the IR
         showing through, in a plain frame: alone there, it has nothing to be told from. */
     static void paintCab (ui::Graphics& g, const Cab& c, ui::Rectangle<float> box, const Setup& setup, bool isChosen, bool isHover,
-                          float body = 1.0f, bool plainFrame = false, bool hornHover = false)
+                          float body = 1.0f, bool plainFrame = false, bool hornHover = false, float micDot = 5.0f)
     {
         const float s = box.getWidth() / c.w;
 
@@ -1998,7 +1998,7 @@ public:
                     continue;
                 const auto& sp = m == 0 ? setup.a : setup.b;
                 g.setColour (m == 0 ? ui::look().orange : ui::look().lilac);
-                g.fillEllipse (ui::Rectangle<float> (5, 5).withCentre (o + ui::Point<float> (sp.x * r, -sp.y * r)));
+                g.fillEllipse (ui::Rectangle<float> (micDot, micDot).withCentre (o + ui::Point<float> (sp.x * r, -sp.y * r)));
             }
         }
     }
@@ -2089,6 +2089,23 @@ public:
 
         paintCone (g, o, R, 0.55f);
         paintMicsOn (g, c, setup, o, R, R / 80.0f);   // the panel's speaker is about 80 px across its radius
+    }
+
+    /** THE CABINET THAT PLAYS, THE BOX ALONE, at the right of `area` and as tall as it (OrbitAmp's CAB, the owner, 10.11):
+        no speaker beside it, its mics' dots on its first speaker twice the pile's; its tolex see-through, as the sketch's
+        (the host lays the whole of it a little see-through over the IR: CabPicker::paintBoxSketch). Every box at one
+        scale, the tallest as tall as the area, clear of the picture's dB marks at the right. */
+    static void paintBoxSketch (ui::Graphics& g, int cab, const Setup& setup, ui::Rectangle<float> area)
+    {
+        if (cab < 0 || cab >= (int) cabs().size())
+            return;
+
+        const auto& c = cabs()[(size_t) cab];
+        static const auto tallest = [] { float h = 0.0f, w = 0.0f; for (const auto& b : cabs()) { h = ui::jmax (h, b.h); w = ui::jmax (w, b.w); } return ui::Point<float> (w, h); }();
+        const float right = area.getRight() - 28.0f;   // clear of the picture's dB marks
+        const float s = ui::jmin (area.getHeight() / tallest.y, 0.5f * area.getWidth() / tallest.x);
+        paintCab (g, c, ui::Rectangle<float> (c.w * s, c.h * s).withPosition (right - c.w * s, area.getBottom() - c.h * s),   // on the floor
+                  setup, true, false, 0.55f, true, false, 10.0f);
     }
 
 private:
