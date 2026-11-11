@@ -1,13 +1,13 @@
-name = "TOP 12: 1x10 TIKTAALIK"
+name = "TOP 12: 1x12 TIKTAALIK"
 style = "Top 12"
 cabir = 1
-box = "1x10-open"
+box = "1x12-open"
 back = "open"
 speaker = "mid"
 cone = "paper"
 horn = false
 horn_db = 0
-blend = 0.500
+blend = 0.679
 align = true
 invert = false
 
@@ -22,11 +22,11 @@ angle = 0.0
 [mic.b]
 on = true
 model = "e906"
-x = -0.150
+x = 0.400
 y = 0.000
-distance = 0.156
+distance = 0.120
 angle = 45.0
-shift = 0.000
+shift = -0.050
 
 [eq]
 on = true
