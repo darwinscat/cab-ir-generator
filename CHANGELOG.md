@@ -6,7 +6,7 @@ All notable changes to **Orbit Bass Cab Builder** and **Orbit Guitar Cab Builder
 [Keep a Changelog](https://keepachangelog.com/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.4.0] — 2026-11-11 — a new guitar TOP 12
 
 ### Changed
 - **The guitar's TOP 12 are twelve new cabinets**, made by ear in OrbitAmp and named for genes and the solar system:
