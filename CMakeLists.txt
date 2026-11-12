@@ -9,7 +9,7 @@ cmake_minimum_required(VERSION 3.22)
 set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "The oldest macOS the binaries run on")
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
-project(cab_ir_generator VERSION 0.4.0 LANGUAGES C CXX)
+project(cab_ir_generator VERSION 0.4.1 LANGUAGES C CXX)
 
 include(FetchContent)
 
@@ -144,7 +144,7 @@ endif()
 
 if(CABIR_APP)
     # JUCE, pinned as the family's plugins pin it; a local tree first.
-    set(CABIR_JUCE_TAG "8.0.16-security" CACHE STRING "JUCE git tag to build against")
+    set(CABIR_JUCE_TAG "8.0.17-security" CACHE STRING "JUCE git tag to build against")
     set(CABIR_JUCE_DIR "$ENV{HOME}/IdeaProjects/orbit-capture/app/tests/build/_deps/juce-src"
         CACHE PATH "Local JUCE source tree (used if present); else the pin is fetched")
     if(CABIR_JUCE_DIR AND EXISTS "${CABIR_JUCE_DIR}/CMakeLists.txt")
@@ -239,7 +239,7 @@ if(CABIR_APP)
     option(CABIR_PLUGINS "Build the plugins (VST3, AU, CLAP)" ON)
     if(CABIR_PLUGINS)
         # CLAP via the MIT clap-juce-extensions wrapper, pinned as the family's plugins pin it.
-        set(CABIR_CLAP_EXT_TAG "51a9359315298de632cf44e9d7524940868441e6" CACHE STRING "clap-juce-extensions git commit to build against")
+        set(CABIR_CLAP_EXT_TAG "6bde108329ff9fc24404b79b8b397261a75cf6a8" CACHE STRING "clap-juce-extensions git commit to build against")
         FetchContent_Declare(clap-juce-extensions GIT_REPOSITORY https://github.com/free-audio/clap-juce-extensions.git GIT_TAG ${CABIR_CLAP_EXT_TAG})
         FetchContent_MakeAvailable(clap-juce-extensions)
 

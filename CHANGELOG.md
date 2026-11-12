@@ -6,6 +6,15 @@ All notable changes to **Orbit Bass Cab Builder** and **Orbit Guitar Cab Builder
 [Keep a Changelog](https://keepachangelog.com/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.4.1] — 2026-11-12 — JUCE's security release
+
+### Fixed
+- **Safer with the files it opens.** Built on JUCE 8.0.17, its security release: a WAV with a broken header no longer
+  crashes the builder, a zip can no longer write outside its folder, and a state nested too deep is refused rather
+  than run.
+- **The CLAP plugins** take clap-juce-extensions 6bde108: a host is told to read the parameters again after a state is
+  loaded, a latency that changes while the plugin starts is reported, and the plugin's text reaches the host whole.
+
 ## [0.4.0] — 2026-11-11 — a new guitar TOP 12
 
 ### Changed
