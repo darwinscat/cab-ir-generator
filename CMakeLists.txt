@@ -144,7 +144,7 @@ endif()
 
 if(CABIR_APP)
     # JUCE, pinned as the family's plugins pin it; a local tree first.
-    set(CABIR_JUCE_TAG "8.0.17-security" CACHE STRING "JUCE git tag to build against")
+    set(CABIR_JUCE_TAG "9.0.5" CACHE STRING "JUCE git tag to build against")
     set(CABIR_JUCE_DIR "$ENV{HOME}/IdeaProjects/orbit-capture/app/tests/build/_deps/juce-src"
         CACHE PATH "Local JUCE source tree (used if present); else the pin is fetched")
     if(CABIR_JUCE_DIR AND EXISTS "${CABIR_JUCE_DIR}/CMakeLists.txt")
