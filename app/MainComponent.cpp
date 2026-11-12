@@ -31,7 +31,9 @@ namespace
             return {};
         if (auto* tile = xml->getChildByName ("rect"))
             xml->removeChildElement (tile, true);
-        return juce::Drawable::createFromSVG (*xml);
+        // Back to text for the parser: JUCE 9 parses SVG with lunasvg and takes no juce::XmlElement.
+        const auto text = xml->toString().toStdString();
+        return juce::Drawable::createFromImageData (text.data(), text.size());
     }
 
     std::unique_ptr<juce::Drawable> catOf()

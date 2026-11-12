@@ -7,6 +7,7 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include <cstring>
 #include <map>
 #include <memory>
 
@@ -26,9 +27,8 @@ inline const juce::Drawable* micGlyph (const juce::String& name)
     if (svg == nullptr)
         return nullptr;
 
-    std::unique_ptr<juce::Drawable> d;
-    if (auto xml = juce::parseXML (svg))
-        d = juce::Drawable::createFromSVG (*xml);
+    // From the bytes, which JUCE 8 and 9 both read as SVG (9 parses with lunasvg and takes no juce::XmlElement).
+    auto d = juce::Drawable::createFromImageData (svg, std::strlen (svg));
     return (parsed[name] = std::move (d)).get();
 }
 
@@ -47,9 +47,16 @@ inline void tintGlyph (juce::Drawable& d, juce::Colour colour)
         shape->setFill (tint (shape->getFill()));
         shape->setStrokeFill (tint (shape->getStrokeFill()));
     }
+   #if JUCE_MAJOR_VERSION >= 9
+    // JUCE 9: a Drawable is no Component, and a group holds its parts as Drawables.
+    if (auto* group = dynamic_cast<juce::DrawableComposite*> (&d))
+        for (int i = 0; i < group->getNumChildren(); ++i)
+            tintGlyph (group->getChild (i), colour);
+   #else
     for (auto* child : d.getChildren())
         if (auto* inner = dynamic_cast<juce::Drawable*> (child))
             tintGlyph (*inner, colour);
+   #endif
 }
 
 } // namespace cabir
