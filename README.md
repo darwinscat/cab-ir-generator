@@ -89,7 +89,7 @@ On Linux the app needs, as on Debian or Ubuntu:
 ```sh
 sudo apt-get install ninja-build libasound2-dev libfreetype-dev libfontconfig1-dev \
   libx11-dev libxcomposite-dev libxcursor-dev libxext-dev libxinerama-dev libxrandr-dev \
-  libxrender-dev libglu1-mesa-dev mesa-common-dev
+  libxrender-dev libxi-dev libglu1-mesa-dev mesa-common-dev
 ```
 
 Options: `CABIR_APP` (the apps), `CABIR_GUITAR_APP` (the guitar's too), `CABIR_PLUGINS`, `CABIR_TOOLS` (the tools below), `CABIR_TESTS`, `CABIR_WEB` (the
