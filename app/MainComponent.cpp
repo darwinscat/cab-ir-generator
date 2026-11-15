@@ -3,6 +3,7 @@
 
 #include "MainComponent.h"
 #include "Flavour.h"
+#include "InputList.h"
 #include "Microphone.h"
 #include "Table.h"
 
@@ -403,8 +404,10 @@ void MainComponent::changeListenerCallback (juce::ChangeBroadcaster* from)
         loadWorkspace (session->workspace());
     else
     {
-        // The app's audio device changed: an input opened in AUDIO is what plays now (the owner, 09.11: its meter moved
-        // while a riff stood silent) — at once if the riff was playing; and the strip names it.
+        // The app's audio device changed: all its inputs open, the one remembered for it heard; an input opened in AUDIO is
+        // what plays now (the owner, 09.11: its meter moved while a riff stood silent) — at once if the riff was playing;
+        // and the strip names it.
+        followInput();
         if (player && ! engine->usingInput() && engine->inputName().isNotEmpty())
             useInput (true);
         repaint (strip());
@@ -970,6 +973,48 @@ void MainComponent::useInput (bool play)
                      });
 }
 
+bool MainComponent::showsIn() const
+{
+    return engine != nullptr && engine->usingInput() && engine->inputCount() > 0;
+}
+
+juce::Rectangle<int> MainComponent::inArea() const { return sampleArea().removeFromRight (inW); }
+
+void MainComponent::followInput()
+{
+    // THE INPUT A DEVICE PLAYS (the owner, 15.11): a workplace setting, kept here by the device's name — never in a
+    // preset, a WAV or a link. A device seen the first time plays the first input it opened with (an older run's tick in
+    // AUDIO), else IN 1; one that no longer has the input kept for it plays IN 1, the setting left for its return.
+    const auto setup = engine->devices.getAudioDeviceSetup();
+    if (setup.inputDeviceName.isEmpty())
+        return;
+    const auto key = "inputOf " + setup.inputDeviceName;
+    auto& kept = *properties.getUserSettings();
+    if (! kept.containsKey (key))
+        kept.setValue (key, std::max (0, setup.inputChannels.findNextSetBit (0)) + 1);
+    engine->openEveryInput();
+    const int n = kept.getIntValue (key, 1);
+    engine->chooseInput (n >= 1 && n <= engine->inputCount() ? n - 1 : 0);
+}
+
+void MainComponent::pickInput (int channel)
+{
+    const auto device = engine->devices.getAudioDeviceSetup().inputDeviceName;
+    engine->chooseInput (channel);
+    if (device.isNotEmpty())
+        properties.getUserSettings()->setValue ("inputOf " + device, channel + 1);
+    repaint (strip());
+}
+
+void MainComponent::showInputs()
+{
+    auto list = std::make_unique<InputList> (engine->inputName(), engine->inputCount(),
+                                             [this] { return engine->chosenInput(); },
+                                             [this] (int i) { return i >= 0 && i < Engine::maxInputs ? meters[(size_t) i] : 0.0f; },
+                                             [this] (int i) { pickInput (i); });
+    juce::CallOutBox::launchAsynchronously (std::move (list), inArea(), this);
+}
+
 void MainComponent::showSamples()
 {
     // The live input first, the instrument through the cabinet as through an amp's (the owner, 07.11); then our riffs.
@@ -1013,8 +1058,8 @@ void MainComponent::filesDropped (const juce::StringArray& files, int, int)
 
 void MainComponent::showAudio()
 {
-    // The output, and the input INPUT plays: a device and its channels, every one open heard, summed; opening one plays it.
-    // Shown once macOS has the player's answer on the microphone (Microphone.h): an input picked there before it would
+    // The output, and the input device INPUT plays: all its inputs open, the one heard picked beside INPUT (IN n), so the
+    // panel lists none of them; opening one plays it. Shown once macOS has the player's answer on the microphone (Microphone.h): an input picked there before it would
     // hold the window until then.
     std::weak_ptr<int> stillHere = alive;
     microphone::ask ([this, stillHere]
@@ -1022,8 +1067,7 @@ void MainComponent::showAudio()
                          if (stillHere.expired())
                              return;
                          felitronics::appkit::AudioSettingsPanel::Options o;
-                         o.minInputs = 0;
-                         o.maxInputs = 2;
+                         o.minInputs = o.maxInputs = felitronics::appkit::AudioSettingsPanel::kHideChannels;
                          auto panel = std::make_unique<felitronics::appkit::AudioSettingsPanel> (engine->devices, o);
                          panel->setSize (460, 380);
                          juce::CallOutBox::launchAsynchronously (std::move (panel), audioArea().translated (0, 0), this);
@@ -1123,6 +1167,15 @@ void MainComponent::timerCallback()
 {
     history.tick();
     sound().flush();
+
+    // The inputs' meters, held and falling, for IN n and its list.
+    if (engine != nullptr && engine->usingInput())
+    {
+        for (int i = 0; i < Engine::maxInputs; ++i)
+            meters[(size_t) i] = std::max (engine->takeLevel (i), meters[(size_t) i] * 0.85f);
+        if (showsIn())
+            repaint (inArea());
+    }
 
     // SPECTRUM: what plays and what goes in, while it is ticked, the EQ on or off — the feeds asked for them only then.
     const bool on = picker.spectrumOn();
@@ -1380,11 +1433,26 @@ void MainComponent::paint (juce::Graphics& g)
 
         // The sample: a box like the preset's, its menu the riffs we carry and a file of the player's own; without the
         // player, the input alone, a click on it AUDIO.
-        const auto sa = sampleArea().toFloat().reduced (0.5f);
-        g.setColour (look().panel2);
-        g.fillRoundedRectangle (sa, 4.0f);
-        g.setColour (look().txFaint);
-        g.drawRoundedRectangle (sa, 4.0f, 1.0f);
+        // While the input plays, its box gives the right of the room to IN n (showInputs).
+        const auto box = [&] (juce::Rectangle<float> r)
+        {
+            g.setColour (look().panel2);
+            g.fillRoundedRectangle (r, 4.0f);
+            g.setColour (look().txFaint);
+            g.drawRoundedRectangle (r, 4.0f, 1.0f);
+        };
+        const auto fitted = [&] (const juce::String& text, float room)   // cut, "...", where it does not fit
+        {
+            if (look().trackedWidth (text, font, 0.06f) <= room)
+                return text;
+            auto cut = text;
+            while (cut.isNotEmpty() && look().trackedWidth (cut.trimEnd() + "...", font, 0.06f) > room)
+                cut = cut.dropLastCharacters (1);
+            return cut.trimEnd() + "...";
+        };
+        const bool withIn = showsIn();
+        const auto sa = (withIn ? sampleArea().withTrimmedRight (inW + 6) : sampleArea()).toFloat().reduced (0.5f);
+        box (sa);
         const auto input = "INPUT: " + (engine->inputName().isNotEmpty() ? engine->inputName().toUpperCase() : juce::String ("NONE, SEE AUDIO"));
         if (player)
         {
@@ -1392,14 +1460,24 @@ void MainComponent::paint (juce::Graphics& g)
             const auto source = engine->usingInput() ? input
                               : engine->hasSample()  ? engine->sampleName().toUpperCase()
                                                      : juce::String ("DROP A ") + flavour::sampleWord + " SAMPLE ON THE WINDOW";
-            look().drawTracked (g, source,
+            look().drawTracked (g, fitted (source, sa.getWidth() - 20.0f - 16.0f),
                                 sa.reduced (10.0f, 0.0f), font, 0.06f, juce::Justification::centredLeft);
             look().drawTracked (g, juce::String::fromUTF8 ("\xe2\x96\xbe"), sa.reduced (10.0f, 0.0f), font, 0.0f, juce::Justification::centredRight);
         }
         else
         {
             g.setColour (engine->inputName().isNotEmpty() ? look().tx : look().txFaint);
-            look().drawTracked (g, input, sa.reduced (10.0f, 0.0f), font, 0.06f, juce::Justification::centredLeft);
+            look().drawTracked (g, fitted (input, sa.getWidth() - 20.0f), sa.reduced (10.0f, 0.0f), font, 0.06f, juce::Justification::centredLeft);
+        }
+        if (withIn)
+        {
+            const auto ia = inArea().toFloat().reduced (0.5f);
+            box (ia);
+            const int in = engine->chosenInput();
+            g.setColour (look().tx);
+            look().drawTracked (g, "IN " + juce::String (in + 1), ia.reduced (10.0f, 0.0f), font, 0.06f, juce::Justification::centredLeft);
+            drawInputMeter (g, { ia.getX() + 48.0f, ia.getCentreY() - 3.0f, ia.getWidth() - 48.0f - 24.0f, 6.0f }, meters[(size_t) in]);
+            look().drawTracked (g, juce::String::fromUTF8 ("\xe2\x96\xbe"), ia.reduced (10.0f, 0.0f), font, 0.0f, juce::Justification::centredRight);
         }
     }
 
@@ -1444,6 +1522,8 @@ void MainComponent::mouseDown (const juce::MouseEvent& e)
             history.switchTo (reg);
         repaint (header());
     }
+    else if (showsIn() && inArea().contains (p))
+        showInputs();
     else if (player && openArea().contains (p))
         openSample();
     else if (player && sampleArea().contains (p))

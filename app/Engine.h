@@ -8,6 +8,7 @@
 #include <felitronics/convolution/CabConvolver.h>
 #include <juce_audio_utils/juce_audio_utils.h>
 
+#include <array>
 #include <atomic>
 #include <vector>
 
@@ -18,10 +19,11 @@ namespace cabir::app
     the plugins play their cabinets through (felitronics::convolution::CabConvolver), so what is heard here is what a
     plugin plays. A sample in, an IR in, the output device out. The IR is taken on the message thread and crossfaded in
     by the convolver; one that lands mid-fade waits for the next tick (flush).
-    ...OR LIVE (useInput, the owner, 07.11): the audio interface's first open input through the cabinet, as an amp's
-    speaker — heard only while played (PLAY), so a laptop's own mic beside its speakers never howls the moment it is
-    picked. The input device is open only while it is the source (the system's mic light off otherwise); the one the
-    AUDIO settings chose is kept for the next time. */
+    ...OR LIVE (useInput, the owner, 07.11): one input of the audio interface through the cabinet, as an amp's speaker —
+    heard only while played (PLAY), so a laptop's own mic beside its speakers never howls the moment it is picked. The
+    input device is open only while it is the source (the system's mic light off otherwise), all its inputs open, the one
+    chosen heard (IN 1, IN 2... — the owner, 15.11: his DI in IN 4 and the cabinet's mic in IN 3, one to be played without
+    patching) and every one measured for the list's meters; the device the AUDIO settings chose is kept for next time. */
 class Engine final : public juce::AudioIODeviceCallback,
                      public Sound
 {
@@ -44,6 +46,17 @@ public:
     void inputOnly();
     bool usingInput() const { return input.load(); }
     juce::String inputName() const;   // the input device open, empty for none
+
+    /** THE INPUT HEARD, by its place on the device (0 is IN 1); a change crossfaded over 20 ms, no click. */
+    void chooseInput (int channel) { chosen = juce::jlimit (0, maxInputs - 1, channel); }
+    int chosenInput() const { return chosen.load(); }
+    int inputCount() const;           // the inputs the open input device has, nought for none
+    /** The loudest sample input `channel` has had since the last ask (1 is full scale), for its meter. */
+    float takeLevel (int channel) { return channel >= 0 && channel < maxInputs ? levels[(size_t) channel].exchange (0.0f) : 0.0f; }
+    static constexpr int maxInputs = 64;
+    /** Every input of the input device open, however it was opened — the last run's setup, AUDIO (which asks for as many as
+        the device manager last had) or INPUT; tried once for a device that keeps some back. After every change of device. */
+    void openEveryInput();
 
     void play (bool on);
     bool isPlaying() const { return input.load() ? live.load() : transport.isPlaying(); }
@@ -68,9 +81,14 @@ private:
     juce::AudioTransportSource transport;
     juce::String name;
     std::atomic<bool> input { false }, live { false };   // the input the source; ...heard
-    juce::String keptInput;                               // the input device and channels last open, for the next time
-    juce::BigInteger keptChannels;
-    void listen (bool on);                                // the input device opened, or closed
+    juce::String keptInput;                               // the input device last open, for the next time
+    void listen (bool on);                                // the input device opened, all its inputs, or closed
+    juce::String askedEvery;                              // the device openEveryInput last asked of, and its count
+    std::atomic<int> chosen { 0 };                        // the input heard (chooseInput)
+    int heard = 0, leaving = -1;                          // audio thread: ...as it plays, and the one fading out, -1 none
+    float fade = 1.0f;                                    // ...the way from `leaving` to `heard`, 0 to 1
+    std::array<int, maxInputs> slotOf {};                 // an input's place among those the device delivers, -1 closed
+    std::array<std::atomic<float>, maxInputs> levels {};  // each input's loudest since the meters last read it
 
     felitronics::convolution::CabConvolver convolver;
     std::atomic<bool> prepared { false };
