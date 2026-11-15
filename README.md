@@ -110,14 +110,11 @@ bells to give the cabinet its character or fix a small flaw. It goes into the IR
 **DOWNLOAD IR** saves the cabinet as a mono WAV: 44.1, 48 or 96 kHz, 24 or 16 bit, the whole IR or cut to 2048,
 1024 or 512 samples.
 
-**Presets.** 40 in Orbit Bass Cab Builder, ten each for Rock, Metal, Punk and Blues; 52 in Orbit Guitar Cab
-Builder: the same four styles and TOP 12, cabinets made by ear in OrbitAmp. The arrows beside the menu (and the
-arrow keys) step through them.
+**Presets:** 40 in Orbit Bass Cab Builder (Rock, Metal, Punk, Blues), 52 in Orbit Guitar Cab Builder (the same
+four styles and TOP 12).
 
-**Listening.** Plug your instrument into an audio interface and pick its input in **AUDIO** (or click the
-**INPUT** box): it plays live through the cabinet, so you hear every change as you make it. The buttons at the foot
-let you hear each mic on its own: **A+B**, **A** or **B** alone as it stands in the pair, or **BYPASS**, the input
-with no cabinet at all. They change only what you hear, not the preset. **AUDIO** picks the output device too.
+**Listening:** the input of your audio interface plays live through the cabinet, with each mic on its own or the
+cabinet bypassed.
 
 **History:** undo and redo, A/B/C/D.
 
