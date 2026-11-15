@@ -42,7 +42,9 @@ public:
     {
         columns = (count + perColumn - 1) / perColumn;
         rows = (count + columns - 1) / columns;
-        setSize (pad * 2 + columns * colW, top + rows * rowH + pad);
+        const int named = juce::roundToInt (look().trackedWidth (device.toUpperCase(), look().font (13.0f), 0.06f)) + (pad + 8) * 2;
+        setSize (std::max (pad * 2 + columns * colW, named), top + rows * rowH + pad);   // the device's name whole above
+        left = (getWidth() - columns * colW) / 2;
         startTimerHz (30);
     }
 
@@ -85,14 +87,14 @@ public:
 
 private:
     juce::String device;
-    int count, columns = 1, rows = 1;
+    int count, columns = 1, rows = 1, left = pad;
     std::function<int()> heard;
     std::function<float (int)> level;
     std::function<void (int)> onPicked;
 
     juce::Rectangle<int> cellArea (int i) const   // down a column, then the next
     {
-        return { pad + (i / rows) * colW, top + (i % rows) * rowH, colW, rowH };
+        return { left + (i / rows) * colW, top + (i % rows) * rowH, colW, rowH };
     }
 
     void timerCallback() override { repaint(); }
