@@ -323,6 +323,7 @@ if(CABIR_APP)
         target_include_directories(cabir_engine_test PRIVATE app)
         target_compile_definitions(cabir_engine_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 CABIR_PLUGIN=0)
         target_link_libraries(cabir_engine_test PRIVATE
+            felitronics::appkit   # InputPick
             felitronics::convolution
             felitronics::analysis
             juce::juce_audio_utils

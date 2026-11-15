@@ -3,12 +3,13 @@
 
 #include "MainComponent.h"
 #include "Flavour.h"
-#include "InputList.h"
 #include "Microphone.h"
 #include "Table.h"
 
 #include <BinaryData.h>
 #include <felitronics/appkit/AudioSettingsPanel.h>
+#include <felitronics/appkit/InputList.h>
+#include <felitronics/appkit/InputPick.h>
 #include <felitronics/appkit/BrandAssets.h>
 #include <felitronics/toml/Toml.h>
 
@@ -53,6 +54,35 @@ namespace
     using flavour::numRiffs;
     const juce::String riffKey = "riff:";   // the setting's prefix for one of these, else a file's path
     const juce::String inputKey = "input:"; // ...or the setting for the live input
+
+    /** THE INPUT PICKER'S LOOK (felitronics-appkit's InputList and its meters): the panel's own, its text tracked. */
+    felitronics::appkit::InputListStyle inputStyle()
+    {
+        felitronics::appkit::InputListStyle s;
+        s.background = look().panel;
+        s.heading = look().txFaint;
+        s.text = look().txDim;
+        s.lit = look().orange;
+        s.litFill = look().panel2;
+        s.meterTrack = look().bezel;
+        s.meterFill = look().violet;
+        s.meterHot = look().orange;
+        s.font = [] (float height) { return look().font (height); };
+        s.drawText = [] (juce::Graphics& g, const juce::String& text, juce::Rectangle<float> r, const juce::Font& f, juce::Justification j)
+        {
+            look().drawTracked (g, text, r, f, 0.06f, j);
+        };
+        s.textWidth = [] (const juce::String& text, const juce::Font& f) { return look().trackedWidth (text, f, 0.06f); };
+        return s;
+    }
+
+    /** Where the input a device plays is kept: the app's settings, read and written as felitronics-appkit's InputMemory
+        asks, key "inputOf <device>", the choice as text — 0.5.0's numbers read the same. */
+    felitronics::appkit::InputMemory inputMemory (juce::PropertiesFile& kept)
+    {
+        return { [&kept] (const std::string& key) { return kept.getValue (juce::String (key)).toStdString(); },
+                 [&kept] (const std::string& key, const std::string& value) { kept.setValue (juce::String (key), juce::String (value)); } };
+    }
 
     /** A device setup as the last run left it (AudioDeviceManager::createStateXml) without its input: what the device
         opens with until macOS has the answer on the microphone. None when it has no input to leave out. */
@@ -988,13 +1018,12 @@ void MainComponent::followInput()
     const auto setup = engine->devices.getAudioDeviceSetup();
     if (setup.inputDeviceName.isEmpty())
         return;
-    const auto key = "inputOf " + setup.inputDeviceName;
-    auto& kept = *properties.getUserSettings();
-    if (! kept.containsKey (key))
-        kept.setValue (key, std::max (0, setup.inputChannels.findNextSetBit (0)) + 1);
+    const auto device = setup.inputDeviceName.toStdString();
+    const auto memory = inputMemory (*properties.getUserSettings());
+    if (! memory.knows (device))
+        memory.remember (device, felitronics::appkit::InputChoice::single (std::max (0, setup.inputChannels.findNextSetBit (0))));
     engine->openEveryInput();
-    const int n = kept.getIntValue (key, 1);
-    engine->chooseInput (n >= 1 && n <= engine->inputCount() ? n - 1 : 0);
+    engine->chooseInput (memory.recall (device, engine->inputCount()).a);
 }
 
 void MainComponent::pickInput (int channel)
@@ -1002,16 +1031,17 @@ void MainComponent::pickInput (int channel)
     const auto device = engine->devices.getAudioDeviceSetup().inputDeviceName;
     engine->chooseInput (channel);
     if (device.isNotEmpty())
-        properties.getUserSettings()->setValue ("inputOf " + device, channel + 1);
+        inputMemory (*properties.getUserSettings()).remember (device.toStdString(), felitronics::appkit::InputChoice::single (channel));
     repaint (strip());
 }
 
 void MainComponent::showInputs()
 {
-    auto list = std::make_unique<InputList> (engine->inputName(), engine->inputCount(),
-                                             [this] { return engine->chosenInput(); },
-                                             [this] (int i) { return i >= 0 && i < Engine::maxInputs ? meters[(size_t) i] : 0.0f; },
-                                             [this] (int i) { pickInput (i); });
+    felitronics::appkit::InputList::Feed feed;
+    feed.lit = [this] (int i) { return i == engine->chosenInput(); };
+    feed.level = [this] (int i) { return i >= 0 && i < Engine::maxInputs ? meters[(size_t) i] : 0.0f; };
+    feed.picked = [this] (int i, const juce::ModifierKeys&) { pickInput (i); };
+    auto list = std::make_unique<felitronics::appkit::InputList> (engine->inputName(), engine->inputCount(), inputStyle(), std::move (feed));
     juce::CallOutBox::launchAsynchronously (std::move (list), inArea(), this);
 }
 
@@ -1476,7 +1506,8 @@ void MainComponent::paint (juce::Graphics& g)
             const int in = engine->chosenInput();
             g.setColour (look().tx);
             look().drawTracked (g, "IN " + juce::String (in + 1), ia.reduced (10.0f, 0.0f), font, 0.06f, juce::Justification::centredLeft);
-            drawInputMeter (g, { ia.getX() + 48.0f, ia.getCentreY() - 3.0f, ia.getWidth() - 48.0f - 24.0f, 6.0f }, meters[(size_t) in]);
+            felitronics::appkit::drawInputMeter (g, { ia.getX() + 48.0f, ia.getCentreY() - 3.0f, ia.getWidth() - 48.0f - 24.0f, 6.0f },
+                                                 meters[(size_t) in], inputStyle());
             look().drawTracked (g, juce::String::fromUTF8 ("\xe2\x96\xbe"), ia.reduced (10.0f, 0.0f), font, 0.0f, juce::Justification::centredRight);
         }
     }

@@ -5,6 +5,7 @@
 
 #include "Sound.h"
 
+#include <felitronics/appkit/InputPick.h>
 #include <felitronics/convolution/CabConvolver.h>
 #include <juce_audio_utils/juce_audio_utils.h>
 
@@ -23,7 +24,8 @@ namespace cabir::app
     heard only while played (PLAY), so a laptop's own mic beside its speakers never howls the moment it is picked. The
     input device is open only while it is the source (the system's mic light off otherwise), all its inputs open, the one
     chosen heard (IN 1, IN 2... — the owner, 15.11: his DI in IN 4 and the cabinet's mic in IN 3, one to be played without
-    patching) and every one measured for the list's meters; the device the AUDIO settings chose is kept for next time. */
+    patching) and every one measured for the list's meters — the family's picker, felitronics-appkit's InputPick; the
+    device the AUDIO settings chose is kept for next time. */
 class Engine final : public juce::AudioIODeviceCallback,
                      public Sound
 {
@@ -48,12 +50,12 @@ public:
     juce::String inputName() const;   // the input device open, empty for none
 
     /** THE INPUT HEARD, by its place on the device (0 is IN 1); a change crossfaded over 20 ms, no click. */
-    void chooseInput (int channel) { chosen = juce::jlimit (0, maxInputs - 1, channel); }
-    int chosenInput() const { return chosen.load(); }
+    void chooseInput (int channel) { pick.choose (felitronics::appkit::InputChoice::single (channel)); }
+    int chosenInput() const { return pick.chosen().a; }
     int inputCount() const;           // the inputs the open input device has, nought for none
     /** The loudest sample input `channel` has had since the last ask (1 is full scale), for its meter. */
-    float takeLevel (int channel) { return channel >= 0 && channel < maxInputs ? levels[(size_t) channel].exchange (0.0f) : 0.0f; }
-    static constexpr int maxInputs = 64;
+    float takeLevel (int channel) { return pick.takeLevel (channel); }
+    static constexpr int maxInputs = felitronics::appkit::InputPick::maxInputs;
     /** Every input of the input device open, however it was opened — the last run's setup, AUDIO (which asks for as many as
         the device manager last had) or INPUT; tried once for a device that keeps some back. After every change of device. */
     void openEveryInput();
@@ -84,11 +86,7 @@ private:
     juce::String keptInput;                               // the input device last open, for the next time
     void listen (bool on);                                // the input device opened, all its inputs, or closed
     juce::String askedEvery;                              // the device openEveryInput last asked of, and its count
-    std::atomic<int> chosen { 0 };                        // the input heard (chooseInput)
-    int heard = 0, leaving = -1;                          // audio thread: ...as it plays, and the one fading out, -1 none
-    float fade = 1.0f;                                    // ...the way from `leaving` to `heard`, 0 to 1
-    std::array<int, maxInputs> slotOf {};                 // an input's place among those the device delivers, -1 closed
-    std::array<std::atomic<float>, maxInputs> levels {};  // each input's loudest since the meters last read it
+    felitronics::appkit::InputPick pick;                  // the input heard, crossfaded, every one measured
 
     felitronics::convolution::CabConvolver convolver;
     std::atomic<bool> prepared { false };
