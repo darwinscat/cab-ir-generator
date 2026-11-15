@@ -3,6 +3,7 @@
 
 #include "MainComponent.h"
 #include "Flavour.h"
+#include "Microphone.h"
 #include "Table.h"
 
 #include <BinaryData.h>
@@ -51,6 +52,22 @@ namespace
     using flavour::numRiffs;
     const juce::String riffKey = "riff:";   // the setting's prefix for one of these, else a file's path
     const juce::String inputKey = "input:"; // ...or the setting for the live input
+
+    /** A device setup as the last run left it (AudioDeviceManager::createStateXml) without its input: what the device
+        opens with until macOS has the answer on the microphone. None when it has no input to leave out. */
+    std::unique_ptr<juce::XmlElement> withoutInput (const juce::XmlElement& audio)
+    {
+        const auto both = audio.getStringAttribute ("audioDeviceName");   // one name for the input and the output
+        if (both.isEmpty() && audio.getStringAttribute ("audioInputDeviceName").isEmpty())
+            return {};
+        auto out = std::make_unique<juce::XmlElement> (audio);
+        if (both.isNotEmpty())
+            out->setAttribute ("audioOutputDeviceName", both);
+        out->removeAttribute ("audioDeviceName");
+        out->removeAttribute ("audioInputDeviceName");
+        out->removeAttribute ("audioDeviceInChans");
+        return out;
+    }
 
     juce::File riffFile (int i)
     {
@@ -260,11 +277,22 @@ MainComponent::MainComponent (Session* host)
     if (session != nullptr)
         session->addChangeListener (this);
 
-    // The output the last run used, else the system's.
+    // The output the last run used, else the system's; and its input once macOS has the player's answer on the
+    // microphone (Microphone.h) — till then the device opens without it, so a first run's window is not held up.
     if (engine != nullptr)
     {
-        const auto audio = juce::parseXML (properties.getUserSettings()->getValue ("audio"));
-        engine->devices.initialise (0, 2, audio.get(), true);
+        std::shared_ptr<juce::XmlElement> audio = juce::parseXML (properties.getUserSettings()->getValue ("audio"));
+        const auto outputOnly = audio != nullptr && ! microphone::answered() ? withoutInput (*audio) : nullptr;
+        engine->devices.initialise (0, 2, outputOnly != nullptr ? outputOnly.get() : audio.get(), true);
+        if (outputOnly != nullptr)
+        {
+            std::weak_ptr<int> stillHere = alive;
+            microphone::ask ([this, stillHere, audio]
+                             {
+                                 if (! stillHere.expired())
+                                     engine->devices.initialise (0, 2, audio.get(), true);
+                             });
+        }
         engine->devices.addAudioCallback (engine.get());
         engine->devices.addChangeListener (this);
     }
@@ -299,7 +327,7 @@ MainComponent::MainComponent (Session* host)
                 riff = i;
         if (! last.startsWith (riffKey) && juce::File::isAbsolutePath (last) && juce::File (last).existsAsFile())
             loadSample (juce::File (last));
-        if (! engine->hasSample())
+        if (! engine->hasSample() && last != inputKey)   // the input waiting for macOS's answer: no riff to stand in
             loadRiff (riff);
     }
 
@@ -903,6 +931,7 @@ void MainComponent::loadSample (const juce::File& file)
     if (! engine->loadSample (file))
         return;
     properties.getUserSettings()->setValue ("sample", file.getFullPathName());
+    ++sourcePicked;
     riffNow = -1;
     engine->play (wasPlaying);
     repaint (strip());
@@ -916,6 +945,7 @@ void MainComponent::loadRiff (int i)
     if (i < 0 || ! engine->loadSample (riffFile (i), riffs[i].title))
         return;
     properties.getUserSettings()->setValue ("sample", riffKey + riffs[i].file);
+    ++sourcePicked;
     riffNow = i;
     engine->play (wasPlaying);
     repaint (strip());
@@ -925,10 +955,19 @@ void MainComponent::useInput (bool play)
 {
     if (engine == nullptr)
         return;
-    engine->useInput (play);   // silent until PLAY: a laptop's own mic beside its speakers would howl
-    properties.getUserSettings()->setValue ("sample", inputKey);
-    riffNow = -1;
-    repaint (strip());
+    // Once macOS has the player's answer on the microphone (Microphone.h), at once after the first time; not if another
+    // sample was picked while the question stood.
+    std::weak_ptr<int> stillHere = alive;
+    const int picked = ++sourcePicked;
+    microphone::ask ([this, stillHere, picked, play]
+                     {
+                         if (stillHere.expired() || picked != sourcePicked)
+                             return;
+                         engine->useInput (play);   // silent until PLAY: a laptop's own mic beside its speakers would howl
+                         properties.getUserSettings()->setValue ("sample", inputKey);
+                         riffNow = -1;
+                         repaint (strip());
+                     });
 }
 
 void MainComponent::showSamples()
@@ -975,12 +1014,20 @@ void MainComponent::filesDropped (const juce::StringArray& files, int, int)
 void MainComponent::showAudio()
 {
     // The output, and the input INPUT plays: a device and its channels, every one open heard, summed; opening one plays it.
-    felitronics::appkit::AudioSettingsPanel::Options o;
-    o.minInputs = 0;
-    o.maxInputs = 2;
-    auto panel = std::make_unique<felitronics::appkit::AudioSettingsPanel> (engine->devices, o);
-    panel->setSize (460, 380);
-    juce::CallOutBox::launchAsynchronously (std::move (panel), audioArea().translated (0, 0), this);
+    // Shown once macOS has the player's answer on the microphone (Microphone.h): an input picked there before it would
+    // hold the window until then.
+    std::weak_ptr<int> stillHere = alive;
+    microphone::ask ([this, stillHere]
+                     {
+                         if (stillHere.expired())
+                             return;
+                         felitronics::appkit::AudioSettingsPanel::Options o;
+                         o.minInputs = 0;
+                         o.maxInputs = 2;
+                         auto panel = std::make_unique<felitronics::appkit::AudioSettingsPanel> (engine->devices, o);
+                         panel->setSize (460, 380);
+                         juce::CallOutBox::launchAsynchronously (std::move (panel), audioArea().translated (0, 0), this);
+                     });
 }
 
 #if CABIR_LISTEN

@@ -10,7 +10,9 @@ All notable changes to **Orbit Bass Cab Builder** and **Orbit Guitar Cab Builder
 
 ### Changed
 - **Built on JUCE 9.0.5**, where 0.4.1 was built on 8.0.17. The builders look, sound and save as before; the CLAP
-  plugins still come from clap-juce-extensions, JUCE 9 having no CLAP of its own.
+  plugins still come from clap-juce-extensions, JUCE 9 having no CLAP of its own. On the Mac the window still comes
+  first: JUCE 9 holds an input until macOS's microphone question is answered, so the builder asks first and opens the
+  input on the answer.
 
 ## [0.4.1] — 2026-11-12 — JUCE's security release
 

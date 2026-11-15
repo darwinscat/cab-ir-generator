@@ -96,6 +96,7 @@ private:
     juce::String presetName;                       // the preset last loaded or saved — dim once edited
     std::string presetText;                        // ...as its state's TOML, to tell
     int riffNow = -1;                              // the riff playing, by its place in the menu; -1 for a file of the player's own
+    int sourcePicked = 0;                          // counts the samples picked: an input waiting for the microphone's answer gives way
     bool player = false;                           // the riffs are where the app was built (the owner's machine): OPEN, PLAY,
                                                    // the songs' menu; else the input alone
 

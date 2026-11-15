@@ -196,6 +196,10 @@ if(CABIR_APP)
             ICON_BIG      "${CMAKE_CURRENT_SOURCE_DIR}/${logo}/icon.png"   # the logo's mark, drawn from mark.svg
             VERSION       ${PROJECT_VERSION})
         target_sources(${target} PRIVATE app/Main.cpp app/MainComponent.cpp app/Engine.cpp)
+        if(APPLE)   # the microphone asked through AVFoundation before an input opens (app/Microphone.h)
+            target_sources(${target} PRIVATE app/Microphone.mm)
+            target_link_libraries(${target} PRIVATE "-framework AVFoundation")
+        endif()
         file(GLOB presets CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/${data}/presets/*.toml")   # the factory's presets
         juce_add_binary_data(${dataTarget} SOURCES ${data}/cabinets.txt ${logo}/mark.svg ${presets})
         target_compile_definitions(${target} PRIVATE
