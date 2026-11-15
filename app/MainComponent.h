@@ -96,6 +96,7 @@ private:
     juce::String presetName;                       // the preset last loaded or saved — dim once edited
     std::string presetText;                        // ...as its state's TOML, to tell
     int riffNow = -1;                              // the riff playing, by its place in the menu; -1 for a file of the player's own
+    int sourcePicked = 0;                          // counts the samples picked: an input waiting for the microphone's answer gives way
     bool player = false;                           // the riffs are where the app was built (the owner's machine): OPEN, PLAY,
                                                    // the songs' menu; else the input alone
 
@@ -130,6 +131,12 @@ private:
     void useInput (bool play = false);             // the live input instead, silent until played (Engine::useInput)
     void showSamples();
     void showAudio();
+    void showInputs();                             // IN 1 to IN n with their meters, beside INPUT while it plays
+    void followInput();                            // after a change of device: every input open, the one kept for it heard
+    void pickInput (int channel);                  // ...another, kept for the device
+    bool showsIn() const;                          // the input plays, its device has inputs: IN n beside INPUT
+    std::array<float, Engine::maxInputs> meters {};   // each input's meter as drawn, held and falling
+    static constexpr int inW = 96;
     void download();
     /** DOWNLOAD IR's format (the owner, 06.11): rate, bits, and the length a loader takes — 0, the whole IR — kept between
         runs; the panel's ▾ chooses, the line under the button says it. */
@@ -153,6 +160,7 @@ private:
     juce::Rectangle<int> openArea() const;
     juce::Rectangle<int> playArea() const;
     juce::Rectangle<int> sampleArea() const;
+    juce::Rectangle<int> inArea() const;           // IN n, the right of the sample's room while the input plays
     juce::Rectangle<int> bypassWordArea() const;
     juce::Rectangle<int> hearArea (int) const;     // BYPASS's A, B, A+B
     juce::Rectangle<int> audioArea() const;

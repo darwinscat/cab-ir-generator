@@ -9,7 +9,7 @@ cmake_minimum_required(VERSION 3.22)
 set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "The oldest macOS the binaries run on")
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
-project(cab_ir_generator VERSION 0.4.1 LANGUAGES C CXX)
+project(cab_ir_generator VERSION 0.5.0 LANGUAGES C CXX)
 
 include(FetchContent)
 
@@ -196,6 +196,10 @@ if(CABIR_APP)
             ICON_BIG      "${CMAKE_CURRENT_SOURCE_DIR}/${logo}/icon.png"   # the logo's mark, drawn from mark.svg
             VERSION       ${PROJECT_VERSION})
         target_sources(${target} PRIVATE app/Main.cpp app/MainComponent.cpp app/Engine.cpp)
+        if(APPLE)   # the microphone asked through AVFoundation before an input opens (app/Microphone.h)
+            target_sources(${target} PRIVATE app/Microphone.mm)
+            target_link_libraries(${target} PRIVATE "-framework AVFoundation")
+        endif()
         file(GLOB presets CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/${data}/presets/*.toml")   # the factory's presets
         juce_add_binary_data(${dataTarget} SOURCES ${data}/cabinets.txt ${logo}/mark.svg ${presets})
         target_compile_definitions(${target} PRIVATE
@@ -309,5 +313,22 @@ if(CABIR_APP)
                 PRODUCT "Orbit Guitar Cab Builder" BUNDLE com.darwinscat.orbitguitarcabbuilder.plugin
                 DESCRIPTION "Guitar cabinet IR generator and cab sim")
         endif()
+    endif()
+
+    # THE PLAYER'S INPUT, without a device of its own (tests/EngineTests.cpp): the input chosen heard, a change
+    # crossfaded, every input measured.
+    if(CABIR_TESTS)
+        juce_add_console_app(cabir_engine_test PRODUCT_NAME "cabir_engine_test")
+        target_sources(cabir_engine_test PRIVATE tests/EngineTests.cpp app/Engine.cpp)
+        target_include_directories(cabir_engine_test PRIVATE app)
+        target_compile_definitions(cabir_engine_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 CABIR_PLUGIN=0)
+        target_link_libraries(cabir_engine_test PRIVATE
+            felitronics::convolution
+            felitronics::analysis
+            juce::juce_audio_utils
+            juce::juce_audio_formats
+            juce::juce_recommended_config_flags
+            juce::juce_recommended_warning_flags)
+        add_test(NAME engine COMMAND cabir_engine_test)
     endif()
 endif()

@@ -62,24 +62,21 @@ void Engine::listen (bool on)
         return;
     if (on)
     {
-        // The one open last time, else the system's default input and its first channel.
+        // The one open last time, else the system's default input; every input it has (the device keeps those it has).
         setup.inputDeviceName = keptInput;
-        setup.inputChannels = keptChannels;
         if (auto* type = devices.getCurrentDeviceTypeObject(); type != nullptr
             && (setup.inputDeviceName.isEmpty() || ! type->getDeviceNames (true).contains (setup.inputDeviceName)))
         {
             const auto names = type->getDeviceNames (true);
             const int at = type->getDefaultDeviceIndex (true);
             setup.inputDeviceName = at >= 0 && at < names.size() ? names[at] : juce::String();
-            setup.inputChannels.clear();
         }
-        if (setup.inputChannels.isZero())
-            setup.inputChannels.setBit (0);
+        setup.inputChannels.clear();
+        setup.inputChannels.setRange (0, maxInputs, true);
     }
     else
     {
         keptInput = setup.inputDeviceName;
-        keptChannels = setup.inputChannels;
         setup.inputDeviceName = {};
         setup.inputChannels.clear();
     }
@@ -91,6 +88,29 @@ juce::String Engine::inputName() const
 {
     const auto setup = devices.getAudioDeviceSetup();
     return setup.inputChannels.isZero() ? juce::String() : setup.inputDeviceName;
+}
+
+void Engine::openEveryInput()
+{
+    auto setup = devices.getAudioDeviceSetup();
+    auto* device = devices.getCurrentAudioDevice();
+    if (device == nullptr || setup.inputDeviceName.isEmpty())
+        return;
+    const int has = std::min (maxInputs, device->getInputChannelNames().size());
+    const auto asked = setup.inputDeviceName + " " + juce::String (has);
+    if (setup.inputChannels.countNumberOfSetBits() >= has || asked == askedEvery)
+        return;
+    askedEvery = asked;
+    setup.inputChannels.clear();
+    setup.inputChannels.setRange (0, maxInputs, true);   // the device keeps those it has
+    setup.useDefaultInputChannels = false;
+    devices.setAudioDeviceSetup (setup, true);
+}
+
+int Engine::inputCount() const
+{
+    auto* device = devices.getCurrentAudioDevice();
+    return device != nullptr && inputName().isNotEmpty() ? std::min (maxInputs, device->getInputChannelNames().size()) : 0;
 }
 
 void Engine::play (bool on)
@@ -135,6 +155,12 @@ void Engine::audioDeviceAboutToStart (juce::AudioIODevice* device)
     const double rate = device->getCurrentSampleRate();
     const int block = device->getCurrentBufferSizeSamples();
     rateNow = rate;
+    // Where each input arrives: the device hands over the open ones alone, in order.
+    const auto open = device->getActiveInputChannels();
+    for (int ch = 0, slot = 0; ch < maxInputs; ++ch)
+        slotOf[(size_t) ch] = open[ch] ? slot++ : -1;
+    heard = chosen.load();
+    leaving = -1;
     transport.prepareToPlay (block, rate);
     scratch.setSize (2, block);
     prepared = convolver.prepare (rate, block, 1, 1.0, true);   // reference-unity: the same loudness as a plugin's
@@ -152,9 +178,9 @@ void Engine::audioDeviceStopped()
 void Engine::audioDeviceIOCallbackWithContext (const float* const* inputs, int numInputs, float* const* outputs, int numOutputs,
                                                int numSamples, const juce::AudioIODeviceCallbackContext&)
 {
-    // Every input open, summed, while it is played — whichever one the instrument is plugged into, the first left ticked
-    // beside it or not (the owner, 09.11); read before any output is written, the two may share memory — or the sample,
-    // folded to mono; through the cabinet, to every output.
+    // The input chosen while it is played, a change crossfaded over 20 ms, and every input measured for its meter, played
+    // or not; read before any output is written, the two may share memory — or the sample, folded to mono; through the
+    // cabinet, to every output.
     const bool fits = numSamples <= scratch.getNumSamples() && numOutputs > 0;
     float* mono = fits ? scratch.getWritePointer (0) : nullptr;
     if (fits)
@@ -162,10 +188,52 @@ void Engine::audioDeviceIOCallbackWithContext (const float* const* inputs, int n
         scratch.clear (0, numSamples);
         if (input.load())
         {
-            if (live.load())
-                for (int ch = 0; ch < numInputs; ++ch)
-                    if (inputs[ch] != nullptr)
-                        juce::FloatVectorOperations::add (mono, inputs[ch], numSamples);
+            const auto in = [&] (int ch) -> const float*
+            {
+                const int slot = ch >= 0 && ch < maxInputs ? slotOf[(size_t) ch] : -1;
+                return slot >= 0 && slot < numInputs ? inputs[slot] : nullptr;
+            };
+            for (int ch = 0; ch < maxInputs; ++ch)
+                if (const float* x = in (ch))
+                {
+                    const auto range = juce::FloatVectorOperations::findMinAndMax (x, numSamples);
+                    const float peak = std::max (-range.getStart(), range.getEnd());
+                    if (peak > levels[(size_t) ch].load (std::memory_order_relaxed))
+                        levels[(size_t) ch].store (peak, std::memory_order_relaxed);
+                }
+            const int want = chosen.load();
+            if (! live.load())
+            {
+                heard = want;   // nothing heard: the next one taken as it is
+                leaving = -1;
+            }
+            else
+            {
+                if (want != heard && leaving < 0)
+                {
+                    leaving = heard;
+                    heard = want;
+                    fade = 0.0f;
+                }
+                const float* now = in (heard);
+                const float* was = leaving >= 0 ? in (leaving) : nullptr;
+                if (leaving < 0)
+                {
+                    if (now != nullptr)
+                        juce::FloatVectorOperations::copy (mono, now, numSamples);
+                }
+                else
+                {
+                    const float step = (float) (1.0 / (0.02 * rateNow));
+                    for (int i = 0; i < numSamples; ++i)
+                    {
+                        fade = std::min (1.0f, fade + step);
+                        mono[i] = fade * (now != nullptr ? now[i] : 0.0f) + (1.0f - fade) * (was != nullptr ? was[i] : 0.0f);
+                    }
+                    if (fade >= 1.0f)
+                        leaving = -1;
+                }
+            }
         }
         else
         {
