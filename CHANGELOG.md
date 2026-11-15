@@ -8,7 +8,16 @@ All notable changes to **Orbit Bass Cab Builder** and **Orbit Guitar Cab Builder
 
 ## [Unreleased]
 
+### Added
+- **Choose the input that plays: IN 1, IN 2 and on, as many as the audio interface has.** While INPUT is the source,
+  IN 4 (say) stands beside it; a click lists every input with a level meter, so a plucked string shows where the
+  instrument is plugged in, and a click on another plays it, without a click in the sound. The builder remembers the
+  input for each audio interface by its name, in its own settings, never in a preset, a WAV or a link; an interface
+  that no longer has that input plays IN 1.
+
 ### Changed
+- **One input plays, the one chosen.** The AUDIO settings no longer list input channels: the builder opens them all,
+  where it used to play every channel ticked there, summed.
 - **Built on JUCE 9.0.5**, where 0.4.1 was built on 8.0.17. The builders look, sound and save as before; the CLAP
   plugins still come from clap-juce-extensions, JUCE 9 having no CLAP of its own. On the Mac the window still comes
   first: JUCE 9 holds an input until macOS's microphone question is answered, so the builder asks first and opens the
