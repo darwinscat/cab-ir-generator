@@ -10,7 +10,15 @@ blend — rendered to a 48 kHz IR while you move them, with the response and whe
 as you go. **Orbit Guitar Cab Builder** is the same on a guitar's cabinets: seven boxes, six speakers and six mics
 of its own.
 
-<p align="center"><img src="docs/app.png" alt="The app: the boxes, the speaker with two mics on it, and the response" width="880"></p>
+**Try them in your browser.** Both builders run right on their pages, the same panel with DOWNLOAD IR, nothing to
+install: [Orbit Bass Cab Builder](https://darwinscat.com/felitronics/orbit-bass-cab-builder) and
+[Orbit Guitar Cab Builder](https://darwinscat.com/felitronics/orbit-guitar-cab-builder). Their presets as ready-made
+IR packs, by style and by cabinet size, free under CC BY 4.0: [bass cab IRs](https://darwinscat.com/felitronics/ir/bass-cab-free-irs)
+and [guitar cab IRs](https://darwinscat.com/felitronics/ir/guitar-cab-free-irs).
+
+<p align="center"><img src="docs/readme/bass-cab-builder.png" alt="Orbit Bass Cab Builder 0.4.1: the bass boxes, two mics on the speaker, and the response" width="880"></p>
+
+<p align="center"><img src="docs/readme/guitar-cab-builder.png" alt="Orbit Guitar Cab Builder 0.4.1: the guitar boxes, an SM57 on the speaker, and the response" width="880"></p>
 
 One code base for four homes:
 
@@ -18,7 +26,8 @@ One code base for four homes:
 - a standalone app for Windows, macOS and Linux, with a sample player to audition by ear, history,
   undo/redo and A/B/C/D;
 - plugins, VST3, AU and CLAP: the same window in a host, the track played through the cabinet;
-- a live web page.
+- a live web page, for the [bass](https://darwinscat.com/felitronics/orbit-bass-cab-builder) and for the
+  [guitar](https://darwinscat.com/felitronics/orbit-guitar-cab-builder).
 
 ## Download
 
@@ -28,6 +37,10 @@ plugins:
 - **macOS** — a `.pkg`: the app, VST3, AU and CLAP, for Apple silicon and Intel, signed and notarized; macOS 11 or later.
 - **Windows** — an installer `.exe`: the app, VST3 and CLAP, x64 and arm64.
 - **Linux** — a `.tar.gz`: the app, VST3 and CLAP, x86_64 and arm64, with how to install them.
+
+The same files are on the builders' pages, with what changed in each version:
+[bass](https://darwinscat.com/felitronics/orbit-bass-cab-builder#download) and
+[guitar](https://darwinscat.com/felitronics/orbit-guitar-cab-builder#download).
 
 ## What it does
 
@@ -46,27 +59,34 @@ brings it back.
 and **TIME** moves B against A by up to a millisecond either way. A double click sends TIME back to
 nought and BLEND back to the middle.
 
-**FIND.** With two mics it moves B to where the two comb least with each other; with one, it moves that
-mic, about where it stands, to where its response has no pit. Every place it tries is drawn on the
-speaker as it goes, green to red.
+**FIND BEST POSITION.** Two mics on one speaker cancel each other at some frequencies, and a single mic in the
+wrong spot leaves a hole in the response. Finding the right spot takes talent, experience and instinct. One click,
+and the builder searches for you: it tries spot after spot, shows each one on the speaker, and moves the mic to
+where the response has no hole. Orbit Guitar Cab Builder also has **FRED**: the classic Fredman pair of two SM57s
+in one click.
 
-<p align="center"><img src="docs/find.png" alt="FIND: the places it tried, a dot each, green where B and A meet well" width="880"></p>
+<p align="center"><img src="docs/readme/find.png" alt="FIND BEST POSITION: every spot it tried, green where the mics do not cancel" width="880"></p>
 
 **The response.** 30 Hz to 12 kHz under it all, following your hand: green where it is fine, red where
 it falls into a pit or the two mics cancel. With two mics, a band under it shows where they meet in
 phase and where they cancel; the response before your last change stays as a faint grey line.
 
+**EQ** right on the response: a high pass to keep the low end in check, a low pass to tame a harsh top, and three
+bells to give the cabinet its character or fix a small flaw. It goes into the IR: DOWNLOAD IR saves what you hear.
+**SPECTRUM** shows what the cabinet does to your sound: what goes in and what comes out.
+
+<p align="center"><img src="docs/readme/eq.png" alt="EQ and SPECTRUM over the response: a high pass, a low pass and three bells" width="880"></p>
+
 **DOWNLOAD IR** saves the cabinet that plays as a 24-bit mono WAV at 48 kHz.
 
-**Presets.** 160 of them in eight styles — Funk, Jazz, Metal, Modern, Motown, Punk, Reggae and Rock;
-the arrows beside the menu (and the arrow keys) step through them.
+**Presets.** 40 in Orbit Bass Cab Builder, ten each for Rock, Metal, Punk and Blues; 52 in Orbit Guitar Cab
+Builder: the same four styles and TOP 12, cabinets made by ear in OrbitAmp. The arrows beside the menu (and the
+arrow keys) step through them.
 
 **Listening.** Plug your instrument into an audio interface and pick its input in **AUDIO** (or click the
-**INPUT** box): it plays live through the cabinet, as through an amp. **HEAR** chooses what you listen through:
-**A+B**, **A** or **B** alone as it stands in the pair, or **BYPASS**, the input with no cabinet at all — for
-listening only, nothing of the preset changes. **AUDIO** picks the output device too. On the machine the app was
-built on, where `data/riffs` lies, it shows a player as well: our riffs read from there, a file of your own, PLAY and
-**Space**; it carries no riffs itself.
+**INPUT** box): it plays live through the cabinet, so you hear every change as you make it. The buttons at the foot
+let you hear each mic on its own: **A+B**, **A** or **B** alone as it stands in the pair, or **BYPASS**, the input
+with no cabinet at all. They change only what you hear, not the preset. **AUDIO** picks the output device too.
 
 **History.** Undo and redo, and four registers, **A B C D**, to keep four cabinets side by side and
 compare them; right-click a register to copy the one playing into it.
