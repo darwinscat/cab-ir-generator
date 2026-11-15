@@ -314,4 +314,21 @@ if(CABIR_APP)
                 DESCRIPTION "Guitar cabinet IR generator and cab sim")
         endif()
     endif()
+
+    # THE PLAYER'S INPUT, without a device of its own (tests/EngineTests.cpp): the input chosen heard, a change
+    # crossfaded, every input measured.
+    if(CABIR_TESTS)
+        juce_add_console_app(cabir_engine_test PRODUCT_NAME "cabir_engine_test")
+        target_sources(cabir_engine_test PRIVATE tests/EngineTests.cpp app/Engine.cpp)
+        target_include_directories(cabir_engine_test PRIVATE app)
+        target_compile_definitions(cabir_engine_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 CABIR_PLUGIN=0)
+        target_link_libraries(cabir_engine_test PRIVATE
+            felitronics::convolution
+            felitronics::analysis
+            juce::juce_audio_utils
+            juce::juce_audio_formats
+            juce::juce_recommended_config_flags
+            juce::juce_recommended_warning_flags)
+        add_test(NAME engine COMMAND cabir_engine_test)
+    endif()
 endif()
