@@ -8,6 +8,8 @@ All notable changes to **Orbit Bass Cab Builder** and **Orbit Guitar Cab Builder
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-11-15 — the input by its number, on JUCE 9
+
 ### Added
 - **Choose the input that plays: IN 1, IN 2 and on, as many as the audio interface has.** While INPUT is the source,
   IN 4 (say) stands beside it; a click lists every input with a level meter, so a plucked string shows where the
