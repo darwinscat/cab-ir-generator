@@ -3,6 +3,8 @@
 
 #include "Engine.h"
 
+#include <felitronics/appkit/InputList.h>   // openInputBits
+
 namespace cabir::app
 {
 
@@ -107,6 +109,12 @@ void Engine::openEveryInput()
     devices.setAudioDeviceSetup (setup, true);
 }
 
+std::uint64_t Engine::openInputs() const
+{
+    auto* device = devices.getCurrentAudioDevice();
+    return device != nullptr && inputName().isNotEmpty() ? felitronics::appkit::openInputBits (device->getActiveInputChannels()) : 0;
+}
+
 int Engine::inputCount() const
 {
     auto* device = devices.getCurrentAudioDevice();
@@ -156,12 +164,7 @@ void Engine::audioDeviceAboutToStart (juce::AudioIODevice* device)
     const int block = device->getCurrentBufferSizeSamples();
     rateNow = rate;
     // Which inputs the device opened: it hands over those alone, in order.
-    const auto open = device->getActiveInputChannels();
-    std::uint64_t bits = 0;
-    for (int ch = 0; ch < maxInputs; ++ch)
-        if (open[ch])
-            bits |= std::uint64_t (1) << ch;
-    pick.prepare (rate, bits);
+    pick.prepare (rate, felitronics::appkit::openInputBits (device->getActiveInputChannels()));
     transport.prepareToPlay (block, rate);
     scratch.setSize (2, block);
     prepared = convolver.prepare (rate, block, 1, 1.0, true);   // reference-unity: the same loudness as a plugin's

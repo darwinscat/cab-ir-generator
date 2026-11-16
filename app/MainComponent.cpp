@@ -1023,7 +1023,7 @@ void MainComponent::followInput()
     if (! memory.knows (device))
         memory.remember (device, felitronics::appkit::InputChoice::single (std::max (0, setup.inputChannels.findNextSetBit (0))));
     engine->openEveryInput();
-    engine->chooseInput (memory.recall (device, engine->inputCount()).a);
+    engine->chooseInput (memory.recall (device, engine->openInputs()).a);   // never a closed input
 }
 
 void MainComponent::pickInput (int channel)

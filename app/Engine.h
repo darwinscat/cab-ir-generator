@@ -53,6 +53,7 @@ public:
     void chooseInput (int channel) { pick.choose (felitronics::appkit::InputChoice::single (channel)); }
     int chosenInput() const { return pick.chosen().a; }
     int inputCount() const;           // the inputs the open input device has, nought for none
+    std::uint64_t openInputs() const; // ...those it opened, input k's bit set
     /** The loudest sample input `channel` has had since the last ask (1 is full scale), for its meter. */
     float takeLevel (int channel) { return pick.takeLevel (channel); }
     static constexpr int maxInputs = felitronics::appkit::InputPick::maxInputs;
