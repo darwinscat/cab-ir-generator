@@ -8,6 +8,15 @@ All notable changes to **Orbit Bass Cab Builder** and **Orbit Guitar Cab Builder
 
 ## [Unreleased]
 
+### Changed
+- **The input picker is the family's now**, felitronics-appkit's, which the amps take too: IN n beside INPUT and its
+  list look and play as before. A choice made halfway through a crossfade is through 20 ms later, where it used to
+  wait for the last one to end, and an input kept for an interface that no longer opens it falls back to the first
+  input open, never to a silent one.
+
+### Dependencies
+- `felitronics-appkit` **v0.25.0** (was v0.22.0): the input picker; nothing else the builders use changed.
+
 ## [0.5.0] — 2026-11-15 — the input by its number, on JUCE 9
 
 ### Added

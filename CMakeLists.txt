@@ -156,7 +156,7 @@ if(CABIR_APP)
     FetchContent_MakeAvailable(juce)
 
     # felitronics-appkit — the brand, the version window, the audio settings.
-    set(CABIR_APPKIT_TAG "v0.22.0" CACHE STRING "felitronics-appkit release tag (fetched when no local checkout)")
+    set(CABIR_APPKIT_TAG "v0.25.0" CACHE STRING "felitronics-appkit release tag (fetched when no local checkout)")
     set(CABIR_APPKIT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../felitronics-appkit" CACHE PATH "Local felitronics-appkit checkout (used if present)")
     if(CABIR_APPKIT_DIR AND EXISTS "${CABIR_APPKIT_DIR}/CMakeLists.txt")
         FetchContent_Declare(felitronics_appkit SOURCE_DIR "${CABIR_APPKIT_DIR}")
