@@ -3,6 +3,8 @@
 
 #include "Engine.h"
 
+#include <felitronics/appkit/InputList.h>   // openInputBits
+
 namespace cabir::app
 {
 
@@ -107,6 +109,12 @@ void Engine::openEveryInput()
     devices.setAudioDeviceSetup (setup, true);
 }
 
+std::uint64_t Engine::openInputs() const
+{
+    auto* device = devices.getCurrentAudioDevice();
+    return device != nullptr && inputName().isNotEmpty() ? felitronics::appkit::openInputBits (device->getActiveInputChannels()) : 0;
+}
+
 int Engine::inputCount() const
 {
     auto* device = devices.getCurrentAudioDevice();
@@ -155,12 +163,8 @@ void Engine::audioDeviceAboutToStart (juce::AudioIODevice* device)
     const double rate = device->getCurrentSampleRate();
     const int block = device->getCurrentBufferSizeSamples();
     rateNow = rate;
-    // Where each input arrives: the device hands over the open ones alone, in order.
-    const auto open = device->getActiveInputChannels();
-    for (int ch = 0, slot = 0; ch < maxInputs; ++ch)
-        slotOf[(size_t) ch] = open[ch] ? slot++ : -1;
-    heard = chosen.load();
-    leaving = -1;
+    // Which inputs the device opened: it hands over those alone, in order.
+    pick.prepare (rate, felitronics::appkit::openInputBits (device->getActiveInputChannels()));
     transport.prepareToPlay (block, rate);
     scratch.setSize (2, block);
     prepared = convolver.prepare (rate, block, 1, 1.0, true);   // reference-unity: the same loudness as a plugin's
@@ -179,8 +183,8 @@ void Engine::audioDeviceIOCallbackWithContext (const float* const* inputs, int n
                                                int numSamples, const juce::AudioIODeviceCallbackContext&)
 {
     // The input chosen while it is played, a change crossfaded over 20 ms, and every input measured for its meter, played
-    // or not; read before any output is written, the two may share memory — or the sample, folded to mono; through the
-    // cabinet, to every output.
+    // or not (InputPick, into the scratch: read before any output is written, the two may share memory) — or the sample,
+    // folded to mono; through the cabinet, to every output.
     const bool fits = numSamples <= scratch.getNumSamples() && numOutputs > 0;
     float* mono = fits ? scratch.getWritePointer (0) : nullptr;
     if (fits)
@@ -188,52 +192,10 @@ void Engine::audioDeviceIOCallbackWithContext (const float* const* inputs, int n
         scratch.clear (0, numSamples);
         if (input.load())
         {
-            const auto in = [&] (int ch) -> const float*
-            {
-                const int slot = ch >= 0 && ch < maxInputs ? slotOf[(size_t) ch] : -1;
-                return slot >= 0 && slot < numInputs ? inputs[slot] : nullptr;
-            };
-            for (int ch = 0; ch < maxInputs; ++ch)
-                if (const float* x = in (ch))
-                {
-                    const auto range = juce::FloatVectorOperations::findMinAndMax (x, numSamples);
-                    const float peak = std::max (-range.getStart(), range.getEnd());
-                    if (peak > levels[(size_t) ch].load (std::memory_order_relaxed))
-                        levels[(size_t) ch].store (peak, std::memory_order_relaxed);
-                }
-            const int want = chosen.load();
+            float* picked[] { mono };
+            pick.process (inputs, numInputs, picked, 1, numSamples);
             if (! live.load())
-            {
-                heard = want;   // nothing heard: the next one taken as it is
-                leaving = -1;
-            }
-            else
-            {
-                if (want != heard && leaving < 0)
-                {
-                    leaving = heard;
-                    heard = want;
-                    fade = 0.0f;
-                }
-                const float* now = in (heard);
-                const float* was = leaving >= 0 ? in (leaving) : nullptr;
-                if (leaving < 0)
-                {
-                    if (now != nullptr)
-                        juce::FloatVectorOperations::copy (mono, now, numSamples);
-                }
-                else
-                {
-                    const float step = (float) (1.0 / (0.02 * rateNow));
-                    for (int i = 0; i < numSamples; ++i)
-                    {
-                        fade = std::min (1.0f, fade + step);
-                        mono[i] = fade * (now != nullptr ? now[i] : 0.0f) + (1.0f - fade) * (was != nullptr ? was[i] : 0.0f);
-                    }
-                    if (fade >= 1.0f)
-                        leaving = -1;
-                }
-            }
+                juce::FloatVectorOperations::clear (mono, numSamples);   // measured, not heard
         }
         else
         {

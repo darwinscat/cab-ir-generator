@@ -2,7 +2,8 @@
 // Copyright (c) 2026 Darwin's Cat — Oleh Tsymaienko <oleh@darwinscat.com> & Alisa Lafoks <alisa@darwinscat.com>. Part of Orbit Bass Cab Builder and Orbit Guitar Cab Builder — see LICENSE.
 
 // THE PLAYER'S INPUT, without a device of its own (app/Engine.h): the input chosen is what plays, IN 4 of four as of two
-// open; a change is crossfaded over 20 ms, no step in the sound; a change made while nothing plays is taken as it is;
+// open; a change is crossfaded over 20 ms, no step in the sound; a change made while nothing plays is through by the
+// time it plays again;
 // every open input is measured for its meter, a closed one reads nought.
 
 #include "Engine.h"
@@ -130,16 +131,17 @@ int main()
         check (near (rig.engine.takeLevel (2), 0.0f), "a meter read is cleared until the next block");
         check (near (rig.engine.takeLevel (9), 0.0f), "an input the device has not reads nought");
 
-        // Stopped, IN 2 chosen, played again: IN 2 at once, no fade from IN 4.
+        // Stopped, IN 2 chosen, played again past the crossfade's 20 ms: IN 2 at once, nothing of IN 4.
         rig.engine.play (false);
         rig.run (10.0);
         check (near (rig.now(), 0.0f), "nothing plays while stopped");
         rig.engine.chooseInput (1);
-        rig.run (10.0);
+        rig.run (30.0);
+        check (near (rig.now(), 0.0f), "...nor while the change crossfades unheard");
         rig.engine.play (true);
         const auto again = rig.heard.size();
         rig.run (10.0);
-        check (near (rig.heard[again], 0.2f), "a change made while stopped is taken as it is");
+        check (near (rig.heard[again], 0.2f), "a change made while stopped is through by the time it plays again");
     }
 
     // Two of four open, IN 2 and IN 4: the device hands over those alone, in order.
